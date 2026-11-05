@@ -186,6 +186,16 @@ def test_hook_question_lists_each_reference_with_its_shape():
     assert shape_note(p["refs"][0]["caption"]) in host.llm_calls[0][0]
 
 
+def test_feature_detail_about_asking_picks_the_you_asked_hook():
+    from launch_desk.hooks import HOOK_SHAPES
+    host = make_host(PHASE1)
+    start(host)  # ARGS carries "people kept asking ..."
+    assert HOOK_SHAPES["you-asked"].shape in host.llm_calls[0][1]
+    quiet = make_host(PHASE1)
+    start(quiet, args=f"{URL} custom themes for pet profile pages")
+    assert HOOK_SHAPES["you-asked"].shape not in quiet.llm_calls[0][1]
+
+
 def test_remaining_failures_are_shown_in_the_phase1_reply():
     bad = {"use_case": "Pick one.", "hooks": ["Pet pages — themes — are here.", "Themes.", "Your theme."],
            "caption": "Pet pages — themes — are here.\n\nPick one.\n\nhttps://pawr.link"}

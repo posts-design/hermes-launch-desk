@@ -255,7 +255,7 @@ def test_redraft_prompt_stays_under_6000_chars_for_every_kind_with_a_use_case(ki
         detail = unsupported_details(" ".join(str(n) + "9" * (40 + i) for i in range(8)), "")[0]
         fails.append(detail if n == 0 else Failure(f"hook{n}:{detail.rule_id}", detail.message, detail.fix))
     fails.append(Failure("use-case-missing", "m", "Say the use case in the caption."))
-    instructions, text = build_redraft_prompt(brief, brand, REFS, pick_hook_shapes(kind), set(), ["hook " * 500] * 3,
+    instructions, text = build_redraft_prompt(brief, brand, REFS, pick_hook_shapes(kind, "asked"), set(), ["hook " * 500] * 3,
                                               "cap " * 3000, fails, use_case="use " * 500)
     assert len(instructions) + len(text) < 6000
     assert "Caption:" in text and "Use case:" in text
@@ -354,7 +354,7 @@ def test_reply_without_use_case_is_retried_then_fails():
 
 
 def test_caption_body_must_carry_the_use_case():
-    elsewhere = {**CLEAN, "use_case": "Match your pet's page to your own site."}
+    elsewhere = {**CLEAN, "use_case": "Match the theme to your own website."}  # 1 of 4 words in the caption
     host, d = draft([elsewhere, CLEAN])
     assert len(host.llm_calls) == 2
     second = prompt_of(host.llm_calls[1])
@@ -423,8 +423,25 @@ def test_prompt_with_the_longest_shape_notes_stays_under_6000_chars(kind):
     brand = BrandKit("N" * 300, "https://pawr.link", "T" * 1000, "#fff", "#111", "#f60", None, None,
                      voice_samples=tuple("voice " * 1000 for _ in range(5)))
     brief = Brief(kind, "x", "what " * 500, "https://pawr.link/" + "p" * 300, detail="detail " * 500)
-    instructions, text = build_brief_prompt(brief, brand, refs, pick_hook_shapes(kind), set())
+    instructions, text = build_brief_prompt(brief, brand, refs, pick_hook_shapes(kind, "people asked"), set())
     assert len(instructions) + len(text) < 6000
+
+
+def test_use_case_is_carried_at_forty_percent_of_its_words():
+    from launch_desk.draft import use_case_carried
+    use = "Match your pet's page to your own site."  # match, pet, page, own, site
+    assert use_case_carried(use, "Pet pages take custom themes.\n\nPick one for the page.")  # 2 of 5
+    assert not use_case_carried(use, "Custom themes are live.\n\nPick one for the page.")  # 1 of 5
+    assert use_case_carried("", "anything")
+
+
+@pytest.mark.parametrize("detail,shape_id", [("", "check-this-out"),
+                                             ("people kept asking to match their own site", "you-asked")])
+def test_prompt_carries_the_picked_hook_shapes(detail, shape_id):
+    from launch_desk.hooks import HOOK_SHAPES
+    brief = Brief("feature", "x", "custom themes for pet profile pages", "https://pawr.link", detail=detail)
+    _, text = build_brief_prompt(brief, BRAND, REFS, pick_hook_shapes("feature", detail), set())
+    assert HOOK_SHAPES["reader-thought"].shape in text and HOOK_SHAPES[shape_id].shape in text
 
 
 def test_redraft_prompt_shows_the_last_use_case():

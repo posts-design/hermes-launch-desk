@@ -251,3 +251,23 @@ def test_reference_line_carries_brand_shape_views_and_fit():
     assert line.count("42.7K") == 1
     none = reference_line(Reference("b", "", "u", "Hi.", None, None, "A related launch"))
     assert shape_note("Hi.") in none and "A related launch" in none and "views" not in none
+
+
+def test_reference_line_skips_the_shape_of_an_empty_caption():
+    from launch_desk.models import Reference
+    from launch_desk.references import reference_line
+    line = reference_line(Reference("a", "Raycast", "u", "", 72620, None, "Same kind of launch, 72.6K views"))
+    assert shape_note("") not in line and "72.6K" in line and "Same kind of launch" in line
+
+
+def test_reference_line_caps_the_brand_at_24_characters():
+    from launch_desk.models import Reference
+    from launch_desk.references import reference_line
+    line = reference_line(Reference("a", "B" * 60, "u", "Hi.", None, None, "A related launch"))
+    assert "B" * 20 in line and "B" * 25 not in line
+
+
+@pytest.mark.parametrize("caption", ["新しいテーマは？\n今すぐ", "¿Ya probaste los temas nuevos\nYa están."])
+def test_full_width_and_spanish_question_marks_count(caption):
+    assert caption_shape(caption)["opening"] == "question"
+

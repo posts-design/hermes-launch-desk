@@ -201,7 +201,7 @@ def _opening(first: str) -> str:
     bare = _bare(first)
     sentence = re.split(r"(?<=[.!?])\s+", bare, maxsplit=1)[0]
     words = sentence.lower().split()
-    if "?" in first:
+    if any(q in first for q in "?？¿"):
         return "question"
     if words and (words[0][0].isdigit() or words[0] in _NUMBER_WORDS
                   or " ".join(words[:2]) in _NUMBER_WORDS):
@@ -256,13 +256,28 @@ def shape_note(caption: str) -> str:
 
 
 _VIEWS_TAIL = re.compile(r",\s*[\d.]+[KM]? views$")
+BRAND_CHARS = 24  # a brand name in the reference list and the draft prompt
+
+
+def short_brand(brand: str) -> str:
+    """The brand on one line, cut at a word to BRAND_CHARS (with "…")."""
+    name = " ".join((brand or "").split())
+    if len(name) <= BRAND_CHARS:
+        return name
+    head = name[:BRAND_CHARS - 1]
+    cut = head.rsplit(" ", 1)[0] if " " in head else head
+    return cut.rstrip(" ,.;:") + "…"
 
 
 def reference_line(ref: Reference) -> str:
-    """'<brand> — <shape note>, <views> views. <fit>.' for the reference list."""
-    line = f"{ref.brand or 'A brand'} — {shape_note(ref.caption)}"
+    """'<brand> — <shape note>, <views> views. <fit>.' for the reference list. A reference
+    without a caption has no shape note."""
+    parts = [shape_note(ref.caption)] if (ref.caption or "").strip() else []
     if ref.views:
-        line += f", {_short(ref.views)} views"
+        parts.append(f"{_short(ref.views)} views")
+    line = short_brand(ref.brand) or "A brand"
+    if parts:
+        line += " — " + ", ".join(parts)
     fit = _VIEWS_TAIL.sub("", ref.why or "").strip()
     return f"{line}. {fit}." if fit else f"{line}."
 

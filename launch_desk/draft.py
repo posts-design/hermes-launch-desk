@@ -24,7 +24,7 @@ from typing import Any, Sequence
 
 from .host import Host
 from .models import BrandKit, Brief, Draft, Failure, HookShape, Reference
-from .references import STOPWORDS, shape_note
+from .references import BRAND_CHARS, STOPWORDS, shape_note
 from .rules import RULES, STOCK_PHRASES, check, relaxed_rules
 
 DRAFT_SCHEMA: dict = {
@@ -53,7 +53,6 @@ _ALSO_AVOID: tuple[str, ...] = (
 _NETWORK = {"x": "X", "linkedin": "LinkedIn"}
 
 REF_CHARS = 250
-BRAND_CHARS = 24  # a brand name in the reference headers
 VOICE_CHARS = 200
 VOICE_COUNT = 3
 REDRAFT_CAPTION_CHARS = 700
@@ -66,7 +65,7 @@ UNSUPPORTED = "unsupported-detail"
 _UNSUPPORTED_MAX = 5
 USE_CASE_MISSING = "use-case-missing"
 USE_CASE_CHARS = 140
-_CARRIED = 0.6  # share of the use case's words the caption must contain
+_CARRIED = 0.4  # share of the use case's words the caption must contain
 
 # Longest first so "one tap" wins over "one". A bare "one" counts only when a word
 # follows it ("one link"), so "Small one:" or "pick one." pass.
@@ -125,7 +124,9 @@ def _stems(text: str) -> set[str]:
 
 
 def use_case_carried(use_case: str, caption: str) -> bool:
-    """True when the caption has most of the use case's words."""
+    """True when the caption has at least 40% of the use case's content words (stopwords
+    out, a plural "s" dropped). Lexical and Latin-script only: words are [a-z0-9] runs, so
+    a faithful paraphrase can miss, and text in other scripts has no words and passes."""
     words = _stems(use_case)
     return not words or len(words & _stems(caption)) >= _CARRIED * len(words)
 

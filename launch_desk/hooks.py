@@ -1,5 +1,7 @@
-"""The six hook shapes and which two to use for each kind of launch."""
+"""The eight hook shapes and which two to use for each kind of launch."""
 from __future__ import annotations
+
+import re
 
 from .models import HookShape
 
@@ -24,18 +26,32 @@ HOOK_SHAPES: dict[str, HookShape] = {
         HookShape("bold-contrast", "A claim against the usual way",
                   "A crowded category where your difference is clear.",
                   "Every [category] does [the usual way]. We built [the different way], so [the benefit]."),
+        HookShape("reader-thought", "What the reader wanted",
+                  "Opens on what the reader wanted, in their words.",
+                  "Your [thing] should [what they wanted]."),
+        HookShape("you-asked", "You asked, it's here",
+                  "Only when the founder's detail says people asked for it or requested it.",
+                  "You asked for [the thing]. It's here."),
     )
 }
 
 _BY_KIND: dict[str, tuple[str, str]] = {
-    "feature": ("check-this-out", "identity-news"),
+    "feature": ("reader-thought", "check-this-out"),
     "product": ("identity-news", "bold-contrast"),
     "rebrand": ("time-jump", "bold-contrast"),
     "partnership": ("identity-news", "audience-call-out"),
 }
 
 
-def pick_hook_shapes(shipped: str) -> list[HookShape]:
-    """Two hook shapes for a kind of launch; unknown kinds use the feature pair."""
-    first, second = _BY_KIND.get(shipped, _BY_KIND["feature"])
+# The founder's detail says people asked for it: "asked", "a top request", "everyone wanted".
+_ASKED_RE = re.compile(r"\b(?:ask(?:s|ed|ing)?|request(?:s|ed)?|wanted)\b", re.IGNORECASE)
+
+
+def pick_hook_shapes(shipped: str, detail: str = "") -> list[HookShape]:
+    """Two hook shapes for a kind of launch; unknown kinds use the feature pair. A feature
+    whose detail says people asked for it gets you-asked in place of check-this-out."""
+    kind = shipped if shipped in _BY_KIND else "feature"
+    first, second = _BY_KIND[kind]
+    if kind == "feature" and _ASKED_RE.search(detail or ""):
+        second = "you-asked"
     return [HOOK_SHAPES[first], HOOK_SHAPES[second]]
