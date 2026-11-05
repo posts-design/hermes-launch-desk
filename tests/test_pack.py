@@ -132,3 +132,24 @@ def test_alt_text_names_the_card_headline_when_given(tmp_path):
     pack = write_pack(tmp_path / "out", _brief(), _brand(), draft, "h", {"x": card}, [],
                       headline="Pet pages can wear your colours now")
     assert "Pet pages can wear your colours now" in (pack / "alt-text.txt").read_text()
+
+
+def test_pack_json_keeps_all_hooks_and_the_extra_references(tmp_path):
+    card = tmp_path / "src" / "card.png"
+    card.parent.mkdir()
+    Image.new("RGB", (1200, 675), "white").save(card)
+    draft = Draft(("one", "two", "three"), "one\n\nbody", (), False)
+    extra = [Reference("r9", "Gamma", "https://x.com/g/9", "Did you know?\nIt works.", 50, None, "why")]
+    pack = write_pack(tmp_path / "packs", _brief(), _brand(), draft, "two", {"x": card}, _refs(),
+                      more_refs=extra)
+    data = json.loads((pack / "pack.json").read_text())
+    assert data["hooks"] == ["one", "two", "three"]
+    [ref] = data["more_references"]
+    assert (ref["id"], ref["brand"], ref["url"], ref["views"]) == ("r9", "Gamma", "https://x.com/g/9", 50)
+    assert ref["shape"]
+    assert "caption" not in ref  # the shape, not the words
+
+
+def test_judge_by_conversion_is_the_checklist_line():
+    from launch_desk.pack import JUDGE_BY_CONVERSION
+    assert JUDGE_BY_CONVERSION in CHECKLIST

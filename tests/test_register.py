@@ -115,3 +115,76 @@ def test_attach_screenshot_rejects_missing_and_non_image(tmp_path):
     bad = json.loads(handler({"path": str(text)}))
     assert bad["ok"] is False
     assert ctx.state.get("screenshot") is None
+
+
+class BlueprintCtx(StubCtx):
+    def __init__(self):
+        super().__init__()
+        self.blueprints = {}
+
+    def register_automation_blueprint(self, key, **kwargs):
+        self.blueprints[key] = kwargs
+
+
+def test_register_adds_the_follow_up_tools_with_schemas():
+    ctx = StubCtx()
+    load_plugin().register(ctx)
+    for name, required in (("launch_desk_followup", {"pack"}),
+                           ("launch_desk_record_results", {"pack", "channel", "signups"})):
+        tool = ctx.tools[name]
+        assert tool["toolset"] == "launch_desk"
+        assert tool["schema"]["name"] == name
+        assert set(tool["schema"]["parameters"]["required"]) == required
+
+
+def test_manifest_lists_every_registered_tool():
+    import re
+    ctx = StubCtx()
+    load_plugin().register(ctx)
+    manifest = (ROOT / "plugin.yaml").read_text(encoding="utf-8")
+    listed = set(re.findall(r"^\s*-\s*(launch_desk_\w+)\s*$", manifest, re.M))
+    assert listed == set(ctx.tools)
+
+
+def test_follow_up_tools_read_and_write_packs_in_the_data_dir(tmp_path):
+    ctx = StubCtx()
+    ctx.state.data_dir = tmp_path / "data"
+    load_plugin().register(ctx)
+    folder = ctx.state.data_dir / "packs" / "p1"
+    folder.mkdir(parents=True)
+    (folder / "pack.json").write_text(json.dumps({"caption": "Hi", "hook": "Hi", "brief": {}}))
+    record = ctx.tools["launch_desk_record_results"]["handler"]
+    out = json.loads(record({"pack": "p1", "channel": "X", "signups": 3}))
+    assert out["ok"] is True
+    got = json.loads(ctx.tools["launch_desk_followup"]["handler"]({"pack": "p1"}))
+    assert got["ok"] is True and got["results"][0]["signups"] == 3
+    bad = json.loads(ctx.tools["launch_desk_followup"]["handler"]({"pack": "../p1"}))
+    assert bad["ok"] is False
+
+
+def test_follow_up_tools_never_raise_on_junk_arguments(tmp_path):
+    ctx = StubCtx()
+    ctx.state.data_dir = tmp_path
+    load_plugin().register(ctx)
+    for name in ("launch_desk_followup", "launch_desk_record_results"):
+        for args in (None, {}, {"pack": 5}, "oops"):
+            assert json.loads(ctx.tools[name]["handler"](args))["ok"] is False
+
+
+def test_blueprint_is_registered_only_when_hermes_has_the_method():
+    plain = StubCtx()
+    load_plugin().register(plain)  # an older Hermes: no method, no error
+    assert not hasattr(plain, "blueprints")
+
+    ctx = BlueprintCtx()
+    load_plugin().register(ctx)
+    bp = ctx.blueprints["follow-up"]
+    assert [s["name"] for s in bp["slots"]] == ["pack"]
+    assert "{pack}" in bp["prompt_template"] and "launch_desk_followup" in bp["prompt_template"]
+    assert bp["schedule_template"] and "{" not in bp["schedule_template"]
+    assert "launch-desk:launch-desk" in bp["skills"]
+
+
+def test_manifest_keeps_the_hermes_floor():
+    manifest = (ROOT / "plugin.yaml").read_text(encoding="utf-8")
+    assert 'requires_hermes: ">=0.22.6"' in manifest

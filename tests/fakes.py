@@ -8,7 +8,7 @@ from typing import Any
 
 class FakeHost:
     def __init__(self, choices=None, llm_replies=None, mcp_replies=None, surface="cli",
-                 unattended=False, data_dir=None):
+                 unattended=False, data_dir=None, schedule_replies=None):
         self.choices = list(choices or [])
         self.llm_replies = list(llm_replies or [])
         self.mcp_replies = dict(mcp_replies or {})
@@ -20,6 +20,8 @@ class FakeHost:
         self.llm_calls: list[tuple[str, str, dict]] = []
         self.mcp_calls: list[tuple[str, dict]] = []
         self.said: list[str] = []
+        self.schedule_replies = list(schedule_replies or [])
+        self.scheduled: list[dict] = []
 
     def choose(self, question: str, choices: list[dict]) -> str | None:
         self.asked.append((question, choices))
@@ -59,3 +61,15 @@ class FakeHost:
 
     def media_path(self, src: Path, label: str) -> str:
         return str(src)
+
+    def schedule(self, job: dict) -> dict:
+        """A scripted cronjob_manage create: the next scripted reply (an Exception is raised),
+        else a success with a made-up job id."""
+        self.scheduled.append(job)
+        reply = self.schedule_replies.pop(0) if self.schedule_replies else None
+        if isinstance(reply, Exception):
+            raise reply
+        if reply is None:
+            reply = {"success": True, "job_id": f"job{len(self.scheduled)}", "deliver": "origin",
+                     "next_run_at": "2026-11-06T12:00:00+00:00"}
+        return reply

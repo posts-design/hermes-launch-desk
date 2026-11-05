@@ -835,3 +835,98 @@ def test_a_draft_saved_by_an_older_version_still_forgets_its_screenshot(tmp_path
     host.state_set("pending", data)
     resume(host, "discard")
     assert not host.state_get("screenshot")
+
+
+# ------------------------------------------------------------------ check-ins after approve
+
+def checkin_questions(host):
+    return questions(host, "yes")
+
+
+def test_approve_then_yes_schedules_two_check_ins_for_the_pack():
+    host = make_host(PHASE1)
+    start(host)
+    reply = resume(host, "approve", "yes")
+    [pack_json] = packs(host)
+    name = pack_json.parent.name
+    assert len(checkin_questions(host)) == 1
+    assert [j["schedule"] for j in host.scheduled] == ["in 24h", "in 72h"]
+    assert all(j["name"] == f"Launch Desk check-in: {name}" and name in j["prompt"] for j in host.scheduled)
+    assert "job1" in reply and "job2" in reply  # how to cancel names each job
+    assert json.loads(pack_json.read_text())["intent_url"] in reply
+
+
+@pytest.mark.parametrize("answer", ["no", None])
+def test_approve_without_a_yes_schedules_nothing(answer):
+    host = make_host(PHASE1)
+    start(host)
+    reply = resume(host, "approve", *([answer] if answer else []))
+    assert len(checkin_questions(host)) == 1
+    assert host.scheduled == []
+    assert packs(host) and "job1" not in reply
+
+
+def test_a_check_in_is_asked_only_after_the_pack_is_written():
+    host = make_host(PHASE1)
+    start(host)
+    seen = []
+    ask = host.choose
+
+    def choose(question, choices):
+        if any(c["value"] == "yes" for c in choices):
+            seen.append(len(packs(host)))
+        return ask(question, choices)
+    host.choose = choose
+    resume(host, "approve", "no")
+    assert seen == [1]
+
+
+def test_check_in_failures_keep_the_pack_and_never_raise(caplog):
+    host = make_host(PHASE1, schedule_replies=[RuntimeError("scheduler down")])
+    start(host)
+    reply = resume(host, "approve", "yes")
+    assert packs(host) and "Traceback" not in reply
+    assert json.loads(packs(host)[0].read_text())["intent_url"] in reply
+
+
+def test_a_refused_check_in_is_reported_and_not_retried():
+    host = make_host(PHASE1, schedule_replies=[{"success": False, "error": "nope"},
+                                               {"success": False, "error": "nope"}])
+    start(host)
+    reply = resume(host, "approve", "yes")
+    assert len(host.scheduled) == 1 and "job1" not in reply and packs(host)
+
+
+@pytest.mark.parametrize("kw", [{"unattended": True}, {"surface": "cron"}])
+def test_unattended_runs_never_ask_about_check_ins_or_schedule(kw):
+    host = make_host(PHASE1, **kw)
+    start(host)
+    resume(host, "approve", "yes")
+    assert host.asked == [] and host.scheduled == []
+
+
+def test_offer_check_ins_never_asks_when_unattended():
+    host = make_host(["yes"], unattended=True)
+    assert wizard._offer_checkins(host, "some-pack") == []
+    assert host.asked == [] and host.scheduled == []
+
+
+def test_pack_keeps_the_unused_hooks_and_the_references_not_shown():
+    host = make_host(PHASE1)
+    start(host)
+    shown = set(pending(host)["shown"])
+    resume(host, "approve", "no")
+    data = json.loads(packs(host)[0].read_text())
+    assert data["hooks"] == CLEAN["hooks"]
+    more = data["more_references"]
+    assert more and all(r["id"] not in shown for r in more)
+    assert all(r["shape"] for r in more)
+
+
+def test_unreadable_search_results_still_approve_without_extra_references():
+    host = make_host(PHASE1)
+    start(host)
+    (Path(pending(host)["dir"]) / "items.json").write_text('{"not": "a list"}')
+    reply = resume(host, "approve", "no")
+    data = json.loads(packs(host)[0].read_text())
+    assert data["more_references"] == [] and data["intent_url"] in reply

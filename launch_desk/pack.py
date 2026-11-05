@@ -10,6 +10,7 @@ from datetime import date
 from pathlib import Path
 
 from .models import BrandKit, Brief, Draft, Reference
+from .references import shape_note
 
 ALT_MAX = 1000
 SLUG_WHAT_MAX = 40
@@ -23,6 +24,7 @@ CHECKLIST: tuple[str, ...] = (
     "Read the post once, start to finish, and change anything that is not true. The draft can carry a detail you never gave it.",
     "Judge it by sign-ups or downloads, with a tracked link, and by who comes back. Not by views.",
 )
+JUDGE_BY_CONVERSION = CHECKLIST[4]  # the after-post check; check-ins repeat it
 
 
 def x_intent_url(text: str) -> str:
@@ -84,7 +86,7 @@ def _fmt_views(views: int | None) -> str:
 def write_pack(out_dir: Path, brief: Brief, brand: BrandKit, draft: Draft, hook: str,
                cards: dict[str, Path], refs: list[Reference],
                has_screenshot: bool = False, preview: Path | None = None,
-               headline: str | None = None) -> Path:
+               headline: str | None = None, more_refs: list[Reference] = ()) -> Path:
     name = f"{date.today().isoformat()}-{_slug(brand.name, SLUG_WHAT_MAX)}-{_slug(brief.what, SLUG_WHAT_MAX)}"
     pack = _new_folder(Path(out_dir), name)
 
@@ -120,8 +122,12 @@ def write_pack(out_dir: Path, brief: Brief, brand: BrandKit, draft: Draft, hook:
         "brand": {"name": brand.name, "url": brand.url, "bg": brand.bg, "ink": brand.ink,
                   "accent": brand.accent},
         "hook": hook,
+        "hooks": list(draft.hooks),
         "caption": text,
         "references": [{"id": r.id, "brand": r.brand, "url": r.url, "views": r.views} for r in refs],
+        # References the founder was not shown, as their shape (not their words), for check-ins.
+        "more_references": [{"id": r.id, "brand": r.brand, "url": r.url, "views": r.views,
+                             "shape": shape_note(r.caption)} for r in more_refs],
         "intent_url": intent,
         "files": files,
     }

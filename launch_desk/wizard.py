@@ -7,7 +7,8 @@ them, and the draft waits in state under "pending" (24 hours) with its files in
 data_dir/pending/<id>/.
 
 Phase 2, `/launch` alone: Approve, Change hook, Swap references or Discard. Approve
-writes the pack. Nothing is ever posted.
+writes the pack, then asks whether to check in a day and three days later; only a Yes
+creates those two jobs on Hermes' scheduler (see followup.py). Nothing is ever posted.
 """
 from __future__ import annotations
 
@@ -23,6 +24,7 @@ from dataclasses import asdict, dataclass, replace
 from pathlib import Path
 from typing import Any, Callable
 
+from . import followup
 from .brand import NEUTRAL, PRESET_ACCENTS, fetch_brand, http_get
 from .draft import DraftError, draft_post, facts_text, unsupported_details
 from .hooks import pick_hook_shapes
@@ -84,6 +86,9 @@ SHIPPED = [
 ]
 NETWORKS = [{"value": "x", "label": "X"}, {"value": "linkedin", "label": "LinkedIn (soon)"}]
 ACCENT_NAMES = ("Blue", "Orange", "Green", "Pink", "Violet")
+CHECKIN_QUESTION = "Your launch pack is saved.\nCheck in with you tomorrow and in 3 days?"
+CHECKIN_CHOICES = [{"value": "yes", "label": "Yes"}, {"value": "no", "label": "No"}]
+CHECKIN_WHEN = ("tomorrow", "in 3 days")
 NEXT_CHOICES = [
     {"value": "approve", "label": "Approve"},
     {"value": "hook", "label": "Change hook"},
@@ -526,18 +531,68 @@ def _start(host: Host, args: Args, stored: BrandKit | None, get: Callable[[str],
 
 # ------------------------------------------------------------------ phase 2
 
+def _checkin_lines(made: list[dict], local: bool) -> list[str]:
+    if not made:
+        return ["The check-ins could not be scheduled, so there are none."]
+    when = " and ".join(CHECKIN_WHEN[: len(made)])
+    lines = [f"I'll check in {when} to ask how many sign-ups each channel brought."]
+    if len(made) < len(CHECKIN_WHEN):
+        lines.append("The later check-in could not be scheduled.")
+    if any(str(m.get("deliver") or "") == "local" for m in made):
+        lines.append("This chat can't receive them, so Hermes keeps their messages: hermes cron list shows them.")
+    cancel = "hermes cron remove" if local else "/cron remove"
+    lines.append("To cancel: " + ", ".join(f"{cancel} {m['job_id']}" for m in made))
+    return lines
+
+
+def _offer_checkins(host: Host, pack_name: str) -> list[str]:
+    """Ask once, after the pack is written. Only a Yes creates the jobs; No, no answer or an
+    unattended run creates nothing. Never raises: the pack is already saved."""
+    if _unattended(host):
+        return []
+    try:
+        if host.choose(CHECKIN_QUESTION, CHECKIN_CHOICES) != "yes":
+            return []
+    except Exception:
+        logger.exception("launch-desk: check-in question failed")
+        return []
+    made: list[dict] = []
+    try:
+        for spec in followup.job_specs(pack_name):
+            reply = host.schedule(spec)
+            if not (isinstance(reply, dict) and reply.get("success") and reply.get("job_id")):
+                logger.warning("launch-desk: check-in not scheduled: %s",
+                               str(reply.get("error") if isinstance(reply, dict) else reply)[:300])
+                break
+            made.append(reply)
+    except Exception:
+        logger.exception("launch-desk: scheduling a check-in failed")
+    return _checkin_lines(made, _local(host))
+
+
+def _unshown_refs(p: _Pending) -> list[Reference]:
+    """The references the founder never saw, for check-ins; none if the items can't be read."""
+    try:
+        return rank_references(p.items(), p.brief, exclude=set(p.data["shown"]))
+    except Exception:
+        logger.warning("launch-desk: unshown references skipped", exc_info=True)
+        return []
+
+
 def _approve(host: Host, p: _Pending) -> str:
+    more = _unshown_refs(p)
     pack = write_pack(host.data_dir() / "packs", p.brief, p.brand, p.draft, p.data["hook"],
                       {"x": Path(p.data["card"])}, p.refs,
                       has_screenshot=bool(_screenshots(_used_screenshots(p.data))),
                       preview=Path(p.data["preview"]),
-                      headline=card_headline(p.data["hook"], p.brief.what))
+                      headline=card_headline(p.data["hook"], p.brief.what), more_refs=more)
     if p.data.get("brand_new"):
         _store_brand(host, p.brand)
     _drop_pending(host, p.data)
     _forget_screenshot(host, p.data)
     data = json.loads((pack / "pack.json").read_text(encoding="utf-8"))
     text = (pack / data["files"]["post"]).read_text(encoding="utf-8").strip()
+    checkins = _offer_checkins(host, pack.name)
     if _local(host):
         post_it = f"Post it on X with this text filled in: {data['intent_url']}"
         saved = f"Pack folder: {pack}"
@@ -553,6 +608,7 @@ def _approve(host: Host, p: _Pending) -> str:
         saved,
         "Read it once and change anything that isn't true.",
         "To edit the text, change it in X's compose box or in post-x.txt.",
+        *checkins,
         f"MEDIA:{host.media_path(pack / data['files']['card_x'], 'card')}",
         f"MEDIA:{host.media_path(pack / data['files']['preview'], 'preview')}",
     ))

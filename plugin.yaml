@@ -5,10 +5,14 @@ description: >-
   feed preview, checked against a scroll test. What you shipped (first 160 characters) is sent to
   posts.design as the search text, through your own account; your site is fetched (at most 4
   requests); the brand kit, voice samples, drafts and their search results are stored locally in the
-  plugin data directory; nothing is posted.
+  plugin data directory; nothing is posted. After approve, only if the founder says Yes, two check-ins
+  (a day and three days later) are created on Hermes' own scheduler and post to the same chat;
+  sign-ups the founder reports are stored in the pack.
 author: posts.design
 license: MIT
 homepage: https://github.com/posts-design/hermes-launch-desk
 requires_hermes: ">=0.22.6"
 provides_tools:
   - launch_desk_attach_screenshot
+  - launch_desk_followup
+  - launch_desk_record_results

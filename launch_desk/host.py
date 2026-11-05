@@ -41,6 +41,8 @@ class Host(Protocol):
 
     def media_path(self, src: Path, label: str) -> str: ...
 
+    def schedule(self, job: dict) -> dict: ...
+
 
 class HermesHost:
     """Host backed by a Hermes PluginContext."""
@@ -115,6 +117,24 @@ class HermesHost:
             self.ctx.post_message(text)
         except Exception:
             pass
+
+    def schedule(self, job: dict) -> dict:
+        """One call to Hermes' own cron tool, as the model would make it (Hermes applies its
+        usual checks); its JSON reply as a dict. The tool is cronjob_manage in Hermes 0.22.7
+        and was cronjob before."""
+        reply: Any = None
+        for name in ("cronjob_manage", "cronjob"):
+            reply = self.ctx.dispatch_tool(name, dict(job))
+            if isinstance(reply, str):
+                try:
+                    reply = json.loads(reply)
+                except ValueError:
+                    return {"success": False, "error": "unreadable reply from the scheduler"}
+            if not isinstance(reply, dict):
+                return {"success": False, "error": "unexpected reply from the scheduler"}
+            if not str(reply.get("error") or "").startswith("Unknown tool"):
+                break
+        return reply
 
     def media_path(self, src: Path, label: str) -> str:
         """The path for a MEDIA line. Chat apps only get files from Hermes' media cache, so a

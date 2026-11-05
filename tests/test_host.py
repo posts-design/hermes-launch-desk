@@ -158,3 +158,35 @@ def test_media_path_needs_an_absolute_data_dir(tmp_path, monkeypatch):
     src.write_bytes(b"png")
     assert HermesHost(_state_ctx("home/plugin-data/ns")).media_path(src, "card") == str(src)
     assert not (tmp_path / "home" / "cache").exists()
+
+
+class DispatchCtx:
+    def __init__(self, replies):
+        self.replies = dict(replies)
+        self.calls = []
+
+    def dispatch_tool(self, name, args, **kw):
+        self.calls.append((name, args))
+        return self.replies.get(name, json.dumps({"error": f"Unknown tool: {name}"}))
+
+
+def test_schedule_creates_through_hermes_cron_tool():
+    ok = json.dumps({"success": True, "job_id": "abc", "deliver": "origin"})
+    ctx = DispatchCtx({"cronjob_manage": ok})
+    out = HermesHost(ctx).schedule({"action": "create", "schedule": "in 24h", "prompt": "p"})
+    assert out["job_id"] == "abc"
+    assert ctx.calls == [("cronjob_manage", {"action": "create", "schedule": "in 24h", "prompt": "p"})]
+
+
+def test_schedule_falls_back_to_the_older_tool_name():
+    ok = json.dumps({"success": True, "job_id": "abc"})
+    ctx = DispatchCtx({"cronjob": ok})
+    assert HermesHost(ctx).schedule({"action": "create"})["job_id"] == "abc"
+    assert [c[0] for c in ctx.calls] == ["cronjob_manage", "cronjob"]
+
+
+@pytest.mark.parametrize("reply", ["not json", "[1]", {"success": True}, json.dumps({"success": False})])
+def test_schedule_returns_a_dict_for_any_reply(reply):
+    ctx = DispatchCtx({"cronjob_manage": reply})
+    out = HermesHost(ctx).schedule({"action": "create"})
+    assert isinstance(out, dict)
