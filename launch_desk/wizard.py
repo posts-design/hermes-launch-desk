@@ -1,9 +1,13 @@
-"""/launch: from "I just shipped X" to an approved launch pack.
+"""/launch: from "I just shipped X" to an approved launch pack, in two phases.
 
-The flow asks before it works: what kind of launch and where (so a session that cannot
-answer stops before any network call), then the brand, the setup check, three
-references, the draft, the hook, the card, and an approve loop of at most three rounds.
-Nothing is saved until the founder approves; nothing is ever posted.
+Phase 1, `/launch <what> [-- <detail>]`: a few questions (asked before any network call,
+so a session that cannot answer stops at once), the brand, the setup check, three
+references, the draft, the hook, then the card and the feed preview. The reply shows
+them, and the draft waits in state under "pending" (24 hours) with its files in
+data_dir/pending/<id>/.
+
+Phase 2, `/launch` alone: Approve, Change hook, Swap references or Discard. Approve
+writes the pack. Nothing is ever posted.
 """
 from __future__ import annotations
 
@@ -12,10 +16,12 @@ import logging
 import re
 import shutil
 import tempfile
+import time
 import urllib.parse
+import uuid
 from dataclasses import asdict, dataclass, replace
 from pathlib import Path
-from typing import Callable
+from typing import Any, Callable
 
 from .brand import NEUTRAL, PRESET_ACCENTS, fetch_brand, http_get
 from .draft import DraftError, draft_post, facts_text, unsupported_details
@@ -32,7 +38,8 @@ logger = logging.getLogger(__name__)
 
 X_CARD = (1200, 675)
 HEADLINE_MAX = 70
-MAX_ROUNDS = 3
+PENDING_KEY = "pending"
+PENDING_TTL_S = 24 * 60 * 60
 
 EXAMPLE = "/launch https://yoursite.com dark mode for the editor -- people kept asking for it"
 USAGE = f"Usage: /launch <what you shipped> [-- <one real detail>], for example: {EXAMPLE}"
@@ -41,12 +48,22 @@ HELP = "\n".join((
     f"Example: {EXAMPLE}",
     "Add your site's link the first time; after that it is remembered.",
     "The part after -- is one true detail, like who asked for it. The draft uses it as a fact.",
+    "You get the draft, the card and a feed preview. Send /launch again to approve, change the hook, "
+    "swap references or discard.",
     "/launch brand <url> reads your site's colours and logo again.",
     "Nothing is ever posted. You get a pack to post yourself.",
 ))
 UNATTENDED = "/launch needs you to answer a few questions; run it in a chat."
 STOPPED = "Stopped: nothing was saved."
-DISCARDED = "Discarded: nothing was saved."
+WAITING = "Stopped. Your draft is still waiting; send /launch to pick up where you left off."
+DISCARDED = "Discarded. Nothing was posted."
+NEXT_STEP = "Send /launch to approve, change the hook, swap references or discard."
+REPLACED = "This draft replaces the one that was waiting."
+LINKEDIN_LATER = "LinkedIn isn't ready yet, so this draft is for X."
+NO_MORE_REFS = "There are no other references to swap in, so these stay."
+PACK_UNAVAILABLE = "posts.design isn't available, so these come from the sample pack of launch posts."
+PACK_TOO_FEW = "Not enough close matches on posts.design; using the sample pack."
+DRAFT_FAILED = "the model did not return a usable draft; run /launch again, or try a larger model"
 
 SHIPPED = [
     {"value": "feature", "label": "A new feature"},
@@ -56,10 +73,12 @@ SHIPPED = [
 ]
 NETWORKS = [{"value": "x", "label": "X"}, {"value": "linkedin", "label": "LinkedIn (soon)"}]
 ACCENT_NAMES = ("Blue", "Orange", "Green", "Pink", "Violet")
-APPROVE = {"value": "approve", "label": "Approve"}
-CHANGE_HOOK = {"value": "hook", "label": "Change hook"}
-SWAP = {"value": "swap", "label": "Swap references"}
-DISCARD = {"value": "discard", "label": "Discard"}
+NEXT_CHOICES = [
+    {"value": "approve", "label": "Approve"},
+    {"value": "hook", "label": "Change hook"},
+    {"value": "swap", "label": "Swap references"},
+    {"value": "discard", "label": "Discard"},
+]
 
 _URL_RE = re.compile(r"https?://[^\s<>\"']+", re.IGNORECASE)
 _DETAIL_SPLIT = re.compile(r"(?:^|\s)--(?:\s|$)")
@@ -67,7 +86,11 @@ _HELP_WORDS = {"help", "-h", "--help", "?"}
 
 
 class _Stop(Exception):
-    """The founder did not answer, or chose to stop: end the run, save nothing."""
+    """The founder did not answer: end the run."""
+
+
+def _now() -> float:
+    return time.time()
 
 
 # ------------------------------------------------------------------ arguments
@@ -101,14 +124,9 @@ def parse_args(raw: str) -> Args:
     return Args(_tidy(what), _tidy(detail), found[0] if found else None)
 
 
-def _site_key(url: str) -> tuple[str, str]:
-    p = urllib.parse.urlsplit(url.strip())
-    host = (p.hostname or "").lower()
-    return (host[4:] if host.startswith("www.") else host), p.path.rstrip("/")
-
-
 def _hostname(url: str) -> str:
-    return _site_key(url)[0] or url
+    host = (urllib.parse.urlsplit(url.strip()).hostname or "").lower()
+    return (host[4:] if host.startswith("www.") else host) or url
 
 
 def _cut(text: str, limit: int) -> str:
@@ -147,8 +165,7 @@ def _ask(host: Host, question: str, choices: list[dict]) -> str:
     return picked
 
 
-def _screenshot(host: Host) -> Path | None:
-    value = host.state_get("screenshot")
+def _screenshot(value: Any) -> Path | None:
     if isinstance(value, str) and value:
         path = Path(value)
         if path.is_file():
@@ -158,8 +175,7 @@ def _screenshot(host: Host) -> Path | None:
 
 # ------------------------------------------------------------------ brand
 
-def _load_brand(host: Host) -> BrandKit | None:
-    data = host.state_get("brand")
+def _kit_from(data: Any) -> BrandKit | None:
     if not isinstance(data, dict):
         return None
     try:
@@ -178,6 +194,12 @@ def _load_brand(host: Host) -> BrandKit | None:
     return kit
 
 
+def _kit_dict(kit: BrandKit) -> dict:
+    data = asdict(kit)
+    data["voice_samples"] = list(kit.voice_samples)
+    return data
+
+
 def _store_brand(host: Host, kit: BrandKit) -> BrandKit:
     """Keep the brand for later runs; its logo moves into data_dir/brand/."""
     brand_dir = host.data_dir() / "brand"
@@ -193,17 +215,15 @@ def _store_brand(host: Host, kit: BrandKit) -> BrandKit:
         kit = replace(kit, logo_path=str(keep))
     else:
         kit = replace(kit, logo_path=None)
-    data = asdict(kit)
-    data["voice_samples"] = list(kit.voice_samples)
-    host.state_set("brand", data)
+    host.state_set("brand", _kit_dict(kit))
     return kit
 
 
-def _read_brand(host: Host, url: str, get: Callable[[str], bytes], work: Path) -> BrandKit:
+def _read_brand(host: Host, url: str, get: Callable[[str], bytes], out: Path) -> BrandKit:
     """Read the site, then let the founder keep its accent or pick a preset."""
     site = _hostname(url)
     host.say(f"Reading {site} for its colours and logo.")
-    kit = fetch_brand(url, get, work / "brand")
+    kit = fetch_brand(url, get, out)
     presets = [{"value": hex_, "label": f"{name} {hex_}"} for name, hex_ in zip(ACCENT_NAMES, PRESET_ACCENTS)]
     if kit.accent != NEUTRAL.accent:
         question = (f"Colours from {site}: background {kit.bg}, text {kit.ink}, accent {kit.accent}.\n"
@@ -222,29 +242,19 @@ def _read_brand(host: Host, url: str, get: Callable[[str], bytes], work: Path) -
 
 # ------------------------------------------------------------------ references
 
-class _Pool:
-    """One search per run; swaps re-rank the same items without repeats."""
-
-    def __init__(self, host: Host, brief: Brief, offline: bool):
-        self.brief = brief
-        self.shown: set[str] = set()
-        self.items: list[dict] | None = None
-        args = build_search_args(brief)
-        if not offline:
-            try:
-                items = McpSource(host).search(args)
-                if len(rank_references(items, brief)) >= 3:
-                    self.items = items
-            except SourceUnavailable:
-                pass
-        self.used_pack = self.items is None
-        if self.items is None:
-            self.items = SamplePackSource().search(args)
-
-    def pick(self) -> list[Reference]:
-        refs = rank_references(self.items, self.brief, exclude=self.shown)
-        self.shown |= {r.id for r in refs}
-        return refs
+def _search(host: Host, brief: Brief, offline: bool) -> tuple[list[dict], str]:
+    """The candidate items for this draft, and a note when they come from the sample pack."""
+    args = build_search_args(brief)
+    note = PACK_UNAVAILABLE
+    if not offline:
+        try:
+            items = McpSource(host).search(args)
+            if len(rank_references(items, brief)) >= 3:
+                return items, ""
+            note = PACK_TOO_FEW
+        except SourceUnavailable:
+            pass
+    return SamplePackSource().search(args), note
 
 
 def _refs_block(refs: list[Reference], used_pack: bool) -> str:
@@ -255,16 +265,14 @@ def _refs_block(refs: list[Reference], used_pack: bool) -> str:
     return "\n".join(lines)
 
 
-# ------------------------------------------------------------------ hook, card, approve
-
-def _pick_hook(host: Host, draft: Draft, refs: list[Reference], used_pack: bool) -> str:
-    body = "\n".join(draft.caption.strip().splitlines()[1:]).strip()
+def _pick_hook(host: Host, hooks: list[str], caption: str, refs: list[Reference], used_pack: bool) -> str:
+    body = "\n".join(caption.strip().splitlines()[1:]).strip()
     question = _refs_block(refs, used_pack) + "\n\nPick the hook, the first line of your post."
     if body:
         question += "\nThe rest of the post:\n\n" + body
-    choices = [{"value": str(n), "label": h} for n, h in enumerate(draft.hooks, 1)]
+    choices = [{"value": str(n), "label": h} for n, h in enumerate(hooks, 1)]
     picked = _ask(host, question, choices)
-    return draft.hooks[int(picked) - 1]
+    return hooks[int(picked) - 1]
 
 
 def _flagged(text: str, brief: Brief, brand: BrandKit, refs: list[Reference]) -> list[Failure]:
@@ -274,28 +282,185 @@ def _flagged(text: str, brief: Brief, brand: BrandKit, refs: list[Reference]) ->
     return found + unsupported_details(text, facts_text(brief, brand))
 
 
-def _render(host: Host, brand: BrandKit, shot: Path | None, hook: str, text: str, brief: Brief,
-            out: Path) -> tuple[Path, Path]:
-    host.say("Drawing the card.")
-    card = render_card(brand, shot, card_headline(hook, brief.what), X_CARD, out / "card-x.png")
-    preview = render_feed_preview(brand, text, card, out / "preview-x.png")
-    return card, preview
+# ------------------------------------------------------------------ the pending draft
+
+class _Pending:
+    """The draft waiting for /launch: plain data in state, files in data_dir/pending/<id>/."""
+
+    def __init__(self, data: dict):
+        self.data = json.loads(json.dumps(data))  # a copy: state changes only on state_set
+        self.dir = Path(data["dir"])
+        self.brief = Brief(**data["brief"])
+        self.brand = _kit_from(data["brand"]) or NEUTRAL
+        self.refs = [Reference(**r) for r in data["refs"]]
+
+    @property
+    def text(self) -> str:
+        return post_text(self.draft, self.data["hook"])
+
+    @property
+    def draft(self) -> Draft:
+        return Draft(tuple(self.data["hooks"]), self.data["caption"], (), False)
+
+    def items(self) -> list[dict]:
+        try:
+            return json.loads((self.dir / "items.json").read_text(encoding="utf-8"))
+        except (OSError, ValueError):
+            return []
+
+    def set_refs(self, refs: list[Reference]) -> None:
+        self.refs = refs
+        self.data["refs"] = [asdict(r) for r in refs]
+        self.data["shown"] = sorted(set(self.data["shown"]) | {r.id for r in refs})
+
+    def set_draft(self, draft: Draft) -> None:
+        self.data["hooks"], self.data["caption"] = list(draft.hooks), draft.caption
+
+    def render(self, host: Host) -> None:
+        """Draw the card and the preview into a new round folder; drop the previous one."""
+        host.say("Drawing the card.")
+        n = int(self.data.get("round") or 0) + 1
+        out = self.dir / f"r{n}"
+        shot = _screenshot(self.data.get("screenshot"))
+        headline = card_headline(self.data["hook"], self.brief.what)
+        card = render_card(self.brand, shot, headline, X_CARD, out / "card-x.png")
+        preview = render_feed_preview(self.brand, self.text, card, out / "preview-x.png")
+        old = self.dir / f"r{n - 1}"
+        if n > 1 and old.is_dir():
+            shutil.rmtree(old, ignore_errors=True)
+        self.data.update(round=n, card=str(card), preview=str(preview))
+
+    def reply(self, notes: list[str]) -> str:
+        lines = [*notes, ""] if notes else []
+        text = self.text
+        lines += ["Your draft for X:", "", text, ""]
+        flagged = _flagged(text, self.brief, self.brand, self.refs)
+        if flagged:
+            lines.append("Still flagged: " + " ".join(f.message for f in flagged))
+        lines += [f"MEDIA:{self.data['preview']}", f"MEDIA:{self.data['card']}", NEXT_STEP]
+        return "\n".join(lines)
 
 
-def _approve_question(text: str, headline: str, flagged: list[Failure]) -> str:
-    lines = ["Your post for X:", "", text, ""]
-    if headline != text.splitlines()[0].strip():
-        lines.append(f"Card headline: {headline}")
-    if flagged:
-        lines.append("Still flagged: " + " ".join(f.message for f in flagged))
-    lines += ["", "Approve this pack?"]
-    return "\n".join(lines)
+def _pending_root(host: Host) -> Path:
+    root = host.data_dir() / "pending"
+    root.mkdir(parents=True, exist_ok=True)
+    return root
 
 
-def _reply(pack: Path, has_preview: bool) -> str:
+def _remove_dir(host: Host, path: Any) -> None:
+    """Delete a pending folder, and only ever one under data_dir/pending/."""
+    if not isinstance(path, str) or not path:
+        return
+    target = Path(path)
+    try:
+        inside = target.resolve().parent == _pending_root(host).resolve()
+    except OSError:
+        return
+    if inside:
+        shutil.rmtree(target, ignore_errors=True)
+
+
+def _drop_pending(host: Host, data: Any) -> None:
+    if isinstance(data, dict):
+        _remove_dir(host, data.get("dir"))
+    host.state_set(PENDING_KEY, None)
+
+
+def _load_pending(host: Host) -> _Pending | None:
+    """The waiting draft; an expired or unreadable one is deleted and counts as absent."""
+    data = host.state_get(PENDING_KEY)
+    if data is None:
+        return None
+    try:
+        fresh = _now() - float(data["created_at"]) < PENDING_TTL_S
+        pending = _Pending(data) if fresh and Path(data["dir"]).is_dir() else None
+    except (KeyError, TypeError, ValueError, AttributeError):
+        pending = None
+    if pending is None:
+        _drop_pending(host, data)
+    return pending
+
+
+# ------------------------------------------------------------------ phase 1
+
+def _phase1(host: Host, args: Args, stored: BrandKit | None, get: Callable[[str], bytes],
+            folder: Path, notes: list[str]) -> str:
+    shipped = _ask(host, "What kind of launch is this?", SHIPPED)
+    network = _ask(host, "Where will you post it?", NETWORKS)
+    if network != "x":
+        host.say(LINKEDIN_LATER)
+        notes.append(LINKEDIN_LATER)
+
+    brand_new = bool(args.url) and (stored is None or _hostname(args.url) != _hostname(stored.url))
+    brand = _read_brand(host, args.url, get, folder / "brand") if brand_new else stored
+    brief = Brief(shipped, "x", args.what, args.url or brand.url, detail=args.detail)
+
+    issues = [i for i in check_setup(lambda: host.mcp("get_my_access", {})) if i.code != "unreachable"]
+    if issues:
+        line = f"{issues[0].message}\n{issues[0].command}"
+        host.say(line)
+        notes.append(line)
+
+    shot = _screenshot(host.state_get("screenshot"))
+    line = f"Finding launch posts like yours for {brand.name or _hostname(brand.url)}."
+    if shot is None:
+        line += " Tip: send a screenshot and ask me to use it for the launch; the card is better with one."
+    host.say(line)
+    items, pack_note = _search(host, brief, offline=bool(issues))
+    if pack_note:
+        host.say(pack_note)
+    refs = rank_references(items, brief)
+
+    host.say("Drafting the post.")
+    draft = draft_post(host, brief, brand, refs, pick_hook_shapes(brief.shipped))
+    hook = _pick_hook(host, list(draft.hooks), draft.caption, refs, bool(pack_note))
+
+    (folder / "items.json").write_text(json.dumps(items, ensure_ascii=False), encoding="utf-8")
+    pending = _Pending({
+        "id": folder.name, "dir": str(folder), "created_at": _now(),
+        "brief": asdict(brief), "brand": _kit_dict(brand), "brand_new": brand_new,
+        "refs": [asdict(r) for r in refs], "shown": sorted(r.id for r in refs),
+        "used_pack": bool(pack_note), "hooks": list(draft.hooks), "hook": hook,
+        "caption": draft.caption, "screenshot": str(shot) if shot else None, "round": 0,
+    })
+    pending.render(host)
+    host.state_set(PENDING_KEY, pending.data)
+    return pending.reply(notes)
+
+
+def _start(host: Host, args: Args, stored: BrandKit | None, get: Callable[[str], bytes]) -> str:
+    """Phase 1 in its own folder; the folder goes if the run does not finish, and a draft
+    already waiting is replaced only when the new one is ready."""
+    old = _load_pending(host)
+    folder = _pending_root(host) / f"{time.strftime('%Y%m%d-%H%M%S')}-{uuid.uuid4().hex[:6]}"
+    folder.mkdir()
+    notes = [REPLACED] if old is not None else []
+    done = False
+    try:
+        reply = _phase1(host, args, stored, get, folder, notes)
+        done = True
+    finally:
+        if not done:
+            shutil.rmtree(folder, ignore_errors=True)
+    if old is not None:
+        _remove_dir(host, old.data.get("dir"))
+    return reply
+
+
+# ------------------------------------------------------------------ phase 2
+
+def _approve(host: Host, p: _Pending) -> str:
+    pack = write_pack(host.data_dir() / "packs", p.brief, p.brand, p.draft, p.data["hook"],
+                      {"x": Path(p.data["card"])}, p.refs,
+                      has_screenshot=_screenshot(p.data.get("screenshot")) is not None,
+                      preview=Path(p.data["preview"]),
+                      headline=card_headline(p.data["hook"], p.brief.what))
+    if p.data.get("brand_new"):
+        _store_brand(host, p.brand)
+    _drop_pending(host, p.data)
     data = json.loads((pack / "pack.json").read_text(encoding="utf-8"))
     text = (pack / data["files"]["post"]).read_text(encoding="utf-8").strip()
-    lines = [
+    return "\n".join((
         "Your launch pack is ready. Nothing was posted.",
         "",
         text,
@@ -305,79 +470,46 @@ def _reply(pack: Path, has_preview: bool) -> str:
         "Read it once and change anything that isn't true.",
         "To edit the text, change it in X's compose box or in post-x.txt.",
         f"MEDIA:{pack / data['files']['card_x']}",
-    ]
-    if has_preview:
-        lines.append(f"MEDIA:{pack / data['files']['preview']}")
-    return "\n".join(lines)
+        f"MEDIA:{pack / data['files']['preview']}",
+    ))
 
 
-# ------------------------------------------------------------------ the run
-
-def _launch(host: Host, args: Args, stored: BrandKit | None, get: Callable[[str], bytes],
-            work: Path) -> str:
-    shipped = _ask(host, "What kind of launch is this?", SHIPPED)
-    network = _ask(host, "Where will you post it?", NETWORKS)
-    if network != "x":
-        host.say("LinkedIn isn't ready yet, so this pack is for X.")
-
-    new_brand = None
-    if args.url and (stored is None or _site_key(args.url)[0] != _site_key(stored.url)[0]):
-        brand = new_brand = _read_brand(host, args.url, get, work)
+def _resume(host: Host, p: _Pending) -> str:
+    question = f"Your draft for X is waiting. It starts: {p.data['hook']}\nWhat next?"
+    picked = _ask(host, question, NEXT_CHOICES)
+    if picked == "approve":
+        return _approve(host, p)
+    if picked == "discard":
+        _drop_pending(host, p.data)
+        return DISCARDED
+    notes: list[str] = []
+    if picked == "swap":
+        fresh = rank_references(p.items(), p.brief, exclude=set(p.data["shown"]))
+        if fresh:
+            host.say("Drafting again with new references.")
+            draft = draft_post(host, p.brief, p.brand, fresh, pick_hook_shapes(p.brief.shipped))
+            hook = _pick_hook(host, list(draft.hooks), draft.caption, fresh, p.data["used_pack"])
+            p.set_refs(fresh)
+            p.set_draft(draft)
+            p.data["hook"] = hook
+        else:
+            notes.append(NO_MORE_REFS)
     else:
-        brand = stored
-    brief = Brief(shipped, "x", args.what, args.url or brand.url, detail=args.detail)
+        p.data["hook"] = _pick_hook(host, p.data["hooks"], p.data["caption"], p.refs, p.data["used_pack"])
+    if not notes:
+        p.render(host)
+    host.state_set(PENDING_KEY, p.data)
+    return p.reply(notes)
 
-    issues = [i for i in check_setup(lambda: host.mcp("get_my_access", {})) if i.code != "unreachable"]
-    if issues:
-        host.say(f"{issues[0].message}\n{issues[0].command}")
 
-    shot = _screenshot(host)
-    line = f"Finding launch posts like yours for {brand.name or _hostname(brand.url)}."
-    if shot is None:
-        line += " Tip: send a screenshot and ask me to use it for the launch; the card is better with one."
-    host.say(line)
-    pool = _Pool(host, brief, offline=bool(issues))
-    if pool.used_pack:
-        host.say("posts.design isn't available, so these come from the sample pack of launch posts.")
-    refs = pool.pick()
-
-    shapes = pick_hook_shapes(brief.shipped)
-    host.say("Drafting the post.")
-    draft = draft_post(host, brief, brand, refs, shapes)
-    hook = _pick_hook(host, draft, refs, pool.used_pack)
-
-    for round_no in range(1, MAX_ROUNDS + 1):
-        text = post_text(draft, hook)
-        card, preview = _render(host, brand, shot, hook, text, brief, work / f"round-{round_no}")
-        last = round_no == MAX_ROUNDS
-        choices = [APPROVE, DISCARD] if last else [APPROVE, CHANGE_HOOK, SWAP, DISCARD]
-        question = _approve_question(text, card_headline(hook, brief.what), _flagged(text, brief, brand, refs))
-        picked = _ask(host, question, choices)
-        if picked == "discard":
-            return DISCARDED
-        if picked == "approve":
-            if new_brand is not None:
-                _store_brand(host, new_brand)
-            pack = write_pack(host.data_dir() / "packs", brief, brand, draft, hook, {"x": card}, refs,
-                              has_screenshot=shot is not None, preview=preview,
-                              headline=card_headline(hook, brief.what))
-            return _reply(pack, has_preview=True)
-        if picked == "swap":
-            fresh = pool.pick()
-            if fresh:
-                refs = fresh
-                host.say("Drafting again with these references.")
-                draft = draft_post(host, brief, brand, refs, shapes)
-            else:
-                host.say("There are no other references to swap in, so these stay.")
-        hook = _pick_hook(host, draft, refs, pool.used_pack)
-    return STOPPED  # not reached: the last round offers only Approve and Discard
-
+# ------------------------------------------------------------------ the command
 
 def _brand_command(host: Host, url: str, get: Callable[[str], bytes]) -> str:
     if not url:
         return "Usage: /launch brand https://yoursite.com"
-    work = Path(tempfile.mkdtemp(prefix="run-", dir=_work_root(host)))
+    root = host.data_dir() / "work"
+    root.mkdir(parents=True, exist_ok=True)
+    work = Path(tempfile.mkdtemp(prefix="brand-", dir=root))
     try:
         kit = _store_brand(host, _read_brand(host, url, get, work))
     finally:
@@ -386,10 +518,22 @@ def _brand_command(host: Host, url: str, get: Callable[[str], bytes]) -> str:
             "Next: /launch <what you shipped>.")
 
 
-def _work_root(host: Host) -> Path:
-    root = host.data_dir() / "work"
-    root.mkdir(parents=True, exist_ok=True)
-    return root
+def _went_wrong(where: str, line: str) -> str:
+    return f"Something went wrong while {where}: {line}. Nothing was posted or saved."
+
+
+def _guarded(fn: Callable[[], str], on_stop: str, after: str = "") -> str:
+    """Run one phase; a stop or any error becomes one plain reply, never a raise."""
+    try:
+        return fn()
+    except _Stop:
+        return on_stop
+    except DraftError:
+        logger.exception("launch-desk: drafting failed")
+        return _went_wrong("drafting", DRAFT_FAILED) + after
+    except Exception:
+        logger.exception("launch-desk: /launch failed")
+        return _went_wrong("making your pack", "an unexpected error, with details in the Hermes log") + after
 
 
 def _run(host: Host, raw: str, get: Callable[[str], bytes]) -> str:
@@ -400,34 +544,26 @@ def _run(host: Host, raw: str, get: Callable[[str], bytes]) -> str:
         return HELP
     first, _, rest = text.partition(" ")
     if first.lower() == "brand" and (not rest.strip() or _URL_RE.fullmatch(rest.strip())):
-        return _brand_command(host, rest.strip(), get)
+        return _guarded(lambda: _brand_command(host, rest.strip(), get), STOPPED)
+    if not text:
+        pending = _load_pending(host)
+        if pending is None:
+            return USAGE
+        return _guarded(lambda: _resume(host, pending), WAITING,
+                        after=" Your draft is still waiting; send /launch to pick it up.")
     args = parse_args(text)
     if not args.what:
         return USAGE
-    stored = _load_brand(host)
+    stored = _kit_from(host.state_get("brand"))
     if stored is None and not args.url:
         return USAGE
-    work = Path(tempfile.mkdtemp(prefix="run-", dir=_work_root(host)))
-    try:
-        return _launch(host, args, stored, get, work)
-    finally:
-        shutil.rmtree(work, ignore_errors=True)
-
-
-def _went_wrong(line: str) -> str:
-    return f"Something went wrong while drafting: {line}. Nothing was posted or saved."
+    return _guarded(lambda: _start(host, args, stored, get), STOPPED)
 
 
 def run_launch(host: Host, raw_args: str = "", get: Callable[[str], bytes] = http_get) -> str:
-    """The /launch command: the chat reply, with the card and preview as MEDIA:<path> lines.
-    Never raises."""
+    """The /launch command: the chat reply, images as MEDIA:<path> lines. Never raises."""
     try:
         return _run(host, raw_args or "", get)
-    except _Stop:
-        return STOPPED
-    except DraftError:
-        logger.exception("launch-desk: drafting failed")
-        return _went_wrong("the model did not return a usable draft; run /launch again, or try a larger model")
     except Exception:
         logger.exception("launch-desk: /launch failed")
-        return _went_wrong("an unexpected error, with details in the Hermes log")
+        return _went_wrong("making your pack", "an unexpected error, with details in the Hermes log")
