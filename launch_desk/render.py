@@ -10,7 +10,7 @@ import urllib.parse
 from functools import lru_cache
 from pathlib import Path
 
-from PIL import Image, ImageDraw, ImageFilter, ImageFont, ImageOps
+from PIL import Image, ImageDraw, ImageFilter, ImageFont, ImageOps, ImageStat
 
 from .models import BrandKit
 
@@ -334,11 +334,36 @@ def _initial(name: str) -> str:
     return "•"
 
 
+LIGHT_MARK = 0.75  # mean luminance of a logo's opaque pixels above which it needs a dark plate
+
+
+def _mark_luminance(lg: Image.Image) -> float:
+    """Luminance of the mean colour of the logo's opaque pixels."""
+    alpha = lg.getchannel("A").point(lambda v: 255 if v > 127 else 0)
+    if not alpha.getbbox():
+        return 0.0
+    mean = ImageStat.Stat(lg.convert("RGB"), mask=alpha).mean
+    return _lum(tuple(round(v) for v in mean[:3]))  # type: ignore[arg-type]
+
+
+def _plate(brand: BrandKit, lg: Image.Image, accent: RGB) -> RGB:
+    """White under a dark or colourful mark; under a light one, the brand's dark
+    background, else the accent (or near-black when the accent is light too)."""
+    if _mark_luminance(lg) <= LIGHT_MARK:
+        return (255, 255, 255)
+    bg = _rgb(brand.bg, (250, 250, 250))
+    if _lum(bg) < 0.25:
+        return bg
+    return accent if _lum(accent) < 0.45 else (17, 17, 17)
+
+
 def _mark_tile(brand: BrandKit, logo: Image.Image | None, d: int, accent: RGB,
                circle: bool = False) -> Image.Image:
     """Square (or round) tile: the logo when it decodes, else the initial on the accent."""
     tile = Image.new("RGBA", (d, d), (0, 0, 0, 0))
     mask = _circle_mask(d) if circle else _mask((d, d), round(d * 0.24))
+    if logo is not None and not logo.convert("RGBA").getchannel("A").getbbox():
+        logo = None  # nothing visible in it: use the initial
     if logo is not None:
         lg = _trim_logo(logo)
         alpha = lg.getchannel("A")
@@ -349,8 +374,8 @@ def _mark_tile(brand: BrandKit, logo: Image.Image | None, d: int, accent: RGB,
             fitted = ImageOps.fit(lg, (d, d), Image.Resampling.LANCZOS)
             tile.paste(fitted, (0, 0))
         else:
-            # A transparent mark: centre it on a white plate so it reads on any background.
-            plate = Image.new("RGBA", (d, d), (255, 255, 255, 255))
+            # A transparent mark: centre it on a plate that it reads against.
+            plate = Image.new("RGBA", (d, d), _plate(brand, lg, accent) + (255,))
             inner = round(d * 0.72)
             lg.thumbnail((inner, inner), Image.Resampling.LANCZOS)
             if max(lg.size) < inner:

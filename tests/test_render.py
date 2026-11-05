@@ -125,3 +125,59 @@ def test_characters_the_font_cannot_draw_are_dropped():
 
     assert _drop_missing("Shipped \U0001F680 today") == "Shipped today"
     assert _drop_missing("Café — “new”") == "Café — “new”"
+
+
+def _round_mark(fill=(255, 255, 255, 255), size=200):
+    from PIL import ImageDraw
+    im = Image.new("RGBA", (size, size), (0, 0, 0, 0))
+    ImageDraw.Draw(im).ellipse((40, 40, size - 40, size - 40), fill=fill)
+    return im
+
+
+def _white_mark():
+    return _round_mark()
+
+
+def _pixels(im):
+    raw = im.convert("RGBA").tobytes()
+    return [tuple(raw[i:i + 4]) for i in range(0, len(raw), 4)]
+
+
+def _inside_colours(tile):
+    """Distinct colours of the tile's opaque pixels."""
+    return {px[:3] for px in _pixels(tile) if px[3] == 255}
+
+
+@pytest.mark.parametrize("bg,ink", [("#FAFAFA", "#111111"), ("#0B0B10", "#F5F5F5")])
+def test_white_on_transparent_logo_stays_visible(bg, ink):
+    from launch_desk.render import _mark_tile
+
+    kit = BrandKit(**{**KIT.__dict__, "bg": bg, "ink": ink})
+    tile = _mark_tile(kit, _white_mark(), 120, _rgb(kit.accent))
+    colours = _inside_colours(tile)
+    assert len(colours) > 1
+    assert (255, 255, 255) in colours
+
+
+def test_white_logo_plate_is_dark_bg_or_accent():
+    from launch_desk.render import _mark_tile
+
+    dark = BrandKit(**{**KIT.__dict__, "bg": "#0B0B10", "ink": "#F5F5F5"})
+    assert _rgb(dark.bg) in _inside_colours(_mark_tile(dark, _white_mark(), 120, _rgb(dark.accent)))
+    assert _rgb(KIT.accent) in _inside_colours(_mark_tile(KIT, _white_mark(), 120, _rgb(KIT.accent)))
+
+
+def test_fully_transparent_logo_falls_back_to_the_initial_tile():
+    from launch_desk.render import _mark_tile
+
+    empty = Image.new("RGBA", (64, 64), (0, 0, 0, 0))
+    tile = _mark_tile(KIT, empty, 120, _rgb(KIT.accent))
+    initial = _mark_tile(KIT, None, 120, _rgb(KIT.accent))
+    assert _pixels(tile) == _pixels(initial)
+
+
+def test_dark_logo_keeps_the_white_plate():
+    from launch_desk.render import _mark_tile
+
+    im = _round_mark((20, 20, 20, 255))
+    assert (255, 255, 255) in _inside_colours(_mark_tile(KIT, im, 120, _rgb(KIT.accent)))
