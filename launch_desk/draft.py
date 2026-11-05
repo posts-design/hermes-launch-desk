@@ -158,6 +158,7 @@ def _instructions(brief: Brief, relaxed: set[str]) -> str:
         "Never add pets, people, times, steps, counts, results or UI actions that are not in FACTS.",
         "No exclamation marks. No questions to the reader unless a hook pattern asks for one. No \"it's not just X, it's Y\" lines.",
         "Use 3 to 5 short lines, with a blank line between them.",
+        "Each line says something new. Don't restate the first line.",
         *_rule_lines(brief, relaxed),
     ]
     numbered = "\n".join(f"{i}. {r}" for i, r in enumerate(rules, 1))

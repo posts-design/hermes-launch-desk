@@ -290,3 +290,8 @@ def test_founder_detail_is_a_fact_in_prompt_and_check():
     assert "12 people asked to match their own site" in text.split("REAL LAUNCH POSTS")[0]
     assert unsupported_details("12 people asked for this.", facts_text(brief, BRAND)) == []
     assert Brief("feature", "x", "w", "u").detail == ""
+
+
+def test_prompt_asks_each_line_to_say_something_new():
+    instructions, _text = build_brief_prompt(BRIEF, BRAND, REFS, SHAPES, set())
+    assert "Don't restate the first line." in instructions
