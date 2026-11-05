@@ -68,10 +68,10 @@ _PICT = (
     "\U0001f8ae-\U0001f8ff\U0001f90c-\U0001f93a\U0001f93c-\U0001f945\U0001f947-\U0001faff"
     "\U0001fc00-\U0001fffd"
 )
-_MOD = "[︎️\U0001f3fb-\U0001f3ff⃣]*"
+_MOD = "[\ufe0e\ufe0f\U0001f3fb-\U0001f3ff⃣]*"
 _EMOJI_RE = re.compile(
     r"[\U0001f1e6-\U0001f1ff]{2}"  # flags
-    r"|[" + _PICT + r"]" + _MOD + r"(?:‍[" + _PICT + r"]" + _MOD + r")*"
+    r"|[" + _PICT + r"]" + _MOD + r"(?:\u200d[" + _PICT + r"]" + _MOD + r")*"
 )
 _EMOJI_ONLY_RE = re.compile(r"^(?:[\W_]|" + _EMOJI_RE.pattern + r")+$")
 

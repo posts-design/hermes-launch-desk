@@ -29,6 +29,7 @@ class StubCtx:
     def __init__(self):
         self.commands = {}
         self.tools = {}
+        self.skills = {}
         self.state = StubState()
 
     def register_command(self, name, handler, description="", args_hint=""):
@@ -36,6 +37,16 @@ class StubCtx:
 
     def register_tool(self, name, toolset, schema, handler, **kwargs):
         self.tools[name] = {"toolset": toolset, "schema": schema, "handler": handler}
+
+
+    def register_skill(self, name, path, description=""):
+        self.skills[name] = path
+
+
+def test_register_adds_skill_with_existing_file():
+    ctx = StubCtx()
+    load_plugin().register(ctx)
+    assert Path(ctx.skills["launch-desk"]).is_file()
 
 
 def test_register_adds_launch_command_and_tool():

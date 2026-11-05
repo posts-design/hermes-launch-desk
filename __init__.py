@@ -60,3 +60,9 @@ def register(ctx):
         handler=attach_screenshot,
         description="Attach a product screenshot for the next /launch share card.",
     )
+    skill = Path(__file__).resolve().parent / "skills" / "launch-desk" / "SKILL.md"
+    if skill.is_file() and hasattr(ctx, "register_skill"):
+        ctx.register_skill(
+            "launch-desk", skill,
+            "When a founder has shipped something and wants to announce it: the launch workflow and /launch.",
+        )
