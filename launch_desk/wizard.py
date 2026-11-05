@@ -53,8 +53,8 @@ HELP = "\n".join((
     "You get the draft, the card and a feed preview. Send /launch again to approve, change the hook, "
     "swap references or discard.",
     "/launch brand <url> reads your site's colours and logo again.",
-    "/launch voice <a past post of yours> keeps it as a voice sample, up to 3; drafts follow its style. "
-    "/launch voice clear forgets them.",
+    "/launch voice: <a past post of yours> keeps it as a voice sample, up to 3; drafts follow its style. "
+    "/launch voice: clear forgets them.",
     "Nothing is ever posted. You get a pack to post yourself.",
 ))
 UNATTENDED = "/launch needs you to answer a few questions; run it in a chat."
@@ -64,7 +64,7 @@ DISCARDED = "Discarded. Nothing was posted."
 NEXT_STEP = "Send /launch to approve, change the hook, swap references or discard."
 REPLACED = "This draft replaces the one that was waiting."
 LINKEDIN_LATER = "LinkedIn isn't ready yet, so this draft is for X."
-VOICE_USAGE = "Usage: /launch voice <a past post of yours>, or /launch voice clear"
+VOICE_USAGE = "Usage: /launch voice: <a past post of yours>, or /launch voice: clear"
 VOICE_NO_BRAND = ("There's no brand saved yet, and voice samples are kept with it. "
                   "Send /launch brand https://yoursite.com first.")
 STYLE_WORDS = {"em-dash": "more than one em-dash", "emoji": "more than one emoji",
@@ -91,6 +91,7 @@ NEXT_CHOICES = [
 
 _URL_RE = re.compile(r"https?://[^\s<>\"']+", re.IGNORECASE)
 _DETAIL_SPLIT = re.compile(r"(?:^|\s)--(?:\s|$)")
+_VOICE_RE = re.compile(r"voice\s*:(.*)", re.I | re.S)
 _HELP_WORDS = {"help", "-h", "--help", "?"}
 
 
@@ -394,6 +395,12 @@ def _remove_dir(host: Host, path: Any) -> None:
         shutil.rmtree(target, ignore_errors=True)
 
 
+def _forget_screenshot(host: Host, used: Any) -> None:
+    """Clear the attached-screenshot state, unless a newer one has replaced the one a draft used."""
+    if used and host.state_get("screenshot") == used:
+        host.state_set("screenshot", None)
+
+
 def _drop_pending(host: Host, data: Any) -> None:
     if isinstance(data, dict):
         _remove_dir(host, data.get("dir"))
@@ -412,6 +419,8 @@ def _load_pending(host: Host) -> _Pending | None:
         pending = None
     if pending is None:
         _drop_pending(host, data)
+        if isinstance(data, dict):
+            _forget_screenshot(host, data.get("screenshot"))
     return pending
 
 
@@ -498,7 +507,7 @@ def _approve(host: Host, p: _Pending) -> str:
     if p.data.get("brand_new"):
         _store_brand(host, p.brand)
     _drop_pending(host, p.data)
-    host.state_set("screenshot", None)
+    _forget_screenshot(host, p.data.get("screenshot"))
     data = json.loads((pack / "pack.json").read_text(encoding="utf-8"))
     text = (pack / data["files"]["post"]).read_text(encoding="utf-8").strip()
     return "\n".join((
@@ -522,7 +531,7 @@ def _resume(host: Host, p: _Pending) -> str:
         return _approve(host, p)
     if picked == "discard":
         _drop_pending(host, p.data)
-        host.state_set("screenshot", None)
+        _forget_screenshot(host, p.data.get("screenshot"))
         return DISCARDED
     notes: list[str] = []
     if picked == "swap":
@@ -607,8 +616,9 @@ def _run(host: Host, raw: str, get: Callable[[str], bytes]) -> str:
     first, _, rest = text.partition(" ")
     if first.lower() == "brand" and (not rest.strip() or _URL_RE.fullmatch(rest.strip())):
         return _guarded(lambda: _brand_command(host, rest.strip(), get), STOPPED)
-    if first.lower() == "voice":
-        return _guarded(lambda: _voice_command(host, rest.strip()), STOPPED)
+    voice = _VOICE_RE.match(text)
+    if voice:
+        return _guarded(lambda: _voice_command(host, voice.group(1).strip()), STOPPED)
     if not text:
         pending = _load_pending(host)
         if pending is None:

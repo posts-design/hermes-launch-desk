@@ -119,10 +119,12 @@ class HermesHost:
     def media_path(self, src: Path, label: str) -> str:
         """The path for a MEDIA line. Chat apps only get files from Hermes' media cache, so a
         copy goes to <HERMES_HOME>/cache/images (Hermes clears it after about a day); the
-        original stays put. data_dir is <HERMES_HOME>/plugin-data/<namespace>: if it isn't,
+        original stays put. data_dir is <HERMES_HOME>/plugin-data/<namespace>: if it isn't (or isn't absolute),
         or the copy fails, the original path is used."""
         try:
             data = self.data_dir()
+            if not data.is_absolute():
+                return str(src)
             home = data.parents[1]
             if data.parent != home / "plugin-data":
                 return str(src)

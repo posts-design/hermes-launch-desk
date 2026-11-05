@@ -150,3 +150,11 @@ def test_media_path_falls_back_to_the_original_outside_plugin_data(tmp_path):
     src.write_bytes(b"png")
     assert HermesHost(_state_ctx(tmp_path / "a" / "b")).media_path(src, "card") == str(src)
     assert not (tmp_path / "cache").exists()
+
+
+def test_media_path_needs_an_absolute_data_dir(tmp_path, monkeypatch):
+    monkeypatch.chdir(tmp_path)
+    src = tmp_path / "card-x.png"
+    src.write_bytes(b"png")
+    assert HermesHost(_state_ctx("home/plugin-data/ns")).media_path(src, "card") == str(src)
+    assert not (tmp_path / "home" / "cache").exists()

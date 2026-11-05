@@ -334,7 +334,7 @@ def _initial(name: str) -> str:
     return "•"
 
 
-LIGHT_MARK = 0.75  # mean luminance of a logo's opaque pixels above which it needs a dark plate
+LIGHT_MARK = 0.5  # mean luminance of a logo's opaque pixels above which it needs a dark plate
 
 
 def _mark_luminance(lg: Image.Image) -> float:

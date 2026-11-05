@@ -181,3 +181,12 @@ def test_dark_logo_keeps_the_white_plate():
 
     im = _round_mark((20, 20, 20, 255))
     assert (255, 255, 255) in _inside_colours(_mark_tile(KIT, im, 120, _rgb(KIT.accent)))
+
+
+def test_light_grey_logo_gets_the_dark_plate():
+    from launch_desk.render import _mark_tile
+
+    dark = BrandKit(**{**KIT.__dict__, "bg": "#0B0B10", "ink": "#F5F5F5"})
+    tile = _mark_tile(dark, _round_mark((0xD0, 0xD0, 0xD0, 255)), 120, _rgb(dark.accent))
+    colours = _inside_colours(tile)
+    assert _rgb(dark.bg) in colours and (255, 255, 255) not in colours

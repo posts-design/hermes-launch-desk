@@ -516,12 +516,27 @@ def with_brand(**kw):
     return host
 
 
-def voice(host, text):
-    return wizard.run_launch(host, f"voice {text}", get=no_get)
+def voice(host, text, sep=": "):
+    return wizard.run_launch(host, f"voice{sep}{text}", get=no_get)
 
 
 def samples(host):
     return host.state_get("brand")["voice_samples"]
+
+
+def test_launch_text_starting_with_voice_is_a_normal_launch():
+    host = make_host(PHASE1)
+    start(host, f"Voice mode in the editor -- people asked {URL}")
+    assert questions(host, "feature") and pending(host) is not None
+
+
+@pytest.mark.parametrize("sep", [":", " :", ": "])
+def test_voice_colon_forms_store_a_sample_and_clear(sep):
+    host = with_brand()
+    voice(host, "hi there", sep=sep)
+    assert samples(host) == ["hi there"]
+    voice(host, "clear", sep=sep)
+    assert samples(host) == []
 
 
 def test_voice_without_a_brand_saves_nothing():
@@ -618,3 +633,43 @@ def test_media_lines_come_from_host_media_path():
     assert [str(m) for m in media(done)] == ["/media-cache/card-5.png", "/media-cache/preview-6.png"]
     assert [src.parent for src, _ in given[4:]] == [pack_dir, pack_dir]
     assert all(src.is_file() for src, _ in given[4:])
+
+
+def _shot(tmp_path, name):
+    shot = tmp_path / name
+    Image.new("RGB", (1600, 900), "white").save(shot)
+    return str(shot)
+
+
+@pytest.mark.parametrize("choice", ["approve", "discard"])
+def test_newer_screenshot_survives_approve_or_discard(tmp_path, choice):
+    host = make_host(PHASE1)
+    host.state_set("screenshot", _shot(tmp_path, "old.png"))
+    start(host)
+    newer = _shot(tmp_path, "new.png")
+    host.state_set("screenshot", newer)
+    resume(host, choice)
+    assert host.state_get("screenshot") == newer
+
+
+def _expired_draft(host, monkeypatch, tmp_path):
+    host.state_set("screenshot", _shot(tmp_path, "old.png"))
+    start(host)
+    later = wizard._now() + wizard.PENDING_TTL_S + 60
+    monkeypatch.setattr(wizard, "_now", lambda: later)
+
+
+def test_dropping_an_expired_draft_clears_its_screenshot(tmp_path, monkeypatch):
+    host = make_host(PHASE1)
+    _expired_draft(host, monkeypatch, tmp_path)
+    assert wizard._load_pending(host) is None
+    assert host.state_get("screenshot") is None
+
+
+def test_dropping_an_expired_draft_keeps_a_newer_screenshot(tmp_path, monkeypatch):
+    host = make_host(PHASE1)
+    _expired_draft(host, monkeypatch, tmp_path)
+    newer = _shot(tmp_path, "new.png")
+    host.state_set("screenshot", newer)
+    assert wizard._load_pending(host) is None
+    assert host.state_get("screenshot") == newer

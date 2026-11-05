@@ -112,12 +112,6 @@ def test_rank_reads_real_search_shape():
     assert len({r.id for r in out}) == 3
 
 
-
-
-
-
-
-
 def test_pack_source_search_filters_by_category():
     pack = SamplePackSource()
     out = pack.search({"category": "announcement"})
