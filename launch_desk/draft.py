@@ -90,7 +90,7 @@ def _rule_lines(brief: Brief, relaxed: set[str]) -> list[str]:
         if rule.id in relaxed:
             continue
         if rule.id == "length" and brief.network != "x":
-            lines.append("Keep it short: 3 to 6 short lines, under 700 characters.")
+            lines.append("Keep the whole caption under 700 characters.")
             continue
         lines.append(words[rule.id])
     return lines
