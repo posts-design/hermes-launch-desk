@@ -19,7 +19,7 @@ class SourceUnavailable(Exception):
 class Host(Protocol):
     def choose(self, question: str, choices: list[dict]) -> str | None: ...
 
-    def complete_json(self, instructions: str, text: str, schema: dict) -> dict | None: ...
+    def complete_json(self, instructions: str, text: str, schema: dict) -> dict | str | None: ...
 
     def mcp(self, tool: str, args: dict) -> dict: ...
 
@@ -43,7 +43,9 @@ class HermesHost:
     def choose(self, question: str, choices: list[dict]) -> str | None:
         return self.ctx.ask_choice(question, choices)
 
-    def complete_json(self, instructions: str, text: str, schema: dict) -> dict | None:
+    def complete_json(self, instructions: str, text: str, schema: dict) -> dict | str | None:
+        """The parsed JSON object; else the raw reply text (some providers answer in plain
+        text or a fenced block); None on an empty reply or any error."""
         try:
             result = self.ctx.llm.complete_structured(
                 instructions=instructions,
@@ -55,7 +57,11 @@ class HermesHost:
             )
         except Exception:
             return None
-        return getattr(result, "parsed", None)
+        parsed = getattr(result, "parsed", None)
+        if isinstance(parsed, dict):
+            return parsed
+        text = getattr(result, "text", None)
+        return text if isinstance(text, str) and text.strip() else None
 
     def mcp(self, tool: str, args: dict) -> dict:
         try:

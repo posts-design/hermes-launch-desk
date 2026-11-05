@@ -1,0 +1,251 @@
+"""Draft the launch post: one model call, code-side checks, at most one redraft.
+
+The model writes a small part of the result. The prompt hands it the facts, the
+founder's voice, three real launch posts and two hook patterns; the scroll test
+in rules.py decides whether the draft is good enough.
+
+Failures on a returned Draft: the caption's own failures keep their plain
+rule id ("em-dash"). A hook's failures carry the hook's 1-based position in the
+rule id ("hook2:em-dash") and the message is prefixed "Hook 2: ".
+"""
+from __future__ import annotations
+
+import json
+import re
+from typing import Any, Sequence
+
+from .host import Host
+from .models import BrandKit, Brief, Draft, Failure, HookShape, Reference
+from .rules import RULES, STOCK_PHRASES, check, relaxed_rules
+
+DRAFT_SCHEMA: dict = {
+    "type": "object",
+    "properties": {
+        "hooks": {"type": "array", "items": {"type": "string"}, "minItems": 3, "maxItems": 3},
+        "caption": {"type": "string"},
+    },
+    "required": ["hooks", "caption"],
+}
+
+# Rules that make sense for a single first line.
+HOOK_RULES: frozenset[str] = frozenset({
+    "first-line-short", "stock-phrase", "em-dash", "emoji", "placeholder",
+    "link-first-line", "copied-run",
+})
+
+# Words small models reach for that make a post read as written by a model.
+# Prompt-only: the scroll test does not check these.
+_ALSO_AVOID: tuple[str, ...] = (
+    "introducing", "powerful", "effortless", "stunning", "transform", "empower",
+    "next-level", "cutting-edge", "say goodbye", "dive in", "journey", "imagine",
+)
+
+_NETWORK = {"x": "X", "linkedin": "LinkedIn"}
+
+REF_CHARS = 400
+VOICE_CHARS = 300
+VOICE_COUNT = 3
+
+
+class DraftError(Exception):
+    """The model gave no usable draft after one retry."""
+
+    def __init__(self, message: str = "The model did not return a usable draft. "
+                                      "Run /launch again, or try a larger model."):
+        super().__init__(message)
+
+
+def _trim(text: str, limit: int) -> str:
+    text = re.sub(r"\n{3,}", "\n\n", (text or "").strip())
+    if len(text) <= limit:
+        return text
+    cut = text[:limit].rsplit(None, 1)[0] if " " in text[:limit] else text[:limit]
+    return cut.rstrip(" ,.;:") + "..."
+
+
+def _one_line(text: str, limit: int) -> str:
+    return _trim(re.sub(r"\s+", " ", text or ""), limit)
+
+
+def _indent(text: str) -> str:
+    return "\n".join("   " + line if line else "" for line in text.split("\n"))
+
+
+def _rule_lines(brief: Brief, relaxed: set[str]) -> list[str]:
+    """The scroll test as plain instructions, one per non-relaxed rule."""
+    url = brief.product_url
+    words = {
+        "first-line-short": "Every hook, and the first line of the caption, is 12 words or fewer. Count them.",
+        "stock-phrase": "No hype words. Never write: " + ", ".join(STOCK_PHRASES + _ALSO_AVOID) + ".",
+        "em-dash": "Do not use the long dash (—). Use a full stop or a comma.",
+        "emoji": "No emoji, or one at most.",
+        "hashtags": "No hashtags.",
+        "placeholder": "No brackets [ ] or { } and no TODO. Fill every gap with real words.",
+        "link-first-line": f"Put the link {url} once, on the last line. Never in the first line.",
+        "length": "The whole caption is 280 characters or fewer, the link counting as 23. Aim for about 200.",
+        "copied-run": "Never copy from the example posts. Not even 5 words in a row.",
+    }
+    lines = []
+    for rule in RULES:
+        if rule.id in relaxed:
+            continue
+        if rule.id == "length" and brief.network != "x":
+            lines.append("Keep it short: 3 to 6 short lines, under 700 characters.")
+            continue
+        lines.append(words[rule.id])
+    return lines
+
+
+def _instructions(brief: Brief, relaxed: set[str]) -> str:
+    network = _NETWORK.get(brief.network, brief.network)
+    rules = [
+        "Write like the founder talking to one friend: plain words, short sentences, first person (I or we).",
+        "Say what changed and why someone would care, using only the facts below.",
+        "Be concrete: name the thing and one way someone would use it. "
+        "Do not invent numbers, features, users, quotes or results you were not given.",
+        "No exclamation marks. No questions to the reader unless a hook pattern asks for one. No \"it's not just X, it's Y\" lines.",
+        "Use 3 to 5 short lines, with a blank line between them.",
+        *_rule_lines(brief, relaxed),
+    ]
+    numbered = "\n".join(f"{i}. {r}" for i, r in enumerate(rules, 1))
+    return (
+        f"You write one launch post for {network}.\n\n"
+        f"Rules:\n{numbered}\n\n"
+        "Reply with JSON only, no other text:\n"
+        '{"hooks": ["first line A", "first line B", "first line C"], "caption": "the whole post"}\n'
+        "- hooks: three different first lines for this post. Hook 1 follows pattern A, "
+        "hook 2 follows pattern B, hook 3 is your own.\n"
+        "- caption: the whole post, starting with your best hook as its first line. "
+        "Use \\n for line breaks."
+    )
+
+
+def _facts(brief: Brief, brand: BrandKit) -> str:
+    lines = [f"Product: {_one_line(brand.name, 80)}"]
+    if brand.tagline:
+        lines.append(f"What it is: {_one_line(brand.tagline, 200)}")
+    lines.append(f"What just shipped ({brief.shipped}): {_one_line(brief.what, 300)}")
+    lines.append(f"Link: {_one_line(brief.product_url, 120)}")
+    return "FACTS\n" + "\n".join(lines)
+
+
+def _voice(brand: BrandKit) -> str:
+    samples = [s for s in brand.voice_samples if s and s.strip()][:VOICE_COUNT]
+    if not samples:
+        return "THE FOUNDER'S VOICE\nNo past posts. Write plainly, like a builder telling a peer."
+    body = "\n".join(f"Post {i}:\n{_indent(_trim(s, VOICE_CHARS))}" for i, s in enumerate(samples, 1))
+    return "THE FOUNDER'S VOICE (past posts, match how they sound)\n" + body
+
+
+def _references(refs: Sequence[Reference]) -> str:
+    if not refs:
+        return ""
+    body = "\n".join(f"{i}. {_one_line(r.brand, 40) or 'A brand'}:\n{_indent(_trim(r.caption, REF_CHARS))}"
+                     for i, r in enumerate(refs[:3], 1))
+    return ("REAL LAUNCH POSTS THAT WORKED (learn the shape, never copy wording)\n" + body)
+
+
+def _shapes(shapes: Sequence[HookShape]) -> str:
+    body = "\n".join(f"{label}. {_one_line(s.shape, 160)}\n   When: {_one_line(s.when, 160)}"
+                     for label, s in zip("AB", shapes))
+    return ("HOOK PATTERNS (replace each [ ] with real words; claim only what the facts support)\n" + body)
+
+
+def build_brief_prompt(brief: Brief, brand: BrandKit, refs: Sequence[Reference],
+                       shapes: Sequence[HookShape], relaxed: set[str]) -> tuple[str, str]:
+    """(instructions, input) for the first draft; together under 6,000 characters."""
+    parts = [_facts(brief, brand), _voice(brand), _references(refs), _shapes(shapes)]
+    return _instructions(brief, relaxed), "\n\n".join(p for p in parts if p)
+
+
+def build_redraft_prompt(brief: Brief, brand: BrandKit, refs: Sequence[Reference],
+                         shapes: Sequence[HookShape], relaxed: set[str],
+                         hooks: Sequence[str], caption: str,
+                         failures: Sequence[Failure]) -> tuple[str, str]:
+    instructions, text = build_brief_prompt(brief, brand, refs, shapes, relaxed)
+    previous = "\n".join(f"Hook {n}: {h}" for n, h in enumerate(hooks, 1))
+    previous += "\nCaption:\n" + _trim(caption, 1200)
+    fixes = "\n".join(f"- ({f.rule_id}: {f.fix})" for f in failures)
+    text += (f"\n\nYOUR LAST DRAFT\n{previous}\n\n"
+             f"Your draft broke these rules. Fix exactly these:\n{fixes}\n"
+             "Keep everything else the same.")
+    return instructions, text
+
+
+_FENCE_RE = re.compile(r"```(?:json|JSON)?\s*(.*?)```", re.DOTALL)
+
+
+def _loads(text: str) -> Any:
+    text = text.strip()
+    candidates = [text] + _FENCE_RE.findall(text)
+    start, end = text.find("{"), text.rfind("}")
+    if 0 <= start < end:
+        candidates.append(text[start:end + 1])
+    for c in candidates:
+        try:
+            return json.loads(c)
+        except ValueError:
+            continue
+    return None
+
+
+def parse_draft(reply: dict | str | None) -> tuple[list[str], str] | None:
+    """(hooks, caption) from a dict, a JSON string, or JSON in a ``` fence; None if the
+    shape is wrong (hooks not exactly 3 non-empty strings, caption missing or empty)."""
+    data = _loads(reply) if isinstance(reply, str) else reply
+    if not isinstance(data, dict):
+        return None
+    hooks, caption = data.get("hooks"), data.get("caption")
+    if not isinstance(hooks, list) or len(hooks) != 3:
+        return None
+    if not all(isinstance(h, str) and h.strip() for h in hooks):
+        return None
+    if not isinstance(caption, str) or not caption.strip():
+        return None
+    return [h.strip() for h in hooks], caption.strip()
+
+
+def _ask(host: Host, instructions: str, text: str) -> tuple[list[str], str] | None:
+    try:
+        reply = host.complete_json(instructions, text, DRAFT_SCHEMA)
+    except Exception:
+        return None
+    return parse_draft(reply)
+
+
+def _failures(hooks: Sequence[str], caption: str, brief: Brief, refs: Sequence[Reference],
+              voice: Sequence[str]) -> list[Failure]:
+    captions = [r.caption for r in refs]
+    found = list(check(caption, network=brief.network, reference_captions=captions, voice_samples=voice))
+    for n, hook in enumerate(hooks, 1):
+        for f in check(hook, network=brief.network, reference_captions=captions, voice_samples=voice):
+            if f.rule_id in HOOK_RULES:
+                found.append(Failure(f"hook{n}:{f.rule_id}", f"Hook {n}: {f.message}", f.fix))
+    return found
+
+
+def draft_post(host: Host, brief: Brief, brand: BrandKit, refs: Sequence[Reference],
+               shapes: Sequence[HookShape]) -> Draft:
+    """Draft, check, and redraft once if anything fails; keep the draft with fewer
+    failures (a tie keeps the redraft). Unparseable first replies get one retry with
+    the same prompt, then DraftError. An unparseable redraft keeps the first draft.
+    Draft.redrafted is True when the returned text is the redraft."""
+    voice = tuple(brand.voice_samples)
+    relaxed = relaxed_rules(voice)
+    instructions, text = build_brief_prompt(brief, brand, refs, shapes, relaxed)
+    first = _ask(host, instructions, text) or _ask(host, instructions, text)
+    if first is None:
+        raise DraftError()
+    hooks, caption = first
+    failures = _failures(hooks, caption, brief, refs, voice)
+    if not failures:
+        return Draft(tuple(hooks), caption, (), False)
+    r_instructions, r_text = build_redraft_prompt(brief, brand, refs, shapes, relaxed,
+                                                  hooks, caption, failures)
+    second = _ask(host, r_instructions, r_text)
+    if second is not None:
+        hooks2, caption2 = second
+        failures2 = _failures(hooks2, caption2, brief, refs, voice)
+        if len(failures2) <= len(failures):
+            return Draft(tuple(hooks2), caption2, tuple(failures2), True)
+    return Draft(tuple(hooks), caption, tuple(failures), False)

@@ -53,3 +53,52 @@ def test_data_dir_is_created(tmp_path):
         class state:
             data_dir = str(tmp_path / "a" / "b")
     assert HermesHost(Ctx()).data_dir().is_dir()
+
+
+class LlmCtx:
+    def __init__(self, result=None, exc=None):
+        self.result = result
+        self.exc = exc
+        self.kwargs = None
+        outer = self
+
+        class llm:
+            @staticmethod
+            def complete_structured(**kwargs):
+                outer.kwargs = kwargs
+                if outer.exc:
+                    raise outer.exc
+                return outer.result
+
+        self.llm = llm
+
+
+class Result:
+    def __init__(self, parsed=None, text=""):
+        self.parsed = parsed
+        self.text = text
+
+
+def test_complete_json_returns_parsed_dict():
+    ctx = LlmCtx(Result(parsed={"a": 1}, text='{"a": 1}'))
+    assert HermesHost(ctx).complete_json("do it", "input", {"type": "object"}) == {"a": 1}
+    assert ctx.kwargs["json_schema"] == {"type": "object"}
+    assert ctx.kwargs["input"] == [{"type": "text", "text": "input"}]
+
+
+def test_complete_json_falls_back_to_text_when_not_parsed():
+    text = 'Here:\n```json\n{"a": 1}\n```'
+    assert HermesHost(LlmCtx(Result(parsed=None, text=text))).complete_json("i", "t", {}) == text
+
+
+@pytest.mark.parametrize("result", [Result(parsed=None, text=""), Result(parsed=None, text="  "), object()])
+def test_complete_json_empty_reply_is_none(result):
+    assert HermesHost(LlmCtx(result)).complete_json("i", "t", {}) is None
+
+
+def test_complete_json_non_dict_parsed_falls_back_to_text():
+    assert HermesHost(LlmCtx(Result(parsed=[1, 2], text="[1, 2]"))).complete_json("i", "t", {}) == "[1, 2]"
+
+
+def test_complete_json_exception_is_none():
+    assert HermesHost(LlmCtx(exc=ValueError("schema"))).complete_json("i", "t", {}) is None

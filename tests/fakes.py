@@ -24,7 +24,7 @@ class FakeHost:
         self.asked.append((question, choices))
         return self.choices.pop(0) if self.choices else None
 
-    def complete_json(self, instructions: str, text: str, schema: dict) -> dict | None:
+    def complete_json(self, instructions: str, text: str, schema: dict) -> dict | str | None:
         self.llm_calls.append((instructions, text, schema))
         return self.llm_replies.pop(0) if self.llm_replies else None
 
