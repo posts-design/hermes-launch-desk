@@ -444,17 +444,6 @@ def test_prompt_carries_the_picked_hook_shapes(detail, shape_id):
     assert HOOK_SHAPES["reader-thought"].shape in text and HOOK_SHAPES[shape_id].shape in text
 
 
-def test_a_founder_detail_adds_one_rule_to_both_prompts():
-    with_detail = Brief("feature", "x", BRIEF.what, BRIEF.product_url, detail="people kept asking for it")
-    numbered = lambda text: len([ln for ln in text.splitlines() if ln[:1].isdigit() and ". " in ln[:4]])
-    plain, detailed = (build_brief_prompt(b, BRAND, REFS, SHAPES, set())[0] for b in (BRIEF, with_detail))
-    assert numbered(detailed) == numbered(plain) + 1
-    fails = [Failure("em-dash", "m", "f")]
-    r_plain, r_detailed = (build_redraft_prompt(b, BRAND, REFS, SHAPES, set(), ["a", "b", "c"], "cap", fails)[0]
-                           for b in (BRIEF, with_detail))
-    assert numbered(r_detailed) == numbered(r_plain) + 1
-
-
 def test_redraft_prompt_shows_the_last_use_case():
     _, text = build_redraft_prompt(BRIEF, BRAND, REFS, SHAPES, set(), CLEAN["hooks"], CLEAN["caption"],
                                    [Failure("em-dash", "m", "f")], use_case=USE)

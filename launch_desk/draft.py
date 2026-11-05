@@ -197,7 +197,6 @@ def _instructions(brief: Brief, relaxed: set[str], refs: Sequence[Reference] | N
         "Write like the founder talking to one friend: plain words, short sentences, first person (I or we).",
         "Open on the reader's side: what they wanted, or what they can do now. Then make it concrete "
         "with the use case. One line may say why it matters or how it feels, if it adds no new fact.",
-        *(["Say the founder's detail once."] if (brief.detail or "").strip() else []),
         "Every detail must come from FACTS. Never describe what the founder or a user did beyond what FACTS says. "
         "Never add pets, people, names, times, steps, counts, results or UI actions that are not in FACTS.",
         "No exclamation marks. No questions to the reader unless a hook pattern asks for one. No \"it's not just X, it's Y\" lines.",
