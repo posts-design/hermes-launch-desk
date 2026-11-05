@@ -245,6 +245,22 @@ def test_redraft_lists_each_fix_once():
         assert rule_id in text
 
 
+@pytest.mark.parametrize("kind", ["feature", "product", "rebrand", "partnership"])
+def test_redraft_prompt_stays_under_6000_chars_for_every_kind_with_a_use_case(kind):
+    brand = BrandKit("N" * 300, "https://pawr.link", "T" * 1000, "#fff", "#111", "#f60", None, None)
+    brief = Brief(kind, "x", "what " * 500, "https://pawr.link/" + "p" * 300, detail="detail " * 500)
+    fails = [Failure(r.id, r.message, r.fix) for r in RULES]
+    fails += [Failure(f"hook{n}:{r.id}", r.message, r.fix) for n in (1, 2, 3) for r in RULES]
+    for n in range(4):
+        detail = unsupported_details(" ".join(str(n) + "9" * (40 + i) for i in range(8)), "")[0]
+        fails.append(detail if n == 0 else Failure(f"hook{n}:{detail.rule_id}", detail.message, detail.fix))
+    fails.append(Failure("use-case-missing", "m", "Say the use case in the caption."))
+    instructions, text = build_redraft_prompt(brief, brand, REFS, pick_hook_shapes(kind), set(), ["hook " * 500] * 3,
+                                              "cap " * 3000, fails, use_case="use " * 500)
+    assert len(instructions) + len(text) < 6000
+    assert "Caption:" in text and "Use case:" in text
+
+
 def test_redraft_prompt_stays_under_6000_chars():
     long_refs = [Reference(f"r{i}", "Brand" * 20, "https://posts.design/x", "word " * 2000, 10, None, "w")
                  for i in range(3)]
@@ -396,6 +412,19 @@ def test_prompt_with_detail_and_long_everything_stays_under_6000_chars():
     r_ins, r_text = build_redraft_prompt(brief, brand, long_refs, SHAPES, set(), hooks, "cap " * 3000, fails,
                                          use_case="use " * 500)
     assert len(r_ins) + len(r_text) < 6000
+
+
+@pytest.mark.parametrize("kind", ["feature", "product", "rebrand", "partnership"])
+def test_prompt_with_the_longest_shape_notes_stays_under_6000_chars(kind):
+    from launch_desk.references import shape_note
+    cap = "You can now " + "word " * 300 + "\n" + "\n".join("- item " * 20 for _ in range(6)) + "\nSee it here:"
+    assert len(shape_note(cap)) >= 70
+    refs = [Reference(f"r{i}", "Brand" * 20, "https://posts.design/x", cap, 10, None, "w") for i in range(3)]
+    brand = BrandKit("N" * 300, "https://pawr.link", "T" * 1000, "#fff", "#111", "#f60", None, None,
+                     voice_samples=tuple("voice " * 1000 for _ in range(5)))
+    brief = Brief(kind, "x", "what " * 500, "https://pawr.link/" + "p" * 300, detail="detail " * 500)
+    instructions, text = build_brief_prompt(brief, brand, refs, pick_hook_shapes(kind), set())
+    assert len(instructions) + len(text) < 6000
 
 
 def test_redraft_prompt_shows_the_last_use_case():

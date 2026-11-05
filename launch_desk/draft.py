@@ -53,10 +53,12 @@ _ALSO_AVOID: tuple[str, ...] = (
 _NETWORK = {"x": "X", "linkedin": "LinkedIn"}
 
 REF_CHARS = 250
+BRAND_CHARS = 24  # a brand name in the reference headers
 VOICE_CHARS = 200
 VOICE_COUNT = 3
 REDRAFT_CAPTION_CHARS = 700
 REDRAFT_CAPTION_MIN = 80  # the last caption is shown at least this long, even over budget
+REDRAFT_SHORT_LINE = 40  # hook and use case lines when the redraft is far over budget
 PROMPT_BUDGET = 5900  # instructions + input; Hermes adds the schema (~300) on top
 HOOK_CHARS = 160
 
@@ -184,7 +186,7 @@ def _borrow(refs: Sequence[Reference] | None) -> str:
     if not refs:
         return "Use 2 to 4 short lines, with a blank line between them."
     top = refs[0]
-    return (f"Borrow the shape of post 1 ({_one_line(top.brand, 40) or 'a brand'}: {shape_note(top.caption)}): "
+    return (f"Borrow the shape of post 1 ({_one_line(top.brand, BRAND_CHARS) or 'a brand'}: {shape_note(top.caption)}): "
             "its structure, never its words. Short lines, a blank line between them.")
 
 
@@ -239,7 +241,7 @@ def _voice(brand: BrandKit) -> str:
 def _references(refs: Sequence[Reference]) -> str:
     if not refs:
         return ""
-    body = "\n".join(f"{i}. {_one_line(r.brand, 40) or 'A brand'} ({shape_note(r.caption)}):\n"
+    body = "\n".join(f"{i}. {_one_line(r.brand, BRAND_CHARS) or 'A brand'} ({shape_note(r.caption)}):\n"
                      f"{_indent(_trim(r.caption, REF_CHARS))}"
                      for i, r in enumerate(refs[:3], 1))
     return ("REAL LAUNCH POSTS THAT WORKED (learn the shape, never copy wording)\n" + body)
@@ -266,19 +268,27 @@ def build_redraft_prompt(brief: Brief, brand: BrandKit, refs: Sequence[Reference
                          failures: Sequence[Failure], use_case: str = "") -> tuple[str, str]:
     """(instructions, input) for the one redraft. The previous draft carries the shape,
     so the references and the voice block are left out; the facts and hook patterns
-    stay. Fix lines are grouped: one line per rule and fix, naming every place it
-    failed ("- (em-dash, hook2:em-dash: <fix>)"). Under 6,000 characters together."""
+    stay (far over budget, the hook patterns go and the last hooks are cut short). Fix
+    lines are grouped: one line per rule and fix, naming every place it failed
+    ("- (em-dash, hook2:em-dash: <fix>)"). Under 6,000 characters together."""
     instructions = _instructions(brief, relaxed, None)
-    previous = "\n".join([f"Use case: {_one_line(use_case, USE_CASE_CHARS)}"]
-                         + [f"Hook {n}: {_one_line(h, HOOK_CHARS)}" for n, h in enumerate(hooks, 1)])
     groups: dict[tuple[str, str], list[str]] = {}
     for f in failures:
         base = f.rule_id.split(":", 1)[-1]
         groups.setdefault((base, f.fix), []).append(f.rule_id)
     fixes = "\n".join(f"- ({', '.join(ids)}: {fix})" for (_, fix), ids in groups.items())
-    head = "\n\n".join(p for p in (_facts(brief, brand), _shapes(shapes, when=False)) if p)
     tail = f"\n\nYour draft broke these rules. Fix exactly these:\n{fixes}\nKeep everything else the same."
+
+    def last_draft(limit: int) -> str:
+        return "\n".join([f"Use case: {_one_line(use_case, min(limit, USE_CASE_CHARS))}"]
+                         + [f"Hook {n}: {_one_line(h, limit)}" for n, h in enumerate(hooks, 1)])
+
+    previous = last_draft(HOOK_CHARS)
+    head = "\n\n".join(p for p in (_facts(brief, brand), _shapes(shapes, when=False)) if p)
     room = PROMPT_BUDGET - len(instructions) - len(head) - len(tail) - len(previous) - 40
+    if room < REDRAFT_CAPTION_MIN:  # far over budget: shorter last-draft lines, no hook patterns
+        previous, head = last_draft(REDRAFT_SHORT_LINE), _facts(brief, brand)
+        room = PROMPT_BUDGET - len(instructions) - len(head) - len(tail) - len(previous) - 40
     cap = _trim(caption, max(REDRAFT_CAPTION_MIN, min(REDRAFT_CAPTION_CHARS, room)))
     return instructions, f"{head}\n\nYOUR LAST DRAFT\n{previous}\nCaption:\n{cap}{tail}"
 
