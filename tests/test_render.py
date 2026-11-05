@@ -199,3 +199,154 @@ def test_light_grey_logo_gets_the_dark_plate():
     tile = _mark_tile(dark, _round_mark((0xD0, 0xD0, 0xD0, 255)), 120, _rgb(dark.accent))
     colours = _inside_colours(tile)
     assert _rgb(dark.bg) in colours and (255, 255, 255) not in colours
+
+
+# ------------------------------------------------------------------ layouts
+
+DARK = BrandKit(**{**KIT.__dict__, "bg": "#0B0B10", "ink": "#F5F5F5"})
+SIZES = [(1200, 675), (1080, 1350)]
+
+
+def _solid(tmp_path: Path, size, colour, name) -> Path:
+    p = tmp_path / name
+    Image.new("RGB", size, colour).save(p)
+    return p
+
+
+def test_choose_layout_by_usable_screenshots(tmp_path):
+    from launch_desk.render import choose_layout
+
+    a, b, c = (_shot(tmp_path, name=n) for n in ("a.png", "b.png", "c.png"))
+    bad = tmp_path / "bad.png"
+    bad.write_bytes(b"not an image")
+    long_hook = "Custom themes are live for every page you build on pawr link"
+    short_hook = "Themes are live."
+    assert choose_layout([a, b], long_hook) == "split"
+    assert choose_layout([a, b], short_hook) == "split"
+    assert choose_layout([a, b, c], short_hook) == "split"
+    assert choose_layout([a], long_hook) == "hero"
+    assert choose_layout([a], short_hook) == "hero"  # the founder's screenshot always shows
+    assert choose_layout([bad, a], short_hook) == "hero"
+    assert choose_layout([], short_hook) == "statement"
+    assert choose_layout([], long_hook) == "statement"
+    assert choose_layout([bad, tmp_path / "missing.png"], long_hook) == "statement"
+
+
+def test_choose_layout_is_deterministic(tmp_path):
+    from launch_desk.render import choose_layout
+
+    shots = [_shot(tmp_path, name="a.png"), _shot(tmp_path, name="b.png")]
+    assert len({choose_layout(shots[:n], "Ship it") for n in (0, 1, 2) for _ in range(3)}) == 3
+
+
+@pytest.mark.parametrize("size", SIZES)
+@pytest.mark.parametrize("layout", ["hero", "statement", "split"])
+def test_every_layout_has_exact_size(tmp_path, size, layout):
+    shots = [_shot(tmp_path, name="a.png"), _shot(tmp_path, (1170, 2532), name="b.png")]
+    out = render_card(KIT, shots, HEADLINE_60, size, tmp_path / "c.png", layout=layout)
+    with Image.open(out) as im:
+        assert im.size == size
+
+
+@pytest.mark.parametrize("layout", ["hero", "statement", "split"])
+@pytest.mark.parametrize("kit", [KIT, DARK])
+def test_every_layout_uses_brand_background_at_corner_pixel(tmp_path, layout, kit):
+    shots = [_shot(tmp_path, name="a.png"), _shot(tmp_path, (900, 1600), name="b.png")]
+    for size in SIZES:
+        out = render_card(kit, shots, "Custom themes are live.", size, tmp_path / "c.png", layout=layout)
+        with Image.open(out) as im:
+            assert im.convert("RGB").getpixel((2, 2)) == _rgb(kit.bg)
+
+
+def _bbox_of(im: Image.Image, colour) -> tuple[int, int, int, int] | None:
+    """Bounding box of the pixels within a few levels of colour."""
+    r, g, b = (im.getchannel(i).point(lambda v, c=c: 255 if abs(v - c) <= 6 else 0)
+               for i, c in enumerate(colour))
+    from PIL import ImageChops
+
+    return ImageChops.multiply(ImageChops.multiply(r, g), b).getbbox()
+
+
+@pytest.mark.parametrize("size", SIZES)
+@pytest.mark.parametrize("shapes", [((2400, 900), (900, 1950)), ((3000, 400), (500, 2600)),
+                                    ((800, 800), (1920, 1080))])
+def test_split_with_mismatched_shapes_stays_inside_and_aligned(tmp_path, size, shapes):
+    red, green = (230, 20, 20), (20, 200, 60)
+    left = _solid(tmp_path, shapes[0], red, "left.png")
+    right = _solid(tmp_path, shapes[1], green, "right.png")
+    out = render_card(KIT, [left, right], HEADLINE_60, size, tmp_path / "c.png", layout="split")
+    with Image.open(out) as im:
+        im = im.convert("RGB")
+        a, b = _bbox_of(im, red), _bbox_of(im, green)
+    assert a and b
+    W, H = size
+    for box in (a, b):
+        assert box[0] >= 16 and box[1] >= 16 and box[2] <= W - 16 and box[3] <= H - 16
+    side_by_side = a[2] <= b[0]
+    stacked = a[3] <= b[1]
+    assert side_by_side or stacked  # never overlapping
+    if side_by_side:
+        assert abs((a[3] - a[1]) - (b[3] - b[1])) <= 2 and abs(a[1] - b[1]) <= 2
+    else:
+        assert abs((a[2] - a[0]) - (b[2] - b[0])) <= 2 and abs(a[0] - b[0]) <= 2
+
+
+@pytest.mark.parametrize("size", SIZES)
+def test_split_keeps_the_newest_two_in_attach_order(tmp_path, size):
+    colours = [(230, 20, 20), (20, 200, 60), (30, 60, 230)]
+    shots = [_solid(tmp_path, (1600, 900), c, f"{i}.png") for i, c in enumerate(colours)]
+    out = render_card(KIT, shots, "Ship it", size, tmp_path / "c.png", layout="split")
+    with Image.open(out) as im:
+        im = im.convert("RGB")
+        old, mid, new = (_bbox_of(im, c) for c in colours)
+    assert old is None and mid and new
+    assert mid[0] < new[0] or mid[1] < new[1]
+
+
+@pytest.mark.parametrize("size", SIZES)
+@pytest.mark.parametrize("kit", [KIT, DARK])
+def test_statement_sets_a_60_character_hook_whole_inside_the_margins(tmp_path, size, kit):
+    from launch_desk.render import MARGIN, _Card, _statement_text
+
+    assert len(HEADLINE_60) == 60
+    lines, font_size = _statement_text(_Card(kit, size, None), HEADLINE_60)
+    assert " ".join(lines) == HEADLINE_60  # nothing cut, no ellipsis
+    out = render_card(kit, [], HEADLINE_60, size, tmp_path / "c.png", layout="statement")
+    with Image.open(out) as im:
+        im = im.convert("RGB")
+        ink = _bbox_of(im, _rgb(kit.ink))
+    W, H = size
+    edge = MARGIN // 2
+    assert ink and ink[0] >= edge and ink[1] >= edge and ink[2] <= W - edge and ink[3] <= H - edge
+
+
+def test_a_forced_layout_without_the_screenshots_it_needs_falls_back(tmp_path):
+    one = [_solid(tmp_path, (1600, 900), (230, 20, 20), "one.png")]
+    split_one = render_card(KIT, one, "Ship it", (1200, 675), tmp_path / "a.png", layout="split")
+    hero_none = render_card(KIT, [], "Ship it", (1200, 675), tmp_path / "b.png", layout="hero")
+    with Image.open(split_one) as a:
+        assert _bbox_of(a.convert("RGB"), (230, 20, 20))
+    with Image.open(hero_none) as b:
+        assert b.size == (1200, 675)
+
+
+def test_statement_leaves_a_screenshot_out(tmp_path):
+    shot = [_solid(tmp_path, (1600, 900), (230, 20, 20), "one.png")]
+    out = render_card(KIT, shot, "Ship it", (1200, 675), tmp_path / "c.png", layout="statement")
+    with Image.open(out) as im:
+        assert _bbox_of(im.convert("RGB"), (230, 20, 20)) is None
+
+
+@pytest.mark.parametrize("size", SIZES)
+def test_split_labels_are_optional_and_stay_inside(tmp_path, size):
+    red, green = (230, 20, 20), (20, 200, 60)
+    shots = [_solid(tmp_path, (1600, 900), red, "a.png"), _solid(tmp_path, (900, 1600), green, "b.png")]
+    long_label = "A label far too long to sit under one screenshot without being cut " * 2
+    out = render_card(KIT, shots, "Ship it", size, tmp_path / "c.png", layout="split",
+                      labels=["Before", long_label])
+    with Image.open(out) as im:
+        im = im.convert("RGB")
+        assert im.size == size
+        boxes = [_bbox_of(im, red), _bbox_of(im, green)]
+    W, H = size
+    assert all(b and b[0] >= 16 and b[2] <= W - 16 and b[3] <= H - 16 for b in boxes)

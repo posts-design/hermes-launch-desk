@@ -9,6 +9,7 @@ import re
 import urllib.parse
 from functools import lru_cache
 from pathlib import Path
+from typing import Sequence
 
 from PIL import Image, ImageDraw, ImageFilter, ImageFont, ImageOps, ImageStat
 
@@ -473,8 +474,8 @@ class _Card:
         text_w = max(nf.getlength(lines[0]) if lines else 0, hf.getlength(host) if host else 0)
         return self.px(56 + 18) + round(text_w)
 
-    def footer(self, max_w: int) -> None:
-        x, bottom, d = self.m, self.H - self.m, self.px(56)
+    def footer(self, max_w: int, x: int | None = None) -> None:
+        x, bottom, d = self.m if x is None else x, self.H - self.m, self.px(56)
         tile = _mark_tile(self.brand, self.logo, d, self.accent)
         self.canvas.paste(tile, (x, bottom - d), tile)
         lines, size, host = self._footer_text(max_w)
@@ -489,6 +490,30 @@ class _Card:
         elif lines:
             self.draw.text((tx, bottom - d / 2), lines[0], font=nf, fill=self.ink, anchor="lm")
 
+    # -- a compact brand row: tile and name on one line
+    def _brand_name(self, max_w: int, d: int) -> tuple[str, ImageFont.FreeTypeFont]:
+        tw = max(1, max_w - d - self.px(14))
+        lines, size = fit_text(_display_name(self.brand), self.font_path, (tw, self.px(40)),
+                               self.px(24), self.px(16), 650, max_lines=1)
+        return (lines[0] if lines else ""), load_font(self.font_path, size, 650)
+
+    def brand_row_width(self, max_w: int, d: int | None = None) -> int:
+        d = d or self.px(44)
+        name, font = self._brand_name(max_w, d)
+        return d + self.px(14) + round(font.getlength(name))
+
+    def brand_row(self, x: int, y: int, max_w: int, d: int | None = None) -> None:
+        d = d or self.px(44)
+        tile = _mark_tile(self.brand, self.logo, d, self.accent)
+        self.canvas.paste(tile, (x, y), tile)
+        name, font = self._brand_name(max_w, d)
+        self.draw.text((x + d + self.px(14), y + d / 2), name, font=font, fill=self.ink, anchor="lm")
+
+    def label(self, text: str, x: int, y: int, w: int, font: ImageFont.FreeTypeFont) -> None:
+        if text:
+            shown = text if font.getlength(text) <= w else _ellipsize(text, font, w)
+            self.draw.text((x, y), shown, font=font, fill=self.muted, anchor="lt")
+
     def shot(self, im: Image.Image, x: int, y: int, w: int, h: int, visible: int | None = None) -> None:
         _place_shot(self.canvas, im, x, y, w, h, min(h, visible if visible else h), self.ink, self.dark)
 
@@ -502,48 +527,239 @@ def _block_height(text: str, font_path: str, box: tuple[int, int], hmax: int, hm
     return _cap_height(font) + (len(lines) - 1) * _line_height(size) + round(size * 0.24)
 
 
-def render_card(brand: BrandKit, screenshot: Path | None, headline: str, size: tuple[int, int],
-                out: Path) -> Path:
-    """Compose the launch card at exactly `size` and save it as PNG to `out`."""
-    raw = _open_image(screenshot)
+# ---------------------------------------------------------------- layouts
+
+LAYOUTS = ("hero", "statement", "split")
+SPLIT_TALLEST = 2.2  # height / width; a taller screenshot keeps its top part in a split
+
+
+def _as_list(screenshots: Sequence[Path | str | None] | Path | str | None) -> list[Path | str]:
+    if screenshots is None:
+        return []
+    if isinstance(screenshots, (str, Path)):
+        return [screenshots] if str(screenshots) else []
+    return [s for s in screenshots if s]
+
+
+def _layout_for(usable: int) -> str:
+    return "split" if usable >= 2 else "hero" if usable == 1 else "statement"
+
+
+def choose_layout(screenshots: Sequence[Path | str], hook: str) -> str:
+    """The card layout for these inputs. Same inputs, same answer; nothing is stored.
+
+    Only usable screenshots count (a file that opens as an image):
+      two or more -> "split": the newest two side by side, in the order they were attached;
+      one         -> "hero": the headline with the screenshot;
+      none        -> "statement": the hook set large as a quote, with the brand.
+    A short hook (8 words or fewer) suits the statement card, but the statement card leaves
+    screenshots out, so it is used only when the founder has none: a real screenshot always
+    shows. The hook is part of the signature so a changed hook re-runs this rule.
+    """
+    return _layout_for(sum(1 for p in _as_list(screenshots) if _open_image(p) is not None))
+
+
+def render_card(brand: BrandKit, screenshots: Sequence[Path | str | None] | Path | str | None,
+                headline: str, size: tuple[int, int], out: Path, layout: str | None = None,
+                labels: Sequence[str] | None = None) -> Path:
+    """Compose the launch card at exactly `size` and save it as PNG to `out`.
+
+    `screenshots` is a list (oldest first) or a single path. `layout` is one of LAYOUTS and
+    defaults to what choose_layout() picks; a layout the screenshots cannot fill (split with
+    one, hero with none) falls back to the one they can. `labels`, one per screenshot, are
+    small captions for the split card; without them it has none.
+    """
+    paths = _as_list(screenshots)
+    texts = list(labels or [])
+    opened = [(im, texts[i] if i < len(texts) else "") for i, p in enumerate(paths)
+              if (im := _open_image(p)) is not None][-2:]
     logo_raw = _open_image(brand.logo_path)
     card = _Card(brand, (int(size[0]), int(size[1])), logo_raw.convert("RGBA") if logo_raw else None)
     headline = _drop_missing(" ".join(headline.split())) or _display_name(brand)
-    tagline = _drop_missing(" ".join((brand.tagline or "").split()))
-    if tagline.lower() == headline.lower():
-        tagline = ""
-    shot = _flatten(raw, card.bg) if raw is not None else None
-    if shot is None:
-        _typographic(card, headline, tagline)
-    elif card.H > card.W:
-        _portrait(card, shot, headline, tagline)
+    shots = [_flatten(im, card.bg) for im, _ in opened]
+    fits = _layout_for(len(shots))
+    if layout not in LAYOUTS or (layout == "split" and len(shots) < 2) or (layout == "hero" and not shots):
+        layout = fits
+    if layout == "statement":
+        _statement(card, headline)
+    elif layout == "split":
+        _split(card, shots, headline, [_drop_missing(" ".join(t.split())) for _, t in opened])
     else:
-        _landscape(card, shot, headline, tagline)
+        tagline = _drop_missing(" ".join((brand.tagline or "").split()))
+        if tagline.lower() == headline.lower():
+            tagline = ""
+        (_portrait if card.H > card.W else _landscape)(card, shots[-1], headline, tagline)
     out = Path(out)
     out.parent.mkdir(parents=True, exist_ok=True)
     card.canvas.save(out, "PNG", optimize=True)
     return out
 
 
-def _typographic(c: _Card, headline: str, tagline: str) -> None:
-    """No screenshot: the headline is the hero, the tagline supports it."""
-    box_w = c.W - 2 * c.m
-    top_limit = c.m
-    bottom_limit = c.H - c.m - c.footer_h - c.gap
-    hmax = round(HEAD_MAX * (1.5 if c.W >= c.H else 2.0) * c.s)
-    mark_h = c.px(38)
-    tag_gap = c.px(28)
-    tag_box = (min(box_w, c.px(900)), c.px(2 * 34))
-    tag_h = _block_height(tagline, c.font_path, tag_box, c.px(30), c.px(20), 420, 2) if tagline else 0
-    head_box = (box_w, bottom_limit - top_limit - mark_h - (tag_h + tag_gap if tag_h else 0))
-    head_h = _block_height(headline, c.font_path, head_box, hmax, c.hmin, HEAD_WEIGHT, 3)
-    total = mark_h + head_h + (tag_gap + tag_h if tag_h else 0)
-    y = top_limit + max(0, (bottom_limit - top_limit - total) * 2 // 5)
-    y = c.accent_mark(c.m, y)
-    end = c.headline(headline, c.m, y, head_box, hmax=hmax)
-    if tag_h:
-        c.tagline(tagline, c.m, end + tag_gap, tag_box, 2, big=30, small=20)
-    c.footer(box_w)
+# -- statement: the hook as a large quote
+
+QUOTE_MARK = "\u201c"
+
+
+def _glow(c: _Card) -> None:
+    """A soft accent light rising from the bottom-right corner; the top-left stays the brand bg."""
+    r = round(0.9 * (c.W ** 2 + c.H ** 2) ** 0.5)
+    k = 4  # drawn at a quarter size, then smoothed up
+    small = Image.radial_gradient("L").resize((2 * r // k, 2 * r // k), Image.Resampling.BILINEAR)
+    peak = 0.17 if c.dark else 0.13
+    # radial_gradient reaches 255 at its corners, so v / 255 * sqrt(2) is the distance in radii
+    small = small.point(lambda v: round(255 * peak * max(0.0, 1 - v / 255 * 2 ** 0.5) ** 2.2))
+    layer = Image.new("L", (c.W // k + 1, c.H // k + 1), 0)
+    layer.paste(small, (c.W // k - r // k, c.H // k - r // k))
+    layer = layer.resize((layer.width * k, layer.height * k), Image.Resampling.BILINEAR).crop((0, 0, c.W, c.H))
+    c.canvas.paste(Image.new("RGB", (c.W, c.H), c.accent), (0, 0), layer)
+
+
+STATEMENT_WEIGHT = 760
+
+
+class _StatementGrid:
+    """The statement card's fixed parts, so the hook gets exactly the room that is left."""
+
+    def __init__(self, c: _Card) -> None:
+        portrait = c.H > c.W
+        self.quote_font = load_font(c.font_path, c.px(220 if portrait else 180), 800)
+        qb = self.quote_font.getbbox(QUOTE_MARK, anchor="ls")
+        self.quote_box = qb
+        self.quote_h, self.quote_gap = qb[3] - qb[1], c.px(30 if portrait else 24)
+        self.rule_gap, self.rule_h, self.rule_w = c.px(44 if portrait else 34), c.px(6), c.px(72)
+        self.top = c.m
+        self.bottom = c.H - c.m - c.footer_h - c.gap  # above the brand
+        fixed = self.quote_h + self.quote_gap + self.rule_gap + self.rule_h
+        self.box = (c.W - 2 * c.m - c.px(40 if portrait else 120), self.bottom - self.top - fixed)
+        self.hmax = c.px(104 if portrait else 96)
+        self.max_lines = 5 if portrait else 4
+
+
+def _statement_text(c: _Card, headline: str) -> tuple[list[str], int]:
+    """The lines and size the statement card sets the hook in."""
+    g = _StatementGrid(c)
+    return fit_text(headline, c.font_path, g.box, g.hmax, c.hmin, STATEMENT_WEIGHT, max_lines=g.max_lines)
+
+
+def _statement(c: _Card, headline: str) -> None:
+    """Centred quote: a quiet accent quote mark, the hook set large, one accent rule, then the
+    brand; a soft accent light rises from the bottom-right corner."""
+    _glow(c)
+    g = _StatementGrid(c)
+    lines, size = _statement_text(c, headline)
+    font = load_font(c.font_path, size, STATEMENT_WEIGHT)
+    lh = _line_height(size)
+    cap = _cap_height(font)
+    group = g.quote_h + g.quote_gap + cap + (len(lines) - 1) * lh + g.rule_gap + g.rule_h
+    q_top = g.top + max(0, (g.bottom - g.top - group) // 2)
+    qb = g.quote_box
+    c.draw.text(((c.W - (qb[2] - qb[0])) / 2 - qb[0], q_top - qb[1]), QUOTE_MARK, font=g.quote_font,
+                fill=_mix(c.bg, c.accent, 0.55 if c.dark else 0.30), anchor="ls")
+    base = q_top + g.quote_h + g.quote_gap + cap
+    for i, line in enumerate(lines):
+        c.draw.text((c.W / 2, base + i * lh), line, font=font, fill=c.ink, anchor="ms")
+    rule_y = base + (len(lines) - 1) * lh + g.rule_gap
+    c.draw.rounded_rectangle(((c.W - g.rule_w) // 2, rule_y, (c.W + g.rule_w) // 2, rule_y + g.rule_h),
+                             g.rule_h // 2, fill=c.accent)
+    max_w = c.W - 2 * c.m
+    c.footer(max_w, x=(c.W - c.footer_width(max_w)) // 2)
+
+
+# -- split: two screenshots side by side
+
+def _crop_tall(shot: Image.Image) -> Image.Image:
+    """A full-page capture keeps its top, phone-screen shaped, so it stays readable."""
+    if shot.height / shot.width <= SPLIT_TALLEST:
+        return shot
+    return shot.crop((0, 0, shot.width, round(shot.width * SPLIT_TALLEST)))
+
+
+def _pair(shots: list[Image.Image], max_w: int, max_h: int, gap: int,
+          stacked: bool) -> list[tuple[int, int]]:
+    """Sizes for two screenshots at one height side by side (or one width stacked), as large
+    as fits in max_w x max_h, never upscaled past MAX_UPSCALE."""
+    if stacked:
+        inv = [s.height / s.width for s in shots]
+        w = min(max_w, (max_h - gap) / sum(inv), *(s.width * MAX_UPSCALE for s in shots))
+        w = max(1, int(w))
+        return [(w, max(1, int(w * r))) for r in inv]
+    ratios = [s.width / s.height for s in shots]
+    h = min(max_h, (max_w - gap) / sum(ratios), *(s.height * MAX_UPSCALE for s in shots))
+    h = max(1, int(h))
+    return [(max(1, int(h * r)), h) for r in ratios]
+
+
+def _area(sizes: list[tuple[int, int]]) -> int:
+    return sum(w * h for w, h in sizes)
+
+
+def _place_pair(c: _Card, shots: list[Image.Image], sizes: list[tuple[int, int]], stacked: bool,
+                stage: tuple[int, int, int, int], labels: list[str], gap: int) -> None:
+    """Draw the brand-tinted stage and the two screenshots centred on it."""
+    c.draw.rounded_rectangle(stage, c.px(28), fill=_mix(c.bg, c.accent, 0.13 if c.dark else 0.09))
+    label_on = any(labels)
+    lf = load_font(c.font_path, c.px(19), 600)
+    label_h = c.px(34) if label_on else 0
+    cx = (stage[0] + stage[2]) // 2
+    if stacked:
+        total = sum(h for _, h in sizes) + gap + 2 * label_h
+        y = stage[1] + (stage[3] - stage[1] - total) // 2
+        for shot, (w, h), label in zip(shots, sizes, labels):
+            x = cx - w // 2
+            if label_on:
+                c.label(label, x, y, w, lf)
+                y += label_h
+            c.shot(shot, x, y, w, h)
+            y += h + gap
+        return
+    x = cx - (sum(w for w, _ in sizes) + gap) // 2
+    h = sizes[0][1]
+    y = stage[1] + (stage[3] - stage[1] - h - label_h) // 2
+    for shot, (w, _), label in zip(shots, sizes, labels):
+        if label_on:
+            c.label(label, x, y, w, lf)
+        c.shot(shot, x, y + label_h, w, h)
+        x += w + gap
+
+
+def _split(c: _Card, shots: list[Image.Image], headline: str, labels: list[str]) -> None:
+    """Two screenshots on a brand-tinted stage, at one height and top-aligned (on the tall card,
+    stacked at one width when that shows them larger), with the headline and brand above."""
+    W, H, m = c.W, c.H, c.m
+    shots = [_crop_tall(s) for s in shots]
+    inset, pad, gap = c.px(28), c.px(40), c.px(28)
+    label_h = c.px(34) if any(labels) else 0
+    max_w = W - 2 * inset - 2 * pad
+    if H <= W:
+        # Headline left and brand right on one row; the stage fills the rest.
+        brand_w = c.brand_row_width(round(W * 0.3))
+        text_w = W - 2 * m - brand_w - c.px(48)
+        top = m - c.px(8)
+        end = c.headline(headline, m, top, (text_w, 2 * _line_height(c.px(52)) + 4),
+                         hmax=c.px(52), max_lines=2)
+        cap = _cap_height(load_font(c.font_path, c.px(52), HEAD_WEIGHT))
+        c.brand_row(W - m - brand_w, top + cap // 2 - c.px(22), brand_w, d=c.px(44))
+        stage = (inset, end + c.px(44), W - inset, H - inset)
+        sizes = _pair(shots, max_w, stage[3] - stage[1] - 2 * pad - label_h, gap, stacked=False)
+        _place_pair(c, shots, sizes, False, stage, labels, gap)
+        return
+    # Tall card: brand row, then the headline, then a stage that hugs the screenshots;
+    # what the screenshots do not need goes to the headline.
+    max_h = round(H * 0.55) - 2 * pad - label_h
+    side = _pair(shots, max_w, max_h, gap, stacked=False)
+    stack = _pair(shots, max_w, max_h - label_h, gap, stacked=True)
+    stacked = _area(stack) > _area(side)
+    sizes = stack if stacked else side
+    content_h = (sum(h for _, h in sizes) + gap + 2 * label_h) if stacked else sizes[0][1] + label_h
+    stage = (inset, H - inset - content_h - 2 * pad, W - inset, H - inset)
+    d = c.px(44)
+    c.brand_row(m, m, W - 2 * m, d=d)
+    head_top, head_bottom = m + d + c.px(48), stage[1] - c.px(48)
+    hmax = round(c.hmax * 1.5)
+    box = (W - 2 * m, head_bottom - head_top)
+    block = _block_height(headline, c.font_path, box, hmax, c.hmin, HEAD_WEIGHT, 4)
+    c.headline(headline, m, head_top + max(0, (box[1] - block) // 2), box, hmax=hmax, max_lines=4)
+    _place_pair(c, shots, sizes, stacked, stage, labels, gap)
 
 
 def _landscape(c: _Card, shot: Image.Image, headline: str, tagline: str) -> None:
