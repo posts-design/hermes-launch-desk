@@ -6,6 +6,9 @@ import pytest
 
 from launch_desk import followup
 from launch_desk.pack import JUDGE_BY_CONVERSION
+from launch_desk.rules import check
+
+MESSAGE_RULES = {"em-dash", "emoji", "placeholder", "stock-phrase"}
 
 PACK = "2026-11-05-pawr-link-custom-themes"
 POST = "Pet pages can wear your colours now.\n\nPick a theme.\n\nhttps://pawr.link"
@@ -56,6 +59,7 @@ def test_two_job_specs_one_day_and_three_days_out():
         # (or keeps it local when there is none). Never another chat.
         assert "deliver" not in spec
         assert spec["attach_to_session"] is True
+        assert spec["enabled_toolsets"] == ["launch_desk"]
 
 
 def test_job_prompt_is_fixed_apart_from_the_pack_name():
@@ -180,3 +184,98 @@ def test_record_results_refuses_traversal(tmp_path):
     out = followup.record_results(root, "../outside", "X", 1)
     assert out["ok"] is False
     assert "results" not in read(tmp_path, "outside")
+
+
+# ------------------------------------------------------------------ the message, composed in code
+
+def message_failures(text):
+    return [f.rule_id for f in check(text, network="x") if f.rule_id in MESSAGE_RULES]
+
+
+PACK_VARIANTS = [
+    {},
+    {"detail": ""},
+    {"more_references": []},
+    {"detail": "", "more_references": [], "hooks": ["Pet pages can wear your colours now."]},
+    {"detail": "people asked \u2014 a lot \U0001F436 [link]"},
+    {"hooks": ["Pet pages can wear your colours now.", "Your page \u2014 your theme \U0001F3A8\U0001F3A8",
+               "Excited to announce themes \u2014 a game-changer {name}"]},
+    {"more_references": [{"id": "r", "brand": "beehiiv \U0001F41D\U0001F41D", "url": "https://x.com/b/1",
+                          "views": 4, "shape": "opens with a number \u2014 4 lines, {list}"}]},
+    {"detail": "TODO", "hooks": [], "more_references": []},
+]
+
+
+@pytest.mark.parametrize("extra", PACK_VARIANTS)
+def test_message_passes_the_copy_checks_for_any_pack(tmp_path, extra):
+    make_pack(tmp_path, **extra)
+    out = followup.followup(tmp_path, PACK)
+    assert out["ok"] is True
+    assert PACK in out["message"]
+    assert message_failures(out["message"]) == []
+
+
+def test_message_carries_the_first_suggestions_from_the_pack(tmp_path):
+    make_pack(tmp_path)
+    out = followup.followup(tmp_path, PACK)
+    assert DETAIL in out["message"]
+    assert out["unused_hooks"][0] in out["message"]
+
+
+def test_message_without_suggestions_still_asks(tmp_path):
+    make_pack(tmp_path, detail="", hooks=[], more_references=[])
+    out = followup.followup(tmp_path, PACK)
+    assert out["suggestions"] == [] and PACK in out["message"]
+
+
+@pytest.mark.parametrize("name", [PACK, "../outside", None, "nope"])
+def test_a_refusal_also_has_a_ready_message(tmp_path, name):
+    out = followup.followup(tmp_path, name)  # no packs at all
+    assert out["ok"] is False
+    assert out["message"].strip() and "\n" not in out["message"].strip()
+    assert message_failures(out["message"]) == []
+    if name == PACK:
+        assert PACK in out["message"]
+    if name == "../outside":
+        assert "../outside" not in out["message"]
+
+
+# ------------------------------------------------------------------ minors
+
+def test_a_pack_name_with_a_trailing_newline_is_refused(tmp_path):
+    make_pack(tmp_path)
+    assert followup.followup(tmp_path, PACK + "\n")["ok"] is False
+    assert followup.record_results(tmp_path, PACK + "\n", "X", 1)["ok"] is False
+
+
+def test_a_pack_json_that_is_a_symlink_is_refused(tmp_path):
+    root = tmp_path / "packs"
+    make_pack(tmp_path / "elsewhere", name="real")
+    folder = root / PACK
+    folder.mkdir(parents=True)
+    os.symlink(tmp_path / "elsewhere" / "real" / "pack.json", folder / "pack.json")
+    assert followup.followup(root, PACK)["ok"] is False
+    assert followup.record_results(root, PACK, "X", 1)["ok"] is False
+    assert "results" not in read(tmp_path / "elsewhere", "real")
+
+
+@pytest.mark.parametrize("signups", ["\uff11\uff12", "12345678", "9" * 5000, "1 2", "+5", "-0", "١٢"])
+def test_signups_as_text_must_be_up_to_seven_ascii_digits(tmp_path, signups):
+    make_pack(tmp_path)
+    out = followup.record_results(tmp_path, PACK, "X", signups)
+    assert out["ok"] is False and "results" not in read(tmp_path)
+
+
+def test_seven_ascii_digits_are_accepted(tmp_path):
+    make_pack(tmp_path)
+    assert followup.record_results(tmp_path, PACK, "X", "0001234")["ok"] is True
+    assert read(tmp_path)["results"][0]["signups"] == 1234
+
+
+def test_results_keep_the_last_fifty(tmp_path):
+    make_pack(tmp_path)
+    for n in range(55):
+        followup.record_results(tmp_path, PACK, "X", n)
+    results = read(tmp_path)["results"]
+    assert len(results) == 50
+    assert [r["signups"] for r in results] == list(range(5, 55))

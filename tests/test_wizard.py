@@ -930,3 +930,30 @@ def test_unreadable_search_results_still_approve_without_extra_references():
     reply = resume(host, "approve", "no")
     data = json.loads(packs(host)[0].read_text())
     assert data["more_references"] == [] and data["intent_url"] in reply
+
+
+
+@pytest.mark.parametrize("surface", ["cli", "tui", "local", "desktop", "acp"])
+def test_cancel_on_a_local_client_uses_the_cron_slash_command(surface):
+    host = make_host(PHASE1, surface=surface)
+    start(host)
+    reply = resume(host, "approve", "yes")
+    assert "/cron remove job1" in reply and "/cron remove job2" in reply
+
+
+@pytest.mark.parametrize("surface", ["telegram", "discord", "slack", "some-new-app"])
+def test_cancel_in_a_chat_app_never_offers_the_cli_only_slash_command(surface):
+    host = make_host(PHASE1, surface=surface)
+    start(host)
+    reply = resume(host, "approve", "yes")
+    assert "/cron" not in reply
+    assert "hermes cron remove" in reply
+    assert "job1" in reply and "job2" in reply
+
+
+def test_a_refused_create_logs_the_raw_reply(caplog):
+    caplog.set_level(logging.WARNING)
+    host = make_host(PHASE1, schedule_replies=[{"success": False, "detail": "raw-marker-xyz"}])
+    start(host)
+    resume(host, "approve", "yes")
+    assert "raw-marker-xyz" in caplog.text

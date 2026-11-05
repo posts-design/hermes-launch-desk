@@ -3,8 +3,10 @@
 On the founder's Yes, /launch creates two one-off jobs on Hermes' own scheduler (a day and
 three days after approve). Each job's agent calls launch_desk_followup and posts one message
 to the chat the job came from: how many sign-ups did each channel bring, and one next post.
-When the founder answers with numbers, the agent calls launch_desk_record_results, which
-appends them to the pack's pack.json. Nothing here posts or asks anything.
+The message itself is composed here, from the pack's own fields, and kept inside the copy
+checks; the agent only relays it. When the founder answers with numbers, the agent calls
+launch_desk_record_results, which appends them to the pack's pack.json. Nothing here posts or
+asks anything.
 """
 from __future__ import annotations
 
@@ -17,6 +19,8 @@ from pathlib import Path
 from typing import Any
 
 from .pack import JUDGE_BY_CONVERSION
+from .references import short_brand
+from .rules import _EMOJI_RE, check
 
 SKILL = "launch-desk:launch-desk"
 CHECKIN_HOURS = (24, 72)
@@ -25,16 +29,22 @@ JOB_NAME = "Launch Desk check-in: {pack}"
 # prompt template).
 PROMPT = (
     "Launch Desk check-in for the launch pack {pack}. "
-    "Call the launch_desk_followup tool with pack set to {pack}. "
-    "Then write one short message to the founder from its result: ask how many sign-ups each "
-    "channel brought, and say they can reply with the numbers. Suggest one next post, taken "
-    "from the suggestions in the result, using only what the result gives. "
-    "Name the pack {pack} in the message. Do not wait for an answer."
+    "Call the launch_desk_followup tool with pack set to {pack}, then reply with the message "
+    "field of its result exactly, adding nothing. "
+    "If the tool is missing or its result has ok false, reply with one line saying the check-in "
+    "for {pack} could not run, and stop. Do not wait for an answer."
 )
+TOOLSETS = ["launch_desk"]
 
 CHANNEL_MAX = 40
 SIGNUPS_MAX = 1_000_000
-_NAME_RE = re.compile(r"^[A-Za-z0-9][A-Za-z0-9._-]{0,159}$")
+SIGNUPS_DIGITS = 7
+RESULTS_KEPT = 50
+_NAME_RE = re.compile(r"[A-Za-z0-9][A-Za-z0-9._-]{0,159}")
+_DIGITS_RE = re.compile(r"[0-9]{1,%d}" % SIGNUPS_DIGITS)
+# The copy checks a check-in message must pass (the rest are for X posts).
+MESSAGE_RULES = frozenset({"em-dash", "emoji", "placeholder", "stock-phrase"})
+QUESTION = "How many sign-ups did each channel bring? Reply with a number for each, like X 12."
 
 
 def job_specs(pack: str) -> list[dict]:
@@ -48,6 +58,7 @@ def job_specs(pack: str) -> list[dict]:
         "prompt": PROMPT.format(pack=pack),
         "skills": [SKILL],
         "attach_to_session": True,
+        "enabled_toolsets": list(TOOLSETS),
     } for hours in CHECKIN_HOURS]
 
 
@@ -59,13 +70,14 @@ class _Refused(Exception):
 
 def _pack_file(root: Path, name: Any) -> Path:
     """data_dir/packs/<name>/pack.json, refusing any name that leaves the packs folder."""
-    if not isinstance(name, str) or not _NAME_RE.match(name) or ".." in name:
+    if not isinstance(name, str) or not _NAME_RE.fullmatch(name) or ".." in name:
         raise _Refused("Unknown pack name.")
     base = Path(root).resolve()
     folder = (base / name).resolve()
-    if folder.parent != base or not (folder / "pack.json").is_file():
+    path = folder / "pack.json"
+    if folder.parent != base or path.is_symlink() or not path.is_file():
         raise _Refused("Unknown pack name.")
-    return folder / "pack.json"
+    return path
 
 
 def _load(path: Path) -> dict:
@@ -102,17 +114,63 @@ def _suggestions(detail: str, unused_hooks: list[str], more_refs: list[dict]) ->
     return out[:3]
 
 
+# ------------------------------------------------------------------ the message
+
+def _passes(text: str) -> bool:
+    return not any(f.rule_id in MESSAGE_RULES for f in check(text, network="x"))
+
+
+def _plain(text: Any) -> str:
+    """Pack text for one line of the message: one line, no em-dash, emoji or brackets."""
+    text = _EMOJI_RE.sub("", str(text or ""))
+    text = re.sub(r"\s*[\u2014\u2013]\s*", ", ", text)
+    text = re.sub(r"[\[\]{}]", "", text)
+    return " ".join(text.split()).strip(" ,")
+
+
+def _idea(s: dict) -> str:
+    if s["kind"] == "reply-with-detail":
+        return f"Reply under your launch post with the detail: {_plain(s['detail']).rstrip('.')}."
+    if s["kind"] == "unused-hook":
+        return f"Post a follow-up that opens with: {_plain(s['hook'])}"
+    brand = _plain(short_brand(str(s.get("brand") or ""))) or "a brand"
+    return f"Try the shape of {brand}'s post ({_plain(s['shape'])}): {s.get('url') or ''}".rstrip(": ")
+
+
+def compose_message(pack: str, suggestions: list[dict]) -> str:
+    """The whole check-in, from pack fields only: the question and up to two next-post
+    ideas. An idea that would trip a copy check is left out."""
+    head = [f"Launch Desk check-in for {pack}.", QUESTION]
+    ideas: list[str] = []
+    for s in suggestions:
+        line = _idea(s)
+        if line and _passes("\n".join(head + ideas + [line])):
+            ideas.append(line)
+        if len(ideas) == 2:
+            break
+    if ideas:
+        head += ["", "Ideas for your next post:"] + [f"- {i}" for i in ideas]
+    return "\n".join(head)
+
+
+def _failed(pack: Any, error: str) -> dict:
+    name = pack if isinstance(pack, str) and _NAME_RE.fullmatch(pack) and ".." not in pack else "that pack"
+    return {"ok": False, "error": error,
+            "message": f"The Launch Desk check-in for {name} could not run: {error.lower().rstrip('.')}."}
+
+
 def followup(root: Path, pack: Any) -> dict:
-    """What a check-in needs, as data for the agent to phrase. Never raises."""
+    """What a check-in needs, with the message ready to post. Never raises."""
     try:
         data = _load(_pack_file(root, pack))
     except _Refused as exc:
-        return {"ok": False, "error": str(exc)}
+        return _failed(pack, str(exc))
     brief = data.get("brief") if isinstance(data.get("brief"), dict) else {}
     hook = data.get("hook") if isinstance(data.get("hook"), str) else ""
     unused = [h for h in _strings(data.get("hooks")) if h.strip() != hook.strip()]
     more = _dicts(data.get("more_references"))
     detail = brief.get("detail") if isinstance(brief.get("detail"), str) else ""
+    suggestions = _suggestions(detail.strip(), unused, more)
     return {
         "ok": True,
         "pack": pack,
@@ -122,7 +180,8 @@ def followup(root: Path, pack: Any) -> dict:
         "more_references": more,
         "after_post_check": {"id": "judge-by-conversion", "text": JUDGE_BY_CONVERSION},
         "results": _dicts(data.get("results")),
-        "suggestions": _suggestions(detail.strip(), unused, more),
+        "suggestions": suggestions,
+        "message": compose_message(pack, suggestions),
     }
 
 
@@ -138,8 +197,14 @@ def _channel(value: Any) -> str:
 
 
 def _signups(value: Any) -> int:
-    if isinstance(value, str) and value.strip().isdigit():
-        value = int(value.strip())
+    if isinstance(value, str):
+        text = value.strip()
+        if not _DIGITS_RE.fullmatch(text):
+            raise _Refused(f"signups must be a whole number from 0 to {SIGNUPS_MAX:,}.")
+        try:
+            value = int(text)
+        except ValueError as exc:
+            raise _Refused("signups must be a whole number.") from exc
     if isinstance(value, bool) or not isinstance(value, int) or not 0 <= value <= SIGNUPS_MAX:
         raise _Refused(f"signups must be a whole number from 0 to {SIGNUPS_MAX:,}.")
     return value
@@ -166,7 +231,7 @@ def record_results(root: Path, pack: Any, channel: Any, signups: Any) -> dict:
     except _Refused as exc:
         return {"ok": False, "error": str(exc)}
     entry["recorded_at"] = datetime.now(timezone.utc).isoformat(timespec="seconds")
-    data["results"] = _dicts(data.get("results")) + [entry]
+    data["results"] = (_dicts(data.get("results")) + [entry])[-RESULTS_KEPT:]
     try:
         _write_json(path, data)
     except OSError:

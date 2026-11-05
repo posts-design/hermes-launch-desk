@@ -540,8 +540,12 @@ def _checkin_lines(made: list[dict], local: bool) -> list[str]:
         lines.append("The later check-in could not be scheduled.")
     if any(str(m.get("deliver") or "") == "local" for m in made):
         lines.append("This chat can't receive them, so Hermes keeps their messages: hermes cron list shows them.")
-    cancel = "hermes cron remove" if local else "/cron remove"
-    lines.append("To cancel: " + ", ".join(f"{cancel} {m['job_id']}" for m in made))
+    ids = [str(m["job_id"]) for m in made]
+    if local:
+        lines.append("To cancel: " + ", ".join(f"/cron remove {i}" for i in ids))
+    else:  # /cron is a CLI command; a chat app cancels through the agent or a terminal
+        lines.append(f"To cancel, ask me to remove check-in {' and '.join(ids)}, "
+                     "or run hermes cron remove <id> where Hermes runs.")
     return lines
 
 
@@ -561,8 +565,7 @@ def _offer_checkins(host: Host, pack_name: str) -> list[str]:
         for spec in followup.job_specs(pack_name):
             reply = host.schedule(spec)
             if not (isinstance(reply, dict) and reply.get("success") and reply.get("job_id")):
-                logger.warning("launch-desk: check-in not scheduled: %s",
-                               str(reply.get("error") if isinstance(reply, dict) else reply)[:300])
+                logger.warning("launch-desk: check-in not scheduled: %s", repr(reply)[:1000])
                 break
             made.append(reply)
     except Exception:

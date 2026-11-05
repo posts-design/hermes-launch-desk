@@ -42,12 +42,12 @@ After Approve, `/launch` asks: "Check in with you tomorrow and in 3 days?" Only 
 When a check-in runs:
 
 1. Call `launch_desk_followup` with the pack name.
-2. Write one short message: ask how many sign-ups each channel brought, and suggest one next post from `suggestions` (a reply that carries the founder's detail, an unused hook, or the shape of a reference they did not see). Use only what the result gives; never make up numbers or details.
-3. Name the pack in the message. Do not wait for an answer.
+2. Reply with its `message` exactly, adding nothing. The message is composed from the pack and already checked: it names the pack, asks how many sign-ups each channel brought, and gives up to two next-post ideas.
+3. If the tool is missing or its result has `ok` false, reply with one line saying the check-in for that pack could not run, and stop. Never wait for an answer.
 
 When the founder replies to a check-in with numbers, call `launch_desk_record_results` once per channel: the pack name from the check-in, the channel (like X or LinkedIn) and the sign-ups as a whole number. Never guess a number they did not give. Then say what was recorded, in one line.
 
-To cancel a check-in: `/cron remove <job id>` in chat, or `hermes cron remove <job id>` in a terminal. `/launch` names the ids when it schedules them.
+To cancel a check-in: in the terminal chat, `/cron remove <job id>`. In a chat app, `/cron` does not exist; when the founder asks you to remove a check-in, remove that job with Hermes' cron tool, or they run `hermes cron remove <job id>` where Hermes runs. `/launch` names the ids when it schedules them.
 
 ## The launch workflow in short
 
