@@ -34,9 +34,9 @@ def _clip(text: str, limit: int) -> str:
     return text if len(text) <= limit else text[: limit - 1].rstrip() + "…"
 
 
-def alt_text(brief: Brief, brand: BrandKit, has_screenshot: bool) -> str:
+def alt_text(brief: Brief, brand: BrandKit, has_screenshot: bool, headline: str | None = None) -> str:
     name = " ".join(brand.name.split()) or "the product"
-    what = _clip(brief.what, 400)
+    what = _clip(headline or brief.what, 400).rstrip(".")
     parts = [f"Launch card for {name}.", f"Headline: {what}."]
     if has_screenshot:
         parts.append(f"It shows a screenshot of {name}.")
@@ -67,7 +67,8 @@ def _new_folder(base: Path, name: str) -> Path:
             n += 1
 
 
-def _post_text(draft: Draft, hook: str) -> str:
+def post_text(draft: Draft, hook: str) -> str:
+    """The post as it will be sent: the caption with its first line replaced by the chosen hook."""
     lines = draft.caption.strip().splitlines()
     if lines and lines[0].strip() != hook.strip():
         lines[0] = hook.strip()
@@ -82,11 +83,12 @@ def _fmt_views(views: int | None) -> str:
 
 def write_pack(out_dir: Path, brief: Brief, brand: BrandKit, draft: Draft, hook: str,
                cards: dict[str, Path], refs: list[Reference],
-               has_screenshot: bool = False) -> Path:
+               has_screenshot: bool = False, preview: Path | None = None,
+               headline: str | None = None) -> Path:
     name = f"{date.today().isoformat()}-{_slug(brand.name, SLUG_WHAT_MAX)}-{_slug(brief.what, SLUG_WHAT_MAX)}"
     pack = _new_folder(Path(out_dir), name)
 
-    text = _post_text(draft, hook)
+    text = post_text(draft, hook)
     intent = x_intent_url(text)
     files = {"post": "post-x.txt", "alt_text": "alt-text.txt", "checklist": "checklist.md",
              "references": "references.md"}
@@ -96,7 +98,10 @@ def write_pack(out_dir: Path, brief: Brief, brand: BrandKit, draft: Draft, hook:
         dest = f"card-{re.sub(r'[^a-z0-9-]', '', str(key).lower()) or 'x'}.png"
         shutil.copyfile(src, pack / dest)
         files[f"card_{key}"] = dest
-    (pack / "alt-text.txt").write_text(alt_text(brief, brand, has_screenshot) + "\n", encoding="utf-8")
+    if preview is not None:
+        shutil.copyfile(preview, pack / "preview-x.png")
+        files["preview"] = "preview-x.png"
+    (pack / "alt-text.txt").write_text(alt_text(brief, brand, has_screenshot, headline) + "\n", encoding="utf-8")
 
     check = ["# Before you post", "", f"Open this link to post on X with the text filled in: {intent}", "",
              "Nothing was posted. You send it.", ""]
@@ -111,7 +116,7 @@ def write_pack(out_dir: Path, brief: Brief, brand: BrandKit, draft: Draft, hook:
     files["pack"] = "pack.json"
     data = {
         "brief": {"shipped": brief.shipped, "network": brief.network, "what": brief.what,
-                  "product_url": brief.product_url},
+                  "detail": brief.detail, "product_url": brief.product_url},
         "brand": {"name": brand.name, "url": brand.url, "bg": brand.bg, "ink": brand.ink,
                   "accent": brand.accent},
         "hook": hook,

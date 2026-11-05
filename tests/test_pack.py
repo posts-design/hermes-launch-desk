@@ -111,3 +111,24 @@ def test_card_key_cannot_escape_pack_and_long_brand_slug_is_capped(tmp_path):
     assert {p.parent for p in tmp_path.rglob("card-*.png") if "out" in p.parts} == {pack}
     assert not (tmp_path / "evil.png").exists()
     assert len(pack.name.split("-", 3)[3]) <= 40 + 1 + 40
+
+
+def test_preview_is_copied_and_listed(tmp_path):
+    card = tmp_path / "c.png"
+    Image.new("RGB", (1200, 675)).save(card)
+    preview = tmp_path / "p.png"
+    Image.new("RGB", (390, 900)).save(preview)
+    draft = Draft(("h", "b", "c"), "h\nbody", (), False)
+    pack = write_pack(tmp_path / "out", _brief(), _brand(), draft, "h", {"x": card}, [], preview=preview)
+    data = json.loads((pack / "pack.json").read_text())
+    assert (pack / data["files"]["preview"]).is_file()
+    assert Image.open(pack / data["files"]["preview"]).size == (390, 900)
+
+
+def test_alt_text_names_the_card_headline_when_given(tmp_path):
+    card = tmp_path / "c.png"
+    Image.new("RGB", (1200, 675)).save(card)
+    draft = Draft(("h", "b", "c"), "h\nbody", (), False)
+    pack = write_pack(tmp_path / "out", _brief(), _brand(), draft, "h", {"x": card}, [],
+                      headline="Pet pages can wear your colours now")
+    assert "Pet pages can wear your colours now" in (pack / "alt-text.txt").read_text()
