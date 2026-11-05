@@ -67,7 +67,41 @@ def test_attach_screenshot_stores_valid_image(tmp_path):
     handler = ctx.tools["launch_desk_attach_screenshot"]["handler"]
     result = json.loads(handler({"path": str(png)}))
     assert result["ok"] is True
-    assert ctx.state.get("screenshot") == str(png)
+    assert ctx.state.get("screenshot") == [str(png)]
+
+
+def _pngs(tmp_path, *names):
+    from PIL import Image
+
+    out = []
+    for name in names:
+        p = tmp_path / name
+        Image.new("RGB", (8, 8), "white").save(p)
+        out.append(str(p))
+    return out
+
+
+def test_attach_keeps_two_screenshots_and_drops_the_oldest(tmp_path):
+    a, b, c = _pngs(tmp_path, "a.png", "b.png", "c.png")
+    ctx = StubCtx()
+    load_plugin().register(ctx)
+    handler = ctx.tools["launch_desk_attach_screenshot"]["handler"]
+    handler({"path": a})
+    handler({"path": b})
+    assert ctx.state.get("screenshot") == [a, b]
+    handler({"path": c})
+    assert ctx.state.get("screenshot") == [b, c]
+    handler({"path": b})  # attaching one again makes it the newest, never a duplicate
+    assert ctx.state.get("screenshot") == [c, b]
+
+
+def test_attach_keeps_a_screenshot_stored_by_an_older_version(tmp_path):
+    old, new = _pngs(tmp_path, "old.png", "new.png")
+    ctx = StubCtx()
+    ctx.state.set("screenshot", old)  # older versions stored one path as a string
+    load_plugin().register(ctx)
+    ctx.tools["launch_desk_attach_screenshot"]["handler"]({"path": new})
+    assert ctx.state.get("screenshot") == [old, new]
 
 
 def test_attach_screenshot_rejects_missing_and_non_image(tmp_path):

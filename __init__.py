@@ -13,7 +13,8 @@ except ImportError:  # imported as a top-level module (pytest collects the repo 
 
 SCREENSHOT_SCHEMA = {
     "name": "launch_desk_attach_screenshot",
-    "description": "Attach a product screenshot (PNG, JPEG or WebP) for the next /launch share card.",
+    "description": ("Attach a product screenshot (PNG, JPEG or WebP) for the next /launch share card. "
+                    "Up to two are kept; two make a side-by-side card, and a third replaces the oldest."),
     "parameters": {
         "type": "object",
         "properties": {"path": {"type": "string", "description": "Path to the image file."}},
@@ -45,7 +46,8 @@ def register(ctx):
             return json.dumps({"ok": False, "error": "File not found."})
         if not _is_image(path):
             return json.dumps({"ok": False, "error": "Not a PNG, JPEG or WebP image."})
-        ctx.state.set("screenshot", str(path))
+        kept = [p for p in wizard.screenshot_paths(ctx.state.get("screenshot")) if p != str(path)]
+        ctx.state.set("screenshot", (kept + [str(path)])[-wizard.SCREENSHOTS_MAX:])
         return json.dumps({"ok": True, "path": str(path)})
 
     ctx.register_command(

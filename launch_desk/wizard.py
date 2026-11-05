@@ -31,7 +31,7 @@ from .models import BrandKit, Brief, Draft, Failure, Reference
 from .pack import post_text, write_pack
 from .references import (CATEGORY, McpSource, SamplePackSource, build_search_args, rank_references,
                          reference_line)
-from .render import render_card, render_feed_preview
+from .render import choose_layout, render_card, render_feed_preview
 from .rules import check, relaxed_rules
 from .setup_check import check_setup
 
@@ -42,6 +42,7 @@ HEADLINE_MAX = 70
 PENDING_KEY = "pending"
 PENDING_TTL_S = 24 * 60 * 60
 VOICE_MAX = 3
+SCREENSHOTS_MAX = 2
 
 EXAMPLE = "/launch https://yoursite.com dark mode for the editor -- people kept asking for it"
 USAGE = (f"Usage: /launch <what you shipped> [-- <one real detail>], for example: {EXAMPLE}\n"
@@ -204,12 +205,23 @@ def _ask(host: Host, question: str, choices: list[dict]) -> str:
     return picked
 
 
-def _screenshot(value: Any) -> Path | None:
-    if isinstance(value, str) and value:
-        path = Path(value)
-        if path.is_file():
-            return path
-    return None
+def screenshot_paths(value: Any) -> list[str]:
+    """The attached-screenshot paths in state, oldest first. Older versions kept one path as a
+    string; this version keeps a list of up to SCREENSHOTS_MAX."""
+    if isinstance(value, str):
+        value = [value]
+    if not isinstance(value, list):
+        return []
+    return [v for v in value if isinstance(v, str) and v]
+
+
+def _screenshots(value: Any) -> list[str]:
+    """The attached screenshots that still exist, at most the newest SCREENSHOTS_MAX."""
+    return [p for p in screenshot_paths(value) if Path(p).is_file()][-SCREENSHOTS_MAX:]
+
+
+def _names(paths: list[str]) -> str:
+    return " and ".join(Path(p).name for p in paths)
 
 
 # ------------------------------------------------------------------ brand
@@ -362,14 +374,15 @@ class _Pending:
         host.say("Drawing the card.")
         n = int(self.data.get("round") or 0) + 1
         out = self.dir / f"r{n}"
-        shot = _screenshot(self.data.get("screenshot"))
+        shots = [Path(p) for p in _screenshots(_used_screenshots(self.data))]
         headline = card_headline(self.data["hook"], self.brief.what)
-        card = render_card(self.brand, shot, headline, X_CARD, out / "card-x.png")
+        layout = choose_layout(shots, headline)  # again on each render: a new hook can change it
+        card = render_card(self.brand, shots, headline, X_CARD, out / "card-x.png", layout=layout)
         preview = render_feed_preview(self.brand, self.text, card, out / "preview-x.png")
         old = self.dir / f"r{n - 1}"
         if n > 1 and old.is_dir():
             shutil.rmtree(old, ignore_errors=True)
-        self.data.update(round=n, card=str(card), preview=str(preview))
+        self.data.update(round=n, card=str(card), preview=str(preview), layout=layout)
 
     def reply(self, host: Host, notes: list[str]) -> str:
         lines = [*notes, ""] if notes else []
@@ -402,10 +415,19 @@ def _remove_dir(host: Host, path: Any) -> None:
         shutil.rmtree(target, ignore_errors=True)
 
 
-def _forget_screenshot(host: Host, used: Any) -> None:
-    """Clear the attached-screenshot state, unless a newer one has replaced the one a draft used."""
-    if used and host.state_get("screenshot") == used:
-        host.state_set("screenshot", None)
+def _used_screenshots(data: dict) -> list[str]:
+    """The screenshot paths a draft was made with (older drafts kept one, as "screenshot")."""
+    return screenshot_paths(data.get("screenshots", data.get("screenshot")))
+
+
+def _forget_screenshot(host: Host, data: Any) -> None:
+    """Take the screenshots a draft used out of the attached-screenshot state; any attached
+    after the draft stay for the next /launch."""
+    used = set(_used_screenshots(data)) if isinstance(data, dict) else set()
+    current = screenshot_paths(host.state_get("screenshot"))
+    kept = [p for p in current if p not in used]
+    if kept != current:
+        host.state_set("screenshot", kept or None)
 
 
 def _drop_pending(host: Host, data: Any) -> None:
@@ -426,8 +448,7 @@ def _load_pending(host: Host) -> _Pending | None:
         pending = None
     if pending is None:
         _drop_pending(host, data)
-        if isinstance(data, dict):
-            _forget_screenshot(host, data.get("screenshot"))
+        _forget_screenshot(host, data)
     return pending
 
 
@@ -448,12 +469,12 @@ def _phase1(host: Host, args: Args, stored: BrandKit | None, get: Callable[[str]
     if issues:
         _tell(host, notes, f"{issues[0].message}\n{issues[0].command}")
 
-    shot = _screenshot(host.state_get("screenshot"))
+    shots = _screenshots(host.state_get("screenshot"))
     line = f"Finding launch posts like yours for {brand.name or _hostname(brand.url)}."
-    if shot is None:
+    if not shots:
         line += " Tip: send a screenshot and ask me to use it for the launch; the card is better with one."
     else:
-        used = f"Using the screenshot you attached: {shot.name}"
+        used = f"Using the screenshot{'s' if len(shots) > 1 else ''} you attached: {_names(shots)}"
         line += f" {used}."
         notes.append(f"{used}.")
     host.say(line)
@@ -477,7 +498,7 @@ def _phase1(host: Host, args: Args, stored: BrandKit | None, get: Callable[[str]
         "brief": asdict(brief), "brand": _kit_dict(brand), "brand_new": brand_new,
         "refs": [asdict(r) for r in refs], "shown": sorted(r.id for r in refs),
         "used_pack": bool(pack_note), "hooks": list(draft.hooks), "hook": hook,
-        "caption": draft.caption, "screenshot": str(shot) if shot else None, "round": 0,
+        "caption": draft.caption, "screenshots": shots, "round": 0,
     })
     pending.render(host)
     host.state_set(PENDING_KEY, pending.data)
@@ -508,13 +529,13 @@ def _start(host: Host, args: Args, stored: BrandKit | None, get: Callable[[str],
 def _approve(host: Host, p: _Pending) -> str:
     pack = write_pack(host.data_dir() / "packs", p.brief, p.brand, p.draft, p.data["hook"],
                       {"x": Path(p.data["card"])}, p.refs,
-                      has_screenshot=_screenshot(p.data.get("screenshot")) is not None,
+                      has_screenshot=bool(_screenshots(_used_screenshots(p.data))),
                       preview=Path(p.data["preview"]),
                       headline=card_headline(p.data["hook"], p.brief.what))
     if p.data.get("brand_new"):
         _store_brand(host, p.brand)
     _drop_pending(host, p.data)
-    _forget_screenshot(host, p.data.get("screenshot"))
+    _forget_screenshot(host, p.data)
     data = json.loads((pack / "pack.json").read_text(encoding="utf-8"))
     text = (pack / data["files"]["post"]).read_text(encoding="utf-8").strip()
     if _local(host):
@@ -544,7 +565,7 @@ def _resume(host: Host, p: _Pending) -> str:
         return _approve(host, p)
     if picked == "discard":
         _drop_pending(host, p.data)
-        _forget_screenshot(host, p.data.get("screenshot"))
+        _forget_screenshot(host, p.data)
         return DISCARDED
     notes: list[str] = []
     if picked == "swap":

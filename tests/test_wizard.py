@@ -302,16 +302,16 @@ def test_screenshot_from_state_is_used_only_if_file_exists(tmp_path, monkeypatch
     seen = []
     real = wizard.render_card
 
-    def spy(brand, screenshot, headline, size, out):
+    def spy(brand, screenshot, headline, size, out, **kw):
         seen.append((screenshot, headline))
-        return real(brand, screenshot, headline, size, out)
+        return real(brand, screenshot, headline, size, out, **kw)
 
     monkeypatch.setattr(wizard, "render_card", spy)
     host = make_host(PHASE1)
     host.state_set("screenshot", str(shot))
     start(host)
     assert len(seen) == 1
-    assert (seen[0][0] is not None) == exists and seen[0][1] == CLEAN["hooks"][0]
+    assert bool(seen[0][0]) == exists and seen[0][1] == CLEAN["hooks"][0]
 
 
 def test_long_hook_falls_back_to_what_for_card_headline(monkeypatch):
@@ -320,9 +320,9 @@ def test_long_hook_falls_back_to_what_for_card_headline(monkeypatch):
     seen = []
     real = wizard.render_card
 
-    def spy(brand, screenshot, headline, size, out):
+    def spy(brand, screenshot, headline, size, out, **kw):
         seen.append(headline)
-        return real(brand, screenshot, headline, size, out)
+        return real(brand, screenshot, headline, size, out, **kw)
 
     monkeypatch.setattr(wizard, "render_card", spy)
     start(make_host(PHASE1, llm=(long, long)))
@@ -333,9 +333,9 @@ def test_card_drops_check_this_out_but_the_post_keeps_it(monkeypatch):
     seen = []
     real = wizard.render_card
 
-    def spy(brand, screenshot, headline, size, out):
+    def spy(brand, screenshot, headline, size, out, **kw):
         seen.append(headline)
-        return real(brand, screenshot, headline, size, out)
+        return real(brand, screenshot, headline, size, out, **kw)
 
     monkeypatch.setattr(wizard, "render_card", spy)
     host = make_host(["feature", "x", "keep", "2"])
@@ -727,3 +727,111 @@ def test_dropping_an_expired_draft_keeps_a_newer_screenshot(tmp_path, monkeypatc
     host.state_set("screenshot", newer)
     assert wizard._load_pending(host) is None
     assert host.state_get("screenshot") == newer
+
+
+# ------------------------------------------------------------------ two screenshots and layouts
+
+def _render_spy(monkeypatch):
+    seen = []
+    real = wizard.render_card
+
+    def spy(brand, screenshots, headline, size, out, **kw):
+        seen.append({"shots": [str(s) for s in screenshots], "headline": headline, **kw})
+        return real(brand, screenshots, headline, size, out, **kw)
+
+    monkeypatch.setattr(wizard, "render_card", spy)
+    return seen
+
+
+def test_two_attached_screenshots_make_a_split_card_named_in_the_reply(tmp_path, monkeypatch):
+    seen = _render_spy(monkeypatch)
+    a, b = _shot(tmp_path, "home.png"), _shot(tmp_path, "settings.png")
+    host = make_host(PHASE1)
+    host.state_set("screenshot", [a, b])
+    reply = start(host)
+    assert seen[0]["shots"] == [a, b] and seen[0]["layout"] == "split"
+    assert pending(host)["screenshots"] == [a, b] and pending(host)["layout"] == "split"
+    named = [line for line in plain(reply) if "home.png" in line]
+    assert len(named) == 1 and "settings.png" in named[0]
+
+
+@pytest.mark.parametrize("state,layout", [(None, "statement"), (1, "hero"), (2, "split")])
+def test_phase1_layout_follows_the_attached_screenshots(tmp_path, monkeypatch, state, layout):
+    seen = _render_spy(monkeypatch)
+    host = make_host(PHASE1)
+    if state:
+        host.state_set("screenshot", [_shot(tmp_path, f"{i}.png") for i in range(state)])
+    start(host)
+    assert seen[0]["layout"] == layout == pending(host)["layout"]
+
+
+def test_missing_screenshot_files_are_skipped(tmp_path, monkeypatch):
+    seen = _render_spy(monkeypatch)
+    a = _shot(tmp_path, "a.png")
+    host = make_host(PHASE1)
+    host.state_set("screenshot", [str(tmp_path / "gone.png"), a])
+    start(host)
+    assert seen[0]["shots"] == [a] and seen[0]["layout"] == "hero"
+
+
+def test_change_hook_rerenders_with_the_layout_the_new_hook_gets(tmp_path, monkeypatch):
+    seen = _render_spy(monkeypatch)
+    asked = []
+
+    def choose(shots, hook):
+        asked.append(hook)
+        return "statement" if hook == CLEAN["hooks"][0] else "hero"
+
+    monkeypatch.setattr(wizard, "choose_layout", choose)
+    host = make_host(PHASE1)
+    host.state_set("screenshot", [_shot(tmp_path, "a.png")])
+    start(host)
+    resume(host, "hook", "3")
+    assert asked == [CLEAN["hooks"][0], CLEAN["hooks"][2]]
+    assert [s["layout"] for s in seen] == ["statement", "hero"]
+    assert pending(host)["layout"] == "hero"
+
+
+@pytest.mark.parametrize("choice", ["approve", "discard"])
+def test_forget_clears_only_the_screenshots_the_draft_used(tmp_path, choice):
+    a, b, c = (_shot(tmp_path, n) for n in ("a.png", "b.png", "c.png"))
+    host = make_host(PHASE1)
+    host.state_set("screenshot", [a, b])
+    start(host)
+    host.state_set("screenshot", [b, c])  # c attached after the draft: a dropped as the oldest
+    resume(host, choice)
+    assert host.state_get("screenshot") == [c]
+
+
+def test_forget_keeps_a_screenshot_attached_after_a_one_screenshot_draft(tmp_path):
+    a, b = _shot(tmp_path, "a.png"), _shot(tmp_path, "b.png")
+    host = make_host(PHASE1)
+    host.state_set("screenshot", [a])
+    start(host)
+    host.state_set("screenshot", [a, b])
+    resume(host, "approve")
+    assert host.state_get("screenshot") == [b]
+    assert Path(a).is_file() and Path(b).is_file()
+
+
+def test_forget_clears_both_when_the_draft_used_both(tmp_path):
+    a, b = _shot(tmp_path, "a.png"), _shot(tmp_path, "b.png")
+    host = make_host(PHASE1)
+    host.state_set("screenshot", [a, b])
+    start(host)
+    resume(host, "discard")
+    assert not host.state_get("screenshot")
+
+
+def test_a_draft_saved_by_an_older_version_still_forgets_its_screenshot(tmp_path):
+    a = _shot(tmp_path, "a.png")
+    host = make_host(PHASE1)
+    host.state_set("screenshot", a)
+    start(host)
+    data = pending(host)
+    data.pop("screenshots")
+    data.pop("layout")
+    data["screenshot"] = a  # the one-screenshot shape older versions stored
+    host.state_set("pending", data)
+    resume(host, "discard")
+    assert not host.state_get("screenshot")

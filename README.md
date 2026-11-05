@@ -48,7 +48,7 @@ It takes two steps. The first run ends with the draft, the card and a feed previ
 
 To make drafts sound like you, send `/launch voice: <a past post of yours>`. It keeps your last three; `/launch voice: clear` forgets them. If your posts use more em-dashes, emoji or hashtags than the checks allow, the draft may too, and the reply says so.
 
-To put your product on the card, send a screenshot and the agent attaches it with `launch_desk_attach_screenshot`. The plugin also ships a skill, `launch-desk:launch-desk`, that teaches the agent the launch workflow, so it steers you well even when you do not type the command.
+To put your product on the card, send a screenshot and the agent attaches it with `launch_desk_attach_screenshot`. Send two and the card shows them side by side; with none, the card sets your hook large as a quote. The plugin also ships a skill, `launch-desk:launch-desk`, that teaches the agent the launch workflow, so it steers you well even when you do not type the command.
 
 ## What it checks
 
@@ -81,7 +81,7 @@ Stored on your machine, in the plugin's data folder and Hermes plugin state:
 - A pending draft with its card, its preview and the search results it came from (items.json), kept up to 24 hours or until you approve or discard it.
 - Finished packs, kept until you delete them.
 - Copies of the card and preview in Hermes' image cache, so chat apps can show them. Hermes clears them after about a day.
-- The path of an attached screenshot, until you approve or discard the draft. The file is not copied; the screenshot tool reads the image where it is and leaves it there.
+- The paths of up to two attached screenshots, until you approve or discard the draft that used them. The files are not copied; the screenshot tool reads each image where it is and leaves it there.
 
 Nothing is posted, scheduled or sent to any social network.
 

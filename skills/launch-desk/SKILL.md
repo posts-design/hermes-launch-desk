@@ -25,7 +25,7 @@ For example: `/launch https://yoursite.com dark mode for the editor -- people ke
 
 ## Screenshots
 
-A card made from the real product beats any generated image. If the user wants a card with their product on it, ask for a screenshot. When they send one, call `launch_desk_attach_screenshot` with the image's file path (PNG, JPEG or WebP), then tell them to run `/launch`. Without a screenshot the card is text only, which still works.
+A card made from the real product beats any generated image. If the user wants a card with their product on it, ask for a screenshot. When they send one, call `launch_desk_attach_screenshot` with the image's file path (PNG, JPEG or WebP), then tell them to run `/launch`. Two screenshots make a side-by-side card; a third replaces the oldest. Without a screenshot the card sets the hook large as a quote, which still works.
 
 Never generate or invent an image for the card.
 
