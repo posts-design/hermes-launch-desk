@@ -1,4 +1,5 @@
 import json
+import logging
 
 import pytest
 
@@ -100,8 +101,11 @@ def test_complete_json_non_dict_parsed_falls_back_to_text():
     assert HermesHost(LlmCtx(Result(parsed=[1, 2], text="[1, 2]"))).complete_json("i", "t", {}) == "[1, 2]"
 
 
-def test_complete_json_exception_is_none():
-    assert HermesHost(LlmCtx(exc=ValueError("schema"))).complete_json("i", "t", {}) is None
+def test_complete_json_exception_is_none_and_logged(caplog):
+    with caplog.at_level(logging.WARNING, logger="launch_desk.host"):
+        assert HermesHost(LlmCtx(exc=ValueError("schema"))).complete_json("i", "t", {}) is None
+    assert [r.levelno for r in caplog.records] == [logging.WARNING]
+    assert caplog.records[0].exc_info[0] is ValueError
 
 
 def test_say_posts_message_and_never_raises():

@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import json
+import logging
 from pathlib import Path
 from typing import Any, Protocol
 
@@ -58,6 +59,7 @@ class HermesHost:
                 max_tokens=2000,
             )
         except Exception:
+            logging.getLogger(__name__).warning("launch-desk: complete_structured failed", exc_info=True)
             return None
         parsed = getattr(result, "parsed", None)
         if isinstance(parsed, dict):
