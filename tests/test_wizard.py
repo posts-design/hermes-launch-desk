@@ -1,6 +1,7 @@
 import io
 import json
 import logging
+import re
 from pathlib import Path
 
 import pytest
@@ -360,6 +361,34 @@ def test_phase2_approve_writes_pack_and_clears_pending():
     assert Path(stored["logo_path"]).parent == host.data_dir() / "brand"
     assert Path(stored["logo_path"]).is_file()
     assert CLEAN["hooks"][0] in (pack_json.parent / "alt-text.txt").read_text()
+
+
+@pytest.mark.parametrize("surface", ["cli", "tui", "local", "desktop", "acp"])
+def test_approve_on_a_local_client_shows_the_raw_intent_url_and_full_folder(surface):
+    host = make_host(PHASE1, surface=surface)
+    start(host)
+    reply = resume(host, "approve")
+    [pack_json] = packs(host)
+    url = json.loads(pack_json.read_text())["intent_url"]
+    lines = plain(reply)
+    assert any(url in line.split() for line in lines)
+    assert f"]({url})" not in reply
+    assert any(str(pack_json.parent) in line for line in lines)
+
+
+@pytest.mark.parametrize("surface", ["telegram", "discord"])
+def test_approve_in_a_chat_app_links_the_intent_and_names_only_the_folder(surface):
+    host = make_host(PHASE1, surface=surface)
+    start(host)
+    reply = resume(host, "approve")
+    [pack_json] = packs(host)
+    url = json.loads(pack_json.read_text())["intent_url"]
+    lines = plain(reply)
+    link = re.compile(r"\[[^\]\n]+\]\(" + re.escape(url) + r"\)")
+    assert sum(len(link.findall(line)) for line in lines) == 1
+    assert all(url not in link.sub("", line) for line in lines)
+    assert any(pack_json.parent.name in line for line in lines)
+    assert not any(str(pack_json.parent) in line for line in lines)
 
 
 def test_phase2_discard_clears_pending_and_leaves_no_files():

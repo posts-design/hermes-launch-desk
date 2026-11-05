@@ -167,14 +167,18 @@ def card_headline(hook: str, what: str) -> str:
 LOCAL_SURFACES = {"cli", "tui", "local", "desktop", "acp"}
 
 
+def _local(host: Host) -> bool:
+    """A terminal or desktop client, where long links and paths can be clicked or copied."""
+    try:
+        return host.surface() in LOCAL_SURFACES
+    except Exception:
+        return True
+
+
 def _tell(host: Host, notes: list[str], line: str) -> None:
     """A line the founder must see once: in the reply on a local client, where it arrives
     together with the progress lines; as a message on a chat app, where the reply comes later."""
-    try:
-        local = host.surface() in LOCAL_SURFACES
-    except Exception:
-        local = True
-    if local:
+    if _local(host):
         notes.append(line)
     else:
         host.say(line)
@@ -510,13 +514,19 @@ def _approve(host: Host, p: _Pending) -> str:
     _forget_screenshot(host, p.data.get("screenshot"))
     data = json.loads((pack / "pack.json").read_text(encoding="utf-8"))
     text = (pack / data["files"]["post"]).read_text(encoding="utf-8").strip()
+    if _local(host):
+        post_it = f"Post it on X with this text filled in: {data['intent_url']}"
+        saved = f"Pack folder: {pack}"
+    else:  # chat apps show a Markdown link as a short label, and the server path means nothing there
+        post_it = f"[Open X with this post filled in]({data['intent_url']})"
+        saved = f"Saved as {pack.name}"
     return "\n".join((
         "Your launch pack is ready. Nothing was posted.",
         "",
         text,
         "",
-        f"Post it on X with this text filled in: {data['intent_url']}",
-        f"Pack folder: {pack}",
+        post_it,
+        saved,
         "Read it once and change anything that isn't true.",
         "To edit the text, change it in X's compose box or in post-x.txt.",
         f"MEDIA:{host.media_path(pack / data['files']['card_x'], 'card')}",
