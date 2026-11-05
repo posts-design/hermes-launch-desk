@@ -100,3 +100,28 @@ def test_stock_phrases_never_relaxed():
 def test_stock_phrase_matches_a_curly_apostrophe():
     ids = [f.rule_id for f in check("In today\u2019s fast-paced world, themes ship.", network="x")]
     assert "stock-phrase" in ids
+
+
+REPEAT = "Check this out: your pet's page can now match your site.\nNow your pet's page can match your own site."
+
+
+def test_restating_the_first_line_fails():
+    assert "repeats-first-line" in ids(REPEAT)
+
+
+def test_second_line_with_new_information_passes():
+    text = "Pet pages can wear your colours now.\nPick a theme in settings and the whole page follows."
+    assert "repeats-first-line" not in ids(text)
+
+
+def test_url_only_line_never_repeats():
+    text = "Pet pages can wear your colours now.\nhttps://pawr.link/pet-pages-can-wear-your-colours-now"
+    assert "repeats-first-line" not in ids(text)
+
+
+def test_short_first_line_never_repeats():
+    assert "repeats-first-line" not in ids("Themes are here.\nThemes are here.")
+
+
+def test_repeats_first_line_is_not_relaxable():
+    assert "repeats-first-line" in ids(REPEAT, voice_samples=[REPEAT])

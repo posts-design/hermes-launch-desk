@@ -58,6 +58,7 @@ To put your product on the card, send a screenshot and the agent attaches it wit
 - No placeholders such as [link], {name} or TODO.
 - At most 280 characters on X, counting each link as 23.
 - No run of five words copied from a reference.
+- No line that just restates the first.
 - No numbers or time and effort claims that are not in your facts.
 
 ## What goes where

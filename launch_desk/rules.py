@@ -6,6 +6,7 @@ from dataclasses import dataclass
 from typing import Callable, Sequence
 
 from .models import Failure
+from .references import STOPWORDS
 
 
 @dataclass(frozen=True)
@@ -35,6 +36,8 @@ RULES: tuple[Rule, ...] = (
          "Shorten the post to 280 characters or fewer, counting each link as 23.", False),
     Rule("copied-run", "The post copies a run of five words from a reference caption.",
          "Reword the passage so it shares no five-word run with the references.", False),
+    Rule("repeats-first-line", "A later line repeats most of the first line.",
+         "Make every line after the first say something new; don't restate the first line.", False),
 )
 _RULE_BY_ID = {r.id: r for r in RULES}
 
@@ -141,6 +144,28 @@ def _link_first(text: str) -> bool:
     return bool(_URL_RE.search(_first_line(text)))
 
 
+def _content_words(line: str) -> set[str]:
+    out = set()
+    for w in re.findall(r"[a-z0-9]+", line.lower().replace("'", "").replace("\u2019", "")):
+        if w in STOPWORDS:
+            continue
+        out.add(w[:-1] if len(w) > 3 and w.endswith("s") and not w.endswith("ss") else w)
+    return out
+
+
+def _repeats_first(text: str) -> bool:
+    lines = [ln.strip() for ln in text.split("\n")]
+    first = _content_words(lines[0]) if lines else set()
+    if len(first) < 3:
+        return False
+    for ln in lines[1:]:
+        if not ln or _URL_RE.fullmatch(ln):
+            continue
+        if len(first & _content_words(_URL_RE.sub(" ", ln))) >= 0.6 * len(first):
+            return True
+    return False
+
+
 _PREDICATES: dict[str, Callable[[str], bool]] = {
     "first-line-short": _first_line_short,
     "stock-phrase": _stock,
@@ -149,6 +174,7 @@ _PREDICATES: dict[str, Callable[[str], bool]] = {
     "hashtags": _hashtags,
     "placeholder": _placeholder,
     "link-first-line": _link_first,
+    "repeats-first-line": _repeats_first,
 }
 
 

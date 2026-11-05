@@ -295,3 +295,17 @@ def test_founder_detail_is_a_fact_in_prompt_and_check():
 def test_prompt_asks_each_line_to_say_something_new():
     instructions, _text = build_brief_prompt(BRIEF, BRAND, REFS, SHAPES, set())
     assert "Don't restate the first line." in instructions
+
+
+def test_restating_caption_triggers_redraft_naming_the_rule():
+    bad = {**CLEAN, "caption": "Check this out: your pet's page can now match your site.\n"
+                              "Now your pet's page can match your own site.\n\nhttps://pawr.link"}
+    host, d = draft([bad, CLEAN])
+    assert len(host.llm_calls) == 2
+    assert "repeats-first-line" in prompt_of(host.llm_calls[1])
+    assert d.failures == () and d.redrafted is True
+
+
+def test_repeats_first_line_is_not_a_hook_rule():
+    from launch_desk.draft import HOOK_RULES
+    assert "repeats-first-line" not in HOOK_RULES

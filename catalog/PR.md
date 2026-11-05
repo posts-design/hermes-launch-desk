@@ -19,7 +19,7 @@ Launch Desk asks two questions as buttons (what kind of launch, which network), 
 ## Why it is more than a prompt
 
 - **References are chosen in code.** One posts.design search per run (or the bundled sample pack when posts.design isn't set up); the plugin ranks the results by how closely they match the launch, then by recorded views, and shows the three it used with the reason for each.
-- **The scroll test runs in code.** First line of 12 words or fewer with no link, no stock launch phrases, at most one em-dash, one emoji and two hashtags, no placeholders, 280 characters on X with links counted as 23, and no run of five words copied from a reference.
+- **The scroll test runs in code.** First line of 12 words or fewer with no link, no stock launch phrases, at most one em-dash, one emoji and two hashtags, no placeholders, 280 characters on X with links counted as 23, no line that just restates the first, and no run of five words copied from a reference.
 - **Invented details are caught in code.** Numbers and time or effort claims that are not in the founder's own facts are flagged. A failing draft is redrafted once with the failures listed, and the better of the two is kept; anything still failing is shown to the founder, not hidden.
 - **The visuals are composed, never generated.** The card is set from the founder's screenshot (attached with the `launch_desk_attach_screenshot` tool), brand colours and logo in bundled Inter, at 1200×675. Without a screenshot it is a typographic card. The feed preview shows the post as it will sit in a feed.
 - **Two-step approval.** Nothing is saved as a pack until the founder has seen the card and the preview and chosen Approve. The pending draft expires after 24 hours.

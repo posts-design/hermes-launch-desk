@@ -136,6 +136,7 @@ def _rule_lines(brief: Brief, relaxed: set[str]) -> list[str]:
         "placeholder": "No brackets [ ] or { } and no TODO. Fill every gap with real words.",
         "link-first-line": f"Put the link {_one_line(url, 120)} once, on the last line. Never in the first line.",
         "length": "The whole caption is 280 characters or fewer, the link counting as 23. Aim for about 200.",
+        "repeats-first-line": "Each line says something new. Don't restate the first line.",
         "copied-run": "Never copy from the example posts. Not even 5 words in a row.",
     }
     lines = []
@@ -158,7 +159,6 @@ def _instructions(brief: Brief, relaxed: set[str]) -> str:
         "Never add pets, people, times, steps, counts, results or UI actions that are not in FACTS.",
         "No exclamation marks. No questions to the reader unless a hook pattern asks for one. No \"it's not just X, it's Y\" lines.",
         "Use 3 to 5 short lines, with a blank line between them.",
-        "Each line says something new. Don't restate the first line.",
         *_rule_lines(brief, relaxed),
     ]
     numbered = "\n".join(f"{i}. {r}" for i, r in enumerate(rules, 1))
