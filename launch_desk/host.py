@@ -2,6 +2,9 @@ from __future__ import annotations
 
 import json
 import logging
+import shutil
+import time
+import uuid
 from pathlib import Path
 from typing import Any, Protocol
 
@@ -35,6 +38,8 @@ class Host(Protocol):
     def unattended(self) -> bool: ...
 
     def say(self, text: str) -> None: ...
+
+    def media_path(self, src: Path, label: str) -> str: ...
 
 
 class HermesHost:
@@ -110,3 +115,23 @@ class HermesHost:
             self.ctx.post_message(text)
         except Exception:
             pass
+
+    def media_path(self, src: Path, label: str) -> str:
+        """The path for a MEDIA line. Chat apps only get files from Hermes' media cache, so a
+        copy goes to <HERMES_HOME>/cache/images (Hermes clears it after about a day); the
+        original stays put. data_dir is <HERMES_HOME>/plugin-data/<namespace>: if it isn't,
+        or the copy fails, the original path is used."""
+        try:
+            data = self.data_dir()
+            home = data.parents[1]
+            if data.parent != home / "plugin-data":
+                return str(src)
+            cache = home / "cache" / "images"
+            cache.mkdir(parents=True, exist_ok=True)
+            stamp = time.strftime("%Y%m%d_%H%M%S")
+            dest = cache / f"launch-desk_{stamp}_{uuid.uuid4().hex[:8]}_{label}.png"
+            shutil.copyfile(src, dest)
+            return str(dest)
+        except Exception:
+            logging.getLogger(__name__).warning("launch-desk: media copy failed", exc_info=True)
+            return str(src)

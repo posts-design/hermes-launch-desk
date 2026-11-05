@@ -591,3 +591,30 @@ def test_screenshot_is_forgotten_after_approve_or_discard(tmp_path, choice):
     resume(host, choice)
     assert host.state_get("screenshot") is None
     assert shot.is_file()  # the founder's file stays where it was
+
+
+# ------------------------------------------------------------------ media delivery
+
+def test_media_lines_come_from_host_media_path():
+    host = make_host(PHASE1)
+    given = []
+
+    def media_path(src, label):
+        given.append((Path(src), label))
+        return f"/media-cache/{label}-{len(given)}.png"
+
+    host.media_path = media_path
+    first = start(host)
+    assert [str(m) for m in media(first)] == ["/media-cache/preview-1.png", "/media-cache/card-2.png"]
+    p = pending(host)
+    assert given == [(Path(p["preview"]), "preview"), (Path(p["card"]), "card")]
+    assert all(src.is_file() for src, _ in given)
+
+    changed = resume(host, "hook", "3")
+    assert [str(m) for m in media(changed)] == ["/media-cache/preview-3.png", "/media-cache/card-4.png"]
+
+    done = resume(host, "approve")
+    pack_dir = packs(host)[0].parent
+    assert [str(m) for m in media(done)] == ["/media-cache/card-5.png", "/media-cache/preview-6.png"]
+    assert [src.parent for src, _ in given[4:]] == [pack_dir, pack_dir]
+    assert all(src.is_file() for src, _ in given[4:])

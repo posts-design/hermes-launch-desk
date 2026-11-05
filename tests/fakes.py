@@ -56,3 +56,6 @@ class FakeHost:
 
     def say(self, text: str) -> None:
         self.said.append(text)
+
+    def media_path(self, src: Path, label: str) -> str:
+        return str(src)

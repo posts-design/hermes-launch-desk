@@ -79,6 +79,7 @@ Stored on your machine, in the plugin's data folder and Hermes plugin state:
 - The brand kit: name, site link, tagline, colours, font name, logo file and voice samples.
 - A pending draft with its card, its preview and the search results it came from (items.json), kept up to 24 hours or until you approve or discard it.
 - Finished packs, kept until you delete them.
+- Copies of the card and preview in Hermes' image cache, so chat apps can show them. Hermes clears them after about a day.
 - The path of an attached screenshot, until you approve or discard the draft. The file is not copied; the screenshot tool reads the image where it is and leaves it there.
 
 Nothing is posted, scheduled or sent to any social network.

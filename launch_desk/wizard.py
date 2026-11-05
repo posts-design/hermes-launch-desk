@@ -363,14 +363,15 @@ class _Pending:
             shutil.rmtree(old, ignore_errors=True)
         self.data.update(round=n, card=str(card), preview=str(preview))
 
-    def reply(self, notes: list[str]) -> str:
+    def reply(self, host: Host, notes: list[str]) -> str:
         lines = [*notes, ""] if notes else []
         text = self.text
         lines += ["Your draft for X:", "", text, ""]
         flagged = _flagged(text, self.brief, self.brand, self.refs)
         if flagged:
             lines.append("Still flagged: " + " ".join(f.message for f in flagged))
-        lines += [f"MEDIA:{self.data['preview']}", f"MEDIA:{self.data['card']}", NEXT_STEP]
+        lines += [f"MEDIA:{host.media_path(Path(self.data['preview']), 'preview')}",
+                  f"MEDIA:{host.media_path(Path(self.data['card']), 'card')}", NEXT_STEP]
         return "\n".join(lines)
 
 
@@ -464,7 +465,7 @@ def _phase1(host: Host, args: Args, stored: BrandKit | None, get: Callable[[str]
     })
     pending.render(host)
     host.state_set(PENDING_KEY, pending.data)
-    return pending.reply(notes)
+    return pending.reply(host, notes)
 
 
 def _start(host: Host, args: Args, stored: BrandKit | None, get: Callable[[str], bytes]) -> str:
@@ -509,8 +510,8 @@ def _approve(host: Host, p: _Pending) -> str:
         f"Pack folder: {pack}",
         "Read it once and change anything that isn't true.",
         "To edit the text, change it in X's compose box or in post-x.txt.",
-        f"MEDIA:{pack / data['files']['card_x']}",
-        f"MEDIA:{pack / data['files']['preview']}",
+        f"MEDIA:{host.media_path(pack / data['files']['card_x'], 'card')}",
+        f"MEDIA:{host.media_path(pack / data['files']['preview'], 'preview')}",
     ))
 
 
@@ -540,7 +541,7 @@ def _resume(host: Host, p: _Pending) -> str:
     if not notes:
         p.render(host)
     host.state_set(PENDING_KEY, p.data)
-    return p.reply(notes)
+    return p.reply(host, notes)
 
 
 # ------------------------------------------------------------------ the command

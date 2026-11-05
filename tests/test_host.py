@@ -1,5 +1,6 @@
 import json
 import logging
+from pathlib import Path
 
 import pytest
 
@@ -124,3 +125,28 @@ def test_say_posts_message_and_never_raises():
     assert ctx.posted == ["Reading the site."]
     HermesHost(Ctx(exc=RuntimeError("no gateway"))).say("x")  # no raise
     HermesHost(object()).say("x")  # a ctx without post_message: no raise
+
+
+def _state_ctx(data_dir):
+    class Ctx:
+        class state:
+            pass
+    Ctx.state.data_dir = str(data_dir)
+    return Ctx()
+
+
+def test_media_path_copies_into_the_hermes_image_cache(tmp_path):
+    home = tmp_path / "home"
+    src = tmp_path / "card-x.png"
+    src.write_bytes(b"\x89PNG\r\n\x1a\nfake")
+    out = Path(HermesHost(_state_ctx(home / "plugin-data" / "agent-plugin-x")).media_path(src, "card"))
+    assert out.parent == home / "cache" / "images"
+    assert out.name.startswith("launch-desk_") and out.name.endswith("_card.png")
+    assert out.read_bytes() == src.read_bytes() and src.is_file()
+
+
+def test_media_path_falls_back_to_the_original_outside_plugin_data(tmp_path):
+    src = tmp_path / "card-x.png"
+    src.write_bytes(b"png")
+    assert HermesHost(_state_ctx(tmp_path / "a" / "b")).media_path(src, "card") == str(src)
+    assert not (tmp_path / "cache").exists()
