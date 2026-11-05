@@ -7,12 +7,15 @@ from launch_desk.draft import (
     DRAFT_SCHEMA,
     DraftError,
     build_brief_prompt,
+    build_redraft_prompt,
     draft_post,
+    facts_text,
     parse_draft,
+    unsupported_details,
 )
 from launch_desk.hooks import pick_hook_shapes
-from launch_desk.models import BrandKit, Brief, Reference
-from launch_desk.rules import STOCK_PHRASES
+from launch_desk.models import BrandKit, Brief, Failure, Reference
+from launch_desk.rules import RULES, STOCK_PHRASES
 
 BRIEF = Brief("feature", "x", "custom themes for pet profile pages", "https://pawr.link")
 BRAND = BrandKit("pawr.link", "https://pawr.link", "A link page for your pet", "#fff", "#111",
@@ -180,3 +183,100 @@ def test_relaxed_rule_shortens_the_rules():
     strict = build_brief_prompt(BRIEF, BRAND, REFS, SHAPES, set())[0]
     relaxed = build_brief_prompt(BRIEF, BRAND, REFS, SHAPES, {"em-dash", "emoji", "hashtags"})[0]
     assert len(relaxed) < len(strict)
+
+
+FACTS = facts_text(BRIEF, BRAND)
+
+
+def test_took_a_minute_without_fact_is_flagged():
+    fails = unsupported_details("I set mine to match his collar. Took a minute.", FACTS)
+    assert [f.rule_id for f in fails] == ["unsupported-detail"]
+    assert "minute" in fails[0].message and "minute" in fails[0].fix
+
+
+@pytest.mark.parametrize("text", ["Watch me redo my page with one tap.", "It works instantly.",
+                                  "Three new themes.", "Now 40 themes.", "A dozen colours."])
+def test_invented_counts_and_effort_are_flagged(text):
+    assert [f.rule_id for f in unsupported_details(text, FACTS)] == ["unsupported-detail"]
+
+
+def test_number_in_facts_is_allowed():
+    facts = "posts.design 1,200 launch posts you can filter in seconds"
+    assert unsupported_details("Now 1,200 posts, filtered in seconds.", facts) == []
+    assert unsupported_details("Now 1,300 posts.", facts) != []
+
+
+@pytest.mark.parametrize("text", ["Small one: themes are here.", "Pick one.", "Live today at https://pawr.link/p/2024",
+                                  "Your pet's page, your colours."])
+def test_plain_text_is_not_flagged(text):
+    assert unsupported_details(text, FACTS) == []
+
+
+def test_unsupported_detail_triggers_redraft():
+    invented = {**CLEAN, "caption": "Pet pages can wear your colours now.\n\nTook a minute.\n\nhttps://pawr.link",
+                "hooks": [CLEAN["hooks"][0], "Check this out: one tap and Biscuit's page is green.",
+                          CLEAN["hooks"][2]]}
+    host, d = draft([invented, CLEAN])
+    assert len(host.llm_calls) == 2
+    second = prompt_of(host.llm_calls[1])
+    assert "unsupported-detail" in second and "hook2:unsupported-detail" in second
+    assert d.failures == () and d.redrafted is True
+
+
+def test_unsupported_detail_reported_when_redraft_keeps_it():
+    invented = {**CLEAN, "caption": "Pet pages can wear your colours now.\n\nTook a minute.\n\nhttps://pawr.link"}
+    _, d = draft([invented, invented])
+    assert [f.rule_id for f in d.failures] == ["unsupported-detail"]
+
+
+def test_redraft_lists_each_fix_once():
+    fix = next(r.fix for r in RULES if r.id == "em-dash")
+    fails = [Failure("em-dash", "m", fix), Failure("hook2:em-dash", "Hook 2: m", fix),
+             Failure("hook3:em-dash", "Hook 3: m", fix)]
+    _, text = build_redraft_prompt(BRIEF, BRAND, REFS, SHAPES, set(), ["a", "b", "c"], "cap", fails)
+    assert text.count(fix) == 1
+    for rule_id in ("em-dash", "hook2:em-dash", "hook3:em-dash"):
+        assert rule_id in text
+
+
+def test_redraft_prompt_stays_under_6000_chars():
+    long_refs = [Reference(f"r{i}", "Brand" * 20, "https://posts.design/x", "word " * 2000, 10, None, "w")
+                 for i in range(3)]
+    brand = BrandKit("N" * 300, "https://pawr.link", "T" * 1000, "#fff", "#111", "#f60", None, None,
+                     voice_samples=tuple("voice " * 1000 for _ in range(5)))
+    brief = Brief("feature", "x", "what " * 500, "https://pawr.link/" + "p" * 300)
+    hook_rules = ("first-line-short", "stock-phrase", "em-dash", "emoji", "placeholder",
+                  "link-first-line", "copied-run")
+    fails = [Failure(r.id, r.message, r.fix) for r in RULES]
+    fails += [Failure(f"hook{n}:{r.id}", r.message, r.fix) for n in (1, 2, 3) for r in RULES if r.id in hook_rules]
+    for n in range(4):  # different long phrases in each place, so the fix lines cannot be merged
+        detail = unsupported_details(" ".join(str(n) + "9" * (40 + i) for i in range(8)), "")[0]
+        fails.append(detail if n == 0 else Failure(f"hook{n}:{detail.rule_id}", detail.message, detail.fix))
+    assert len(fails) >= 30
+    hooks = ["hook " * 500] * 3
+    instructions, text = build_redraft_prompt(brief, brand, long_refs, SHAPES, set(), hooks, "cap " * 3000, fails)
+    assert len(instructions) + len(text) < 6000
+
+
+class RaisingHost(FakeHost):
+    def __init__(self, exc):
+        super().__init__()
+        self.exc = exc
+
+    def complete_json(self, instructions, text, schema):
+        self.llm_calls.append((instructions, text, schema))
+        raise self.exc
+
+
+def test_call_errors_become_draft_error_with_cause():
+    exc = RuntimeError("provider down")
+    host = RaisingHost(exc)
+    with pytest.raises(DraftError) as info:
+        draft_post(host, BRIEF, BRAND, REFS, SHAPES)
+    assert len(host.llm_calls) == 2
+    assert info.value.__cause__ is exc
+
+
+def test_programming_errors_propagate():
+    with pytest.raises(AttributeError):
+        draft_post(RaisingHost(AttributeError("bug")), BRIEF, BRAND, REFS, SHAPES)
