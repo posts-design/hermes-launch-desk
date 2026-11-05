@@ -36,6 +36,25 @@ def keyword_phrase(what: str, limit: int = 4) -> str:
     return " ".join(words[:limit])
 
 
+def _stems(text: str) -> set[str]:
+    """Lowercase words of three letters or more, stopwords out, a plural "s" dropped."""
+    out = set()
+    for w in re.findall(r"[a-z0-9]+", (text or "").lower()):
+        if len(w) < 3 or w in STOPWORDS:
+            continue
+        out.add(w[:-1] if len(w) > 3 and w.endswith("s") and not w.endswith("ss") else w)
+    return out
+
+
+def brief_terms(brief: Brief) -> set[str]:
+    """The words a sample-pack caption is matched on: the keyword phrase and the words of what."""
+    return _stems(keyword_phrase(brief.what) + " " + brief.what)
+
+
+def _overlap(item: dict, terms: set[str]) -> int:
+    return len(terms & _stems(item.get("caption") or ""))
+
+
 def build_search_args(brief: Brief) -> dict:
     also = [p for p in (keyword_phrase(brief.what), ALSO[brief.shipped]) if p]
     return {
@@ -76,7 +95,8 @@ def _short(n: int) -> str:
 
 
 def _why(kind: str, views: int | None) -> str:
-    text = {"close": "Close match for your launch", "same": "Same kind of launch"}.get(kind, "A related launch")
+    text = {"close": "Close match for your launch", "same": "Same kind of launch",
+            "pack": "Close match from the sample pack"}.get(kind, "A related launch")
     return f"{text}, {_short(views)} views" if views else text
 
 
@@ -91,19 +111,23 @@ def _tier(item: dict) -> float | None:
     return 1.0 if loose else 1.5
 
 
-def _score(item: dict, wanted: str) -> float:
+def _score(item: dict, wanted: str, terms: set[str]) -> float:
     views = _views(item) or 0
     tier = _tier(item)
-    if tier is None:  # sample pack item: category match stands in for fit
-        return ((2 if item.get("category") == wanted else 0) + 1 + math.log10(views + 1) / 2)
+    if tier is None:  # sample pack item: shared words first, then category, then views
+        return (10 * _overlap(item, terms) + (3 if item.get("category") == wanted else 0)
+                + min(math.log10(views + 1), 11) / 4)
     return tier - 0.05 * int(item.get("_pos") or 0) + math.log10(views + 1) / 4
 
 
-def _reference(item: dict, wanted: str) -> Reference:
+def _reference(item: dict, wanted: str, terms: set[str]) -> Reference:
     views = _views(item)
     tier = _tier(item)
     if tier is None:
-        kind = "same" if item.get("category") == wanted else "other"
+        if _overlap(item, terms):
+            kind = "pack"
+        else:
+            kind = "same" if item.get("category") == wanted else "other"
     else:
         kind = "close" if tier >= 2.0 else "same"
     category = item.get("category")
@@ -117,8 +141,9 @@ def _reference(item: dict, wanted: str) -> Reference:
 def rank_references(items: list[dict], brief: Brief, k: int = 3,
                     exclude: set[str] = frozenset()) -> list[Reference]:
     wanted = CATEGORY[brief.shipped]
+    terms = brief_terms(brief)
     pool = [i for i in items if _id(i) and _id(i) not in exclude and (i.get("caption") or "").strip()]
-    pool.sort(key=lambda i: (_score(i, wanted), _views(i) or 0), reverse=True)
+    pool.sort(key=lambda i: (_score(i, wanted, terms), _views(i) or 0), reverse=True)
     picked: list[Reference] = []
     brands: set[str] = set()
     for it in pool:
@@ -126,7 +151,7 @@ def rank_references(items: list[dict], brief: Brief, k: int = 3,
         if brand in brands:
             continue
         brands.add(brand)
-        picked.append(_reference(it, wanted))
+        picked.append(_reference(it, wanted, terms))
         if len(picked) == k:
             break
     return picked

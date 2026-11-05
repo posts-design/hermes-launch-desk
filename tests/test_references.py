@@ -1,4 +1,5 @@
 import json
+import re
 from pathlib import Path
 
 from fakes import FakeHost
@@ -73,6 +74,35 @@ def test_rank_prefers_tier_then_views_one_per_brand():
 def test_pack_items_still_rank_by_category_match():
     items = [item("p1", "P", 9_000_000, category="announcement"), item("p2", "Q", 1_000)]
     assert rank_references(items, FEATURE, k=2)[0].id == "p2"
+
+
+def test_pack_ranks_keyword_overlap_before_category_and_views():
+    items = [
+        item("off", "Off", 9_000_000, caption="timeline. ticker. trade."),
+        item("cat", "Cat", 5_000_000, category="announcement", caption="Custom themes for every page"),
+        item("one", "One", 1_000, caption="Introducing custom pairs"),
+        item("two", "Two", 500, caption="New profile themes are here"),
+    ]
+    assert [r.id for r in rank_references(items, FEATURE, k=4)] == ["cat", "two", "one", "off"]
+    same = [item("a", "A", 900, caption="Dark mode"), item("b", "B", 100, caption="Pet profiles")]
+    out = rank_references(same, FEATURE, k=2)
+    assert [r.id for r in out] == ["b", "a"]
+    assert out[0].why != out[1].why and "100" in out[0].why
+
+
+ON_TOPIC = re.compile(r"\b(themes?|custom\w*|profiles?)\b", re.I)
+
+
+def test_sample_pack_picks_on_topic_posts_for_a_themes_feature():
+    pack = SamplePackSource()
+    items = pack.search(build_search_args(FEATURE))
+    picked = rank_references(items, FEATURE)
+    assert len(picked) == 3
+    assert all(ON_TOPIC.search(r.caption) for r in picked)
+    on_topic = [e for e in items if ON_TOPIC.search(e["caption"])]
+    assert len(on_topic) >= 3
+    top_views = max(e["views"] for e in items)
+    assert all(r.views < top_views for r in picked)  # the biggest off-topic post is not picked
 
 
 def test_items_without_caption_are_skipped():

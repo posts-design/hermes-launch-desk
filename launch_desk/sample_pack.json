@@ -261,6 +261,15 @@
   "why": "Same kind of launch, 58.9K views"
  },
  {
+  "id": "x-twitter-perplexitydevs-2104646637381660738-perplexity-developers-build-custom",
+  "brand": "Perplexity",
+  "url": "https://posts.design/perplexity-developers-you-can-now-build-custom-reusable-2026-09-28",
+  "caption": "You can now build custom reusable agents in the Perplexity Agent API with Profiles, Skills, and managed connectors.\n\nConfigure an agent once in the API Portal and reuse it across applications and workflows.",
+  "views": 42749,
+  "category": "feature-update",
+  "why": "Same kind of launch, 42.7K views"
+ },
+ {
   "id": "x-twitter-vercel-dev-2116229954551812364-vercel-developers-fx-v0-0-16",
   "brand": "Vercel",
   "url": "https://posts.design/vercel-developers-fx-v0-0-16-2026-10-30",
@@ -279,6 +288,15 @@
   "why": "Same kind of launch, 27.3K views"
  },
  {
+  "id": "x-twitter-notionhq-2085123644578254961-notion-small-qol-improvement-share-pages",
+  "brand": "Notion",
+  "url": "https://posts.design/notion-small-qol-improvement-you-can-now-share-2026-08-05",
+  "caption": "Small QoL improvement: you can now share pages with your Custom Agents straight from the Share menu.\n\nEasier to give them all the context they need 🫡",
+  "views": 20483,
+  "category": "feature-update",
+  "why": "Same kind of launch, 20.5K views"
+ },
+ {
   "id": "x-twitter-raycast-2106009649271255198-raycast-ios",
   "brand": "Raycast",
   "url": "https://posts.design/new-in-raycast-for-ios-2026-10-02",
@@ -286,5 +304,14 @@
   "views": 18669,
   "category": "feature-update",
   "why": "Same kind of launch, 18.7K views"
+ },
+ {
+  "id": "x-twitter-beehiiv-2100584618621640839-beehiiv-five-ways-turn-audience-room",
+  "brand": "beehiiv 🐝",
+  "url": "https://posts.design/beehiiv-five-new-ways-to-turn-an-audience-2026-09-17",
+  "caption": "five new ways to turn an audience into a room full of people who know each other. here’s what’s new in communities -\n\n👤 Custom Profile Fields: collect what you actually want to know\n🗺️ Member Directory: members find each other on their own\n🔔 Email Notifications: one click back",
+  "views": 4256,
+  "category": "feature-update",
+  "why": "Same kind of launch, 4.3K views"
  }
 ]
