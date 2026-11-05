@@ -4,6 +4,7 @@ Missing setup is not an error: /launch offers the sample pack and carries on.
 """
 from __future__ import annotations
 
+import re
 from dataclasses import dataclass
 from typing import Callable, Literal
 
@@ -13,12 +14,13 @@ ADD_SERVER = "hermes mcp add posts --url https://posts.design/mcp --auth oauth"
 ALLOWLIST = "hermes config set plugins.entries.launch-desk.mcp_allowlist '[\"posts\"]'"
 SIGN_IN = "hermes mcp login posts"
 
-# Substrings (lower-case) of the texts Hermes' MCP layer returns.
-# tools/mcp_tool_handlers.py: "MCP server '<name>' is not connected" (also what an unconfigured
-# server gets), "... requires re-authentication ... Run `hermes mcp login <name>`".
-_SERVER_MARKS = ("is not connected", "not found", "unknown server", "no mcp server",
-                 "not configured", "no such server", "unknown mcp")
-_SIGNIN_MARKS = ("401", "unauthorized", "login", "auth", "token")
+# Texts Hermes' MCP layer returns (tools/mcp_tool_handlers.py): sign-in is "requires
+# re-authentication ... Run `hermes mcp login <name>`" (its detail can carry upstream text, so
+# sign-in is checked first); an unconfigured or stopped server is "MCP server '<name>' is not
+# connected". "transport is down" and "unreachable after N consecutive failures" are transient.
+_SIGNIN_MARKS = ("re-authentication", "hermes mcp login", "401", "unauthorized")
+_SIGNIN_WORDS = re.compile(r"\b(auth|token)\b")
+_SERVER_MARKS = ("is not connected",)
 
 
 @dataclass(frozen=True)
@@ -30,7 +32,7 @@ class SetupIssue:
 
 def _issue(code: str) -> SetupIssue:
     if code == "server":
-        return SetupIssue("server", "posts.design is not set up in Hermes yet.", ADD_SERVER)
+        return SetupIssue("server", "posts.design is not connected in Hermes. Add it with the command below; if you already did, run `hermes mcp list` and restart Hermes.", ADD_SERVER)
     if code == "allowlist":
         return SetupIssue("allowlist", "Launch Desk is not allowed to use the posts.design server yet.", ALLOWLIST)
     if code == "signin":
@@ -46,10 +48,10 @@ def _classify(exc: Exception) -> str:
     if isinstance(exc, SourceUnavailable) and exc.kind == "timeout":
         return "unreachable"
     text = str(exc).lower()
+    if any(m in text for m in _SIGNIN_MARKS) or _SIGNIN_WORDS.search(text):
+        return "signin"
     if any(m in text for m in _SERVER_MARKS):
         return "server"
-    if any(m in text for m in _SIGNIN_MARKS):
-        return "signin"
     return "unreachable"
 
 

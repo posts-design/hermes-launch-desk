@@ -89,7 +89,9 @@ def test_pack_json_has_no_secrets_or_host_paths_outside_pack(tmp_path):
     assert data["hook"] and data["caption"] and data["brief"]["what"]
     for p in pack.rglob("*"):
         if p.suffix in (".txt", ".md", ".json"):
-            assert "PRIVATE-VOICE-SAMPLE" not in p.read_text()
+            body = p.read_text()
+            assert "PRIVATE-VOICE-SAMPLE" not in body
+            assert str(tmp_path) not in body and str(pack) not in body
 
 
 def test_alt_text_is_bounded_and_mentions_screenshot_only_when_present():
@@ -98,3 +100,14 @@ def test_alt_text_is_bounded_and_mentions_screenshot_only_when_present():
     assert "screenshot" in alt_text(_brief(), _brand(), True).lower()
     assert "screenshot" not in alt_text(_brief(), _brand(), False).lower()
     assert "Pawr Link" in alt_text(_brief(), _brand(), False)
+
+
+def test_card_key_cannot_escape_pack_and_long_brand_slug_is_capped(tmp_path):
+    card = tmp_path / "c.png"
+    Image.new("RGB", (10, 10)).save(card)
+    draft = Draft(("h", "b", "c"), "h\nbody", (), False)
+    pack = write_pack(tmp_path / "out", _brief(), _brand(name="Very Long Brand " * 10), draft, "h",
+                      {"../../evil": card}, [])
+    assert {p.parent for p in tmp_path.rglob("card-*.png") if "out" in p.parts} == {pack}
+    assert not (tmp_path / "evil.png").exists()
+    assert len(pack.name.split("-", 3)[3]) <= 40 + 1 + 40

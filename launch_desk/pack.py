@@ -83,7 +83,7 @@ def _fmt_views(views: int | None) -> str:
 def write_pack(out_dir: Path, brief: Brief, brand: BrandKit, draft: Draft, hook: str,
                cards: dict[str, Path], refs: list[Reference],
                has_screenshot: bool = False) -> Path:
-    name = f"{date.today().isoformat()}-{_slug(brand.name)}-{_slug(brief.what, SLUG_WHAT_MAX)}"
+    name = f"{date.today().isoformat()}-{_slug(brand.name, SLUG_WHAT_MAX)}-{_slug(brief.what, SLUG_WHAT_MAX)}"
     pack = _new_folder(Path(out_dir), name)
 
     text = _post_text(draft, hook)
@@ -93,7 +93,7 @@ def write_pack(out_dir: Path, brief: Brief, brand: BrandKit, draft: Draft, hook:
     (pack / "post-x.txt").write_text(text + "\n", encoding="utf-8")
 
     for key, src in cards.items():
-        dest = f"card-{key}.png"
+        dest = f"card-{re.sub(r'[^a-z0-9-]', '', str(key).lower()) or 'x'}.png"
         shutil.copyfile(src, pack / dest)
         files[f"card_{key}"] = dest
     (pack / "alt-text.txt").write_text(alt_text(brief, brand, has_screenshot) + "\n", encoding="utf-8")

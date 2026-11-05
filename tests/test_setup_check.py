@@ -27,9 +27,6 @@ def test_permission_error_from_probe_reports_allowlist():
 
 @pytest.mark.parametrize("message", [
     "MCP server 'posts' is not connected",
-    "MCP server not found",
-    "unknown server posts",
-    "No MCP server named posts",
 ])
 def test_no_server_reports_server_issue(message):
     issues = check_setup(_raises(SourceUnavailable(message, kind="error")))
@@ -42,6 +39,7 @@ def test_no_server_reports_server_issue(message):
     "Unauthorized",
     "MCP server 'posts' requires re-authentication. Run `hermes mcp login posts`",
     "token expired",
+    "MCP server 'posts' requires re-authentication. client not found Run `hermes mcp login posts`",
 ])
 def test_401_from_probe_reports_signin(message):
     issues = check_setup(_raises(SourceUnavailable(message, kind="error")))
@@ -56,6 +54,8 @@ def test_allowed_false_reports_signin():
 @pytest.mark.parametrize("exc", [
     SourceUnavailable("timed out", kind="timeout"),
     SourceUnavailable("something odd", kind="error"),
+    SourceUnavailable("MCP server 'posts' transport is down; reconnect requested. Do NOT retry this tool immediately", kind="error"),
+    SourceUnavailable("MCP server 'posts' is unreachable after 3 consecutive failures. Paused", kind="error"),
     RuntimeError("boom"),
 ])
 def test_timeout_or_unknown_is_unreachable_with_no_command(exc):
