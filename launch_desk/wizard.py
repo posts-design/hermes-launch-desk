@@ -29,7 +29,8 @@ from .hooks import pick_hook_shapes
 from .host import Host, SourceUnavailable
 from .models import BrandKit, Brief, Draft, Failure, Reference
 from .pack import post_text, write_pack
-from .references import CATEGORY, McpSource, SamplePackSource, build_search_args, rank_references
+from .references import (CATEGORY, McpSource, SamplePackSource, build_search_args, rank_references,
+                         reference_line)
 from .render import render_card, render_feed_preview
 from .rules import check, relaxed_rules
 from .setup_check import check_setup
@@ -299,7 +300,9 @@ def _refs_block(refs: list[Reference], used_pack: bool) -> str:
     head = "Three launch posts that worked" + (" (from the sample pack)" if used_pack else "") + ":"
     lines = [head]
     for n, r in enumerate(refs, 1):
-        lines.append(f"{n}. {r.brand or 'A brand'}: {r.why}. {r.url}")
+        lines.append(f"{n}. {reference_line(r)} {r.url}")
+    if refs:
+        lines.append("The draft borrows the shape of 1, not its words.")
     return "\n".join(lines)
 
 

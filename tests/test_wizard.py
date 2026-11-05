@@ -26,6 +26,7 @@ PACK_IDS = {e["id"] for e in json.loads(
 EM_DASH_MESSAGE = next(r.message for r in RULES if r.id == "em-dash")
 
 CLEAN = {
+    "use_case": "Pick a theme and the whole page follows.",
     "hooks": ["Pet pages can wear your colours now.",
               "Check this out: your pet's page in your colours.",
               "Your pet's page, your theme."],
@@ -33,6 +34,7 @@ CLEAN = {
                "\n\nhttps://pawr.link",
 }
 OTHER = {
+    "use_case": "Match the page to your own site.",
     "hooks": ["Themes for pet pages are live.", "Check this out: pet pages match your site.",
               "Match your pet's page to your site."],
     "caption": "Themes for pet pages are live.\n\nMatch the page to your own site.\n\nhttps://pawr.link",
@@ -171,8 +173,21 @@ def test_phase1_ends_with_media_lines_and_stores_pending():
         assert r["url"] in hook_q and r["brand"] in hook_q
 
 
+def test_hook_question_lists_each_reference_with_its_shape():
+    from launch_desk.references import shape_note
+    host = make_host(PHASE1)
+    start(host)
+    p = pending(host)
+    lines = questions(host, "1")[0].splitlines()
+    for r in p["refs"]:
+        line = next(ln for ln in lines if r["url"] in ln)
+        assert r["brand"] in line and shape_note(r["caption"]) in line
+    # the draft was told to borrow the top reference's shape, and the question names it
+    assert shape_note(p["refs"][0]["caption"]) in host.llm_calls[0][0]
+
+
 def test_remaining_failures_are_shown_in_the_phase1_reply():
-    bad = {"hooks": ["Pet pages — themes — are here.", "Themes.", "Your theme."],
+    bad = {"use_case": "Pick one.", "hooks": ["Pet pages — themes — are here.", "Themes.", "Your theme."],
            "caption": "Pet pages — themes — are here.\n\nPick one.\n\nhttps://pawr.link"}
     host = make_host(PHASE1, llm=(bad, bad))
     reply = start(host)

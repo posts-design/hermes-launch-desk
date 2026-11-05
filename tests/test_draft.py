@@ -33,13 +33,16 @@ REFS = [
 ]
 SHAPES = pick_hook_shapes("feature")
 
+USE = "Pick a theme and the whole page follows."
 CLEAN = {
+    "use_case": USE,
     "hooks": ["Pet pages can wear your colours now.",
               "Check this out: Biscuit's page is green.",
               "Your pet's page, your theme."],
     "caption": "Pet pages can wear your colours now.\n\nPick a theme in settings and the whole page follows.\n\nhttps://pawr.link",
 }
 BAD = {
+    "use_case": USE,
     "hooks": ["We are excited to announce themes", "https://pawr.link has themes", "Themes are here."],
     "caption": "Themes are here — finally — for pet pages.\n\nhttps://pawr.link",
 }
@@ -86,7 +89,7 @@ def test_still_failing_after_redraft_reports_failures():
 
 
 def test_better_first_draft_is_kept_over_worse_redraft():
-    one_fail = {**CLEAN, "caption": "Themes — for pet pages — are here.\n\nhttps://pawr.link"}
+    one_fail = {**CLEAN, "caption": "Themes — for pet pages — are here.\n\nPick a theme and the whole page follows.\n\nhttps://pawr.link"}
     host, d = draft([one_fail, BAD])
     assert d.caption == one_fail["caption"]
     assert d.redrafted is False
@@ -94,15 +97,15 @@ def test_better_first_draft_is_kept_over_worse_redraft():
 
 
 def test_tie_keeps_the_redraft():
-    a = {**CLEAN, "caption": "Themes — for pet pages — are here.\n\nhttps://pawr.link"}
-    b = {**CLEAN, "caption": "Pet pages — with themes — are here.\n\nhttps://pawr.link"}
+    a = {**CLEAN, "caption": "Themes — for pet pages — are here.\n\nPick a theme and the whole page follows.\n\nhttps://pawr.link"}
+    b = {**CLEAN, "caption": "Pet pages — with themes — are here.\n\nPick a theme and the whole page follows.\n\nhttps://pawr.link"}
     _, d = draft([a, b])
     assert d.caption == b["caption"]
     assert d.redrafted is True
 
 
 def test_junk_redraft_keeps_first_draft():
-    one_fail = {**CLEAN, "caption": "Themes — for pet pages — are here.\n\nhttps://pawr.link"}
+    one_fail = {**CLEAN, "caption": "Themes — for pet pages — are here.\n\nPick a theme and the whole page follows.\n\nhttps://pawr.link"}
     host, d = draft([one_fail, "no json here"])
     assert d.caption == one_fail["caption"]
     assert d.redrafted is False
@@ -111,7 +114,7 @@ def test_junk_redraft_keeps_first_draft():
 def test_voice_sample_relaxes_rule():
     brand = BrandKit("pawr.link", "https://pawr.link", "", "#fff", "#111", "#f60", None, None,
                      voice_samples=("We shipped — at last — the thing — you asked for.",))
-    two_dashes = {**CLEAN, "caption": "Themes — for pet pages — are here.\n\nhttps://pawr.link"}
+    two_dashes = {**CLEAN, "caption": "Themes — for pet pages — are here.\n\nPick a theme and the whole page follows.\n\nhttps://pawr.link"}
     host, d = draft([two_dashes], brand=brand)
     assert len(host.llm_calls) == 1
     assert d.failures == ()
@@ -140,7 +143,7 @@ def test_junk_twice_raises_draft_error():
     CLEAN,
 ])
 def test_parse_accepts_fenced_json(reply):
-    assert parse_draft(reply) == (CLEAN["hooks"], CLEAN["caption"])
+    assert parse_draft(reply) == (CLEAN["hooks"], CLEAN["caption"], USE)
 
 
 @pytest.mark.parametrize("reply", [
@@ -153,6 +156,9 @@ def test_parse_accepts_fenced_json(reply):
     {"hooks": ["a", "b", "c"]},
     {"hooks": ["a", "b", "c"], "caption": "   "},
     {"hooks": ["a", "b", "c"], "caption": ["x"]},
+    {"hooks": ["a", "b", "c"], "caption": "x"},
+    {"hooks": ["a", "b", "c"], "caption": "x", "use_case": "  "},
+    {"hooks": ["a", "b", "c"], "caption": "x", "use_case": 3},
 ])
 def test_parse_rejects_wrong_shapes(reply):
     assert parse_draft(reply) is None
@@ -213,7 +219,7 @@ def test_plain_text_is_not_flagged(text):
 
 
 def test_unsupported_detail_triggers_redraft():
-    invented = {**CLEAN, "caption": "Pet pages can wear your colours now.\n\nTook a minute.\n\nhttps://pawr.link",
+    invented = {**CLEAN, "caption": "Pet pages can wear your colours now.\n\nPick a theme and the whole page follows. Took a minute.\n\nhttps://pawr.link",
                 "hooks": [CLEAN["hooks"][0], "Check this out: one tap and Biscuit's page is green.",
                           CLEAN["hooks"][2]]}
     host, d = draft([invented, CLEAN])
@@ -224,7 +230,7 @@ def test_unsupported_detail_triggers_redraft():
 
 
 def test_unsupported_detail_reported_when_redraft_keeps_it():
-    invented = {**CLEAN, "caption": "Pet pages can wear your colours now.\n\nTook a minute.\n\nhttps://pawr.link"}
+    invented = {**CLEAN, "caption": "Pet pages can wear your colours now.\n\nPick a theme and the whole page follows. Took a minute.\n\nhttps://pawr.link"}
     _, d = draft([invented, invented])
     assert [f.rule_id for f in d.failures] == ["unsupported-detail"]
 
@@ -299,7 +305,7 @@ def test_prompt_asks_each_line_to_say_something_new():
 
 def test_restating_caption_triggers_redraft_naming_the_rule():
     bad = {**CLEAN, "caption": "Check this out: your pet's page can now match your site.\n"
-                              "Now your pet's page can match your own site.\n\nhttps://pawr.link"}
+                              "Now your pet's page can match your own site.\n\n" + USE + "\n\nhttps://pawr.link"}
     host, d = draft([bad, CLEAN])
     assert len(host.llm_calls) == 2
     assert "repeats-first-line" in prompt_of(host.llm_calls[1])
@@ -309,3 +315,90 @@ def test_restating_caption_triggers_redraft_naming_the_rule():
 def test_repeats_first_line_is_not_a_hook_rule():
     from launch_desk.draft import HOOK_RULES
     assert "repeats-first-line" not in HOOK_RULES
+
+
+# ------------------------------------------------------------------ use case and shapes
+
+def test_schema_requires_a_use_case():
+    assert DRAFT_SCHEMA["properties"]["use_case"]["type"] == "string"
+    assert {"use_case", "hooks", "caption"} <= set(DRAFT_SCHEMA["required"])
+
+
+def test_draft_returns_the_use_case():
+    _, d = draft([CLEAN])
+    assert d.use_case == USE
+
+
+def test_reply_without_use_case_is_retried_then_fails():
+    no_use = {k: v for k, v in CLEAN.items() if k != "use_case"}
+    host = FakeHost(llm_replies=[no_use, no_use])
+    with pytest.raises(DraftError):
+        draft_post(host, BRIEF, BRAND, REFS, SHAPES)
+    assert len(host.llm_calls) == 2
+
+
+def test_caption_body_must_carry_the_use_case():
+    elsewhere = {**CLEAN, "use_case": "Match your pet's page to your own site."}
+    host, d = draft([elsewhere, CLEAN])
+    assert len(host.llm_calls) == 2
+    second = prompt_of(host.llm_calls[1])
+    assert "use-case-missing" in second and elsewhere["use_case"] in second
+    assert d.failures == () and d.redrafted is True
+
+
+def test_use_case_in_the_first_line_counts():
+    first_line = {**CLEAN, "use_case": "Pet pages can wear your colours now."}
+    host, d = draft([first_line])
+    assert len(host.llm_calls) == 1 and d.failures == ()
+
+
+def test_unsupported_detail_in_use_case_is_flagged():
+    invented = {**CLEAN, "use_case": "Pick a theme in one tap and the whole page follows."}
+    _, d = draft([invented, invented])
+    ids = {f.rule_id for f in d.failures}
+    assert "use-case:unsupported-detail" in ids
+
+
+def test_use_case_from_the_founder_detail_passes():
+    brief = Brief("feature", "x", "custom themes for pet profile pages", "https://pawr.link",
+                  detail="people kept asking to match their pet's page to their own site")
+    reply = {"use_case": "Match your pet's page to your own site.",
+             "hooks": ["Pet pages take custom themes now.", "Check this out: pet pages take themes.",
+                       "People kept asking for this one."],
+             "caption": "Pet pages take custom themes now.\n\nPeople kept asking to match their pet's page "
+                        "to their own site. Now you can.\n\nhttps://pawr.link"}
+    host = FakeHost(llm_replies=[reply])
+    d = draft_post(host, brief, BRAND, REFS, SHAPES)
+    assert d.failures == () and len(host.llm_calls) == 1
+
+
+def test_prompt_names_each_reference_shape_and_borrows_the_top_one():
+    from launch_desk.references import shape_note
+    instructions, text = build_brief_prompt(BRIEF, BRAND, REFS, SHAPES, set())
+    for r in REFS:
+        assert shape_note(r.caption) in text
+    assert shape_note(REFS[0].caption) in instructions
+    assert REFS[0].brand in instructions
+    no_refs = build_brief_prompt(BRIEF, BRAND, [], SHAPES, set())[0]
+    assert shape_note(REFS[0].caption) not in no_refs
+
+
+def test_prompt_with_detail_and_long_everything_stays_under_6000_chars():
+    long_refs = [Reference(f"r{i}", "Brand" * 20, "https://posts.design/x", "word " * 2000, 10, None, "w")
+                 for i in range(3)]
+    brand = BrandKit("N" * 300, "https://pawr.link", "T" * 1000, "#fff", "#111", "#f60", None, None,
+                     voice_samples=tuple("voice " * 1000 for _ in range(5)))
+    brief = Brief("feature", "x", "what " * 500, "https://pawr.link/" + "p" * 300, detail="detail " * 500)
+    instructions, text = build_brief_prompt(brief, brand, long_refs, SHAPES, set())
+    assert len(instructions) + len(text) < 6000
+    hooks = ["hook " * 500] * 3
+    fails = [Failure(r.id, r.message, r.fix) for r in RULES]
+    r_ins, r_text = build_redraft_prompt(brief, brand, long_refs, SHAPES, set(), hooks, "cap " * 3000, fails,
+                                         use_case="use " * 500)
+    assert len(r_ins) + len(r_text) < 6000
+
+
+def test_redraft_prompt_shows_the_last_use_case():
+    _, text = build_redraft_prompt(BRIEF, BRAND, REFS, SHAPES, set(), CLEAN["hooks"], CLEAN["caption"],
+                                   [Failure("em-dash", "m", "f")], use_case=USE)
+    assert USE in text

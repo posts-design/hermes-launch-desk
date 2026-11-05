@@ -10,6 +10,11 @@ rule id ("hook2:em-dash") and the message is prefixed "Hook 2: ".
 
 Besides the scroll test, unsupported_details() flags numbers and time or effort
 phrases that are not in the facts (rule id "unsupported-detail", one per post).
+
+The model also returns a use case: one concrete use of what shipped, from the facts.
+The caption must carry it ("use-case-missing" otherwise), and the use case
+itself gets unsupported_details() ("use-case:unsupported-detail"). The prompt asks
+the model to borrow the shape of the top reference (see references.shape_note).
 """
 from __future__ import annotations
 
@@ -19,15 +24,17 @@ from typing import Any, Sequence
 
 from .host import Host
 from .models import BrandKit, Brief, Draft, Failure, HookShape, Reference
+from .references import STOPWORDS, shape_note
 from .rules import RULES, STOCK_PHRASES, check, relaxed_rules
 
 DRAFT_SCHEMA: dict = {
     "type": "object",
     "properties": {
+        "use_case": {"type": "string"},
         "hooks": {"type": "array", "items": {"type": "string"}, "minItems": 3, "maxItems": 3},
         "caption": {"type": "string"},
     },
-    "required": ["hooks", "caption"],
+    "required": ["use_case", "hooks", "caption"],
 }
 
 # Rules that make sense for a single first line.
@@ -45,15 +52,19 @@ _ALSO_AVOID: tuple[str, ...] = (
 
 _NETWORK = {"x": "X", "linkedin": "LinkedIn"}
 
-REF_CHARS = 400
-VOICE_CHARS = 300
+REF_CHARS = 250
+VOICE_CHARS = 200
 VOICE_COUNT = 3
 REDRAFT_CAPTION_CHARS = 700
+REDRAFT_CAPTION_MIN = 80  # the last caption is shown at least this long, even over budget
 PROMPT_BUDGET = 5900  # instructions + input; Hermes adds the schema (~300) on top
 HOOK_CHARS = 160
 
 UNSUPPORTED = "unsupported-detail"
 _UNSUPPORTED_MAX = 5
+USE_CASE_MISSING = "use-case-missing"
+USE_CASE_CHARS = 140
+_CARRIED = 0.6  # share of the use case's words the caption must contain
 
 # Longest first so "one tap" wins over "one". A bare "one" counts only when a word
 # follows it ("one link"), so "Small one:" or "pick one." pass.
@@ -100,6 +111,21 @@ def unsupported_details(text: str, facts: str) -> list[Failure]:
     listed = ", ".join(f'"{p[:20]}"' for p in found[:_UNSUPPORTED_MAX])
     return [Failure(UNSUPPORTED, f"The post adds details that are not in the facts: {listed}.",
                     f"Remove {listed}, or replace with something from FACTS.")]
+
+
+def _stems(text: str) -> set[str]:
+    out = set()
+    for w in re.findall(r"[a-z0-9]+", (text or "").lower().replace("\u2019", "'")):
+        if len(w) < 3 or w in STOPWORDS:
+            continue
+        out.add(w[:-1] if len(w) > 3 and w.endswith("s") and not w.endswith("ss") else w)
+    return out
+
+
+def use_case_carried(use_case: str, caption: str) -> bool:
+    """True when the caption has most of the use case's words."""
+    words = _stems(use_case)
+    return not words or len(words & _stems(caption)) >= _CARRIED * len(words)
 
 
 def facts_text(brief: Brief, brand: BrandKit) -> str:
@@ -150,15 +176,28 @@ def _rule_lines(brief: Brief, relaxed: set[str]) -> list[str]:
     return lines
 
 
-def _instructions(brief: Brief, relaxed: set[str]) -> str:
+def _borrow(refs: Sequence[Reference] | None) -> str:
+    """The shape rule: borrow the top reference's structure, or plain short lines without one.
+    None is the redraft, which shows no references: keep the last draft's shape."""
+    if refs is None:
+        return "Keep the shape of your last draft."
+    if not refs:
+        return "Use 2 to 4 short lines, with a blank line between them."
+    top = refs[0]
+    return (f"Borrow the shape of post 1 ({_one_line(top.brand, 40) or 'a brand'}: {shape_note(top.caption)}): "
+            "its structure, never its words. Short lines, a blank line between them.")
+
+
+def _instructions(brief: Brief, relaxed: set[str], refs: Sequence[Reference] | None = ()) -> str:
     network = _NETWORK.get(brief.network, brief.network)
     rules = [
         "Write like the founder talking to one friend: plain words, short sentences, first person (I or we).",
-        "Say what changed and why someone would care.",
+        "Open on the reader's side: what they wanted, or what they can do now. Then make it concrete "
+        "with the use case. One line may say why it matters or how it feels, if it adds no new fact.",
         "Every detail must come from FACTS. Never describe what the founder or a user did beyond what FACTS says. "
-        "Never add pets, people, times, steps, counts, results or UI actions that are not in FACTS.",
+        "Never add pets, people, names, times, steps, counts, results or UI actions that are not in FACTS.",
         "No exclamation marks. No questions to the reader unless a hook pattern asks for one. No \"it's not just X, it's Y\" lines.",
-        "Use 3 to 5 short lines, with a blank line between them.",
+        _borrow(refs),
         *_rule_lines(brief, relaxed),
     ]
     numbered = "\n".join(f"{i}. {r}" for i, r in enumerate(rules, 1))
@@ -166,7 +205,11 @@ def _instructions(brief: Brief, relaxed: set[str]) -> str:
         f"You write one launch post for {network}.\n\n"
         f"Rules:\n{numbered}\n\n"
         "Reply with JSON only, no other text:\n"
-        '{"hooks": ["first line A", "first line B", "first line C"], "caption": "the whole post"}\n'
+        '{"use_case": "one concrete use", "hooks": ["first line A", "first line B", "first line C"], '
+        '"caption": "the whole post"}\n'
+        "- use_case: one concrete, true use of what shipped, from FACTS only (best source: the founder's detail; "
+        "else the founder's words for what shipped). No person, pet, name, number or time beyond FACTS. "
+        "The caption says it once (the first line counts), never the words \"use case\".\n"
         "- hooks: three different first lines for this post. Hook 1 follows pattern A, "
         "hook 2 follows pattern B, hook 3 is your own.\n"
         "- caption: the whole post, starting with your best hook as its first line. "
@@ -188,7 +231,7 @@ def _facts(brief: Brief, brand: BrandKit) -> str:
 def _voice(brand: BrandKit) -> str:
     samples = [s for s in brand.voice_samples if s and s.strip()][:VOICE_COUNT]
     if not samples:
-        return "THE FOUNDER'S VOICE\nNo past posts. Write plainly, like a builder telling a peer."
+        return "THE FOUNDER'S VOICE\nNo past posts. Sound like a builder telling a peer: warm, specific, a little dry."
     body = "\n".join(f"Post {i}:\n{_indent(_trim(s, VOICE_CHARS))}" for i, s in enumerate(samples, 1))
     return ("THE FOUNDER'S VOICE (tone only; its details are not facts about this launch)\n" + body)
 
@@ -196,7 +239,8 @@ def _voice(brand: BrandKit) -> str:
 def _references(refs: Sequence[Reference]) -> str:
     if not refs:
         return ""
-    body = "\n".join(f"{i}. {_one_line(r.brand, 40) or 'A brand'}:\n{_indent(_trim(r.caption, REF_CHARS))}"
+    body = "\n".join(f"{i}. {_one_line(r.brand, 40) or 'A brand'} ({shape_note(r.caption)}):\n"
+                     f"{_indent(_trim(r.caption, REF_CHARS))}"
                      for i, r in enumerate(refs[:3], 1))
     return ("REAL LAUNCH POSTS THAT WORKED (learn the shape, never copy wording)\n" + body)
 
@@ -213,19 +257,20 @@ def build_brief_prompt(brief: Brief, brand: BrandKit, refs: Sequence[Reference],
                        shapes: Sequence[HookShape], relaxed: set[str]) -> tuple[str, str]:
     """(instructions, input) for the first draft; together under 6,000 characters."""
     parts = [_facts(brief, brand), _voice(brand), _references(refs), _shapes(shapes)]
-    return _instructions(brief, relaxed), "\n\n".join(p for p in parts if p)
+    return _instructions(brief, relaxed, refs), "\n\n".join(p for p in parts if p)
 
 
 def build_redraft_prompt(brief: Brief, brand: BrandKit, refs: Sequence[Reference],
                          shapes: Sequence[HookShape], relaxed: set[str],
                          hooks: Sequence[str], caption: str,
-                         failures: Sequence[Failure]) -> tuple[str, str]:
+                         failures: Sequence[Failure], use_case: str = "") -> tuple[str, str]:
     """(instructions, input) for the one redraft. The previous draft carries the shape,
     so the references and the voice block are left out; the facts and hook patterns
     stay. Fix lines are grouped: one line per rule and fix, naming every place it
     failed ("- (em-dash, hook2:em-dash: <fix>)"). Under 6,000 characters together."""
-    instructions = _instructions(brief, relaxed)
-    previous = "\n".join(f"Hook {n}: {_one_line(h, HOOK_CHARS)}" for n, h in enumerate(hooks, 1))
+    instructions = _instructions(brief, relaxed, None)
+    previous = "\n".join([f"Use case: {_one_line(use_case, USE_CASE_CHARS)}"]
+                         + [f"Hook {n}: {_one_line(h, HOOK_CHARS)}" for n, h in enumerate(hooks, 1)])
     groups: dict[tuple[str, str], list[str]] = {}
     for f in failures:
         base = f.rule_id.split(":", 1)[-1]
@@ -234,7 +279,7 @@ def build_redraft_prompt(brief: Brief, brand: BrandKit, refs: Sequence[Reference
     head = "\n\n".join(p for p in (_facts(brief, brand), _shapes(shapes, when=False)) if p)
     tail = f"\n\nYour draft broke these rules. Fix exactly these:\n{fixes}\nKeep everything else the same."
     room = PROMPT_BUDGET - len(instructions) - len(head) - len(tail) - len(previous) - 40
-    cap = _trim(caption, max(120, min(REDRAFT_CAPTION_CHARS, room)))
+    cap = _trim(caption, max(REDRAFT_CAPTION_MIN, min(REDRAFT_CAPTION_CHARS, room)))
     return instructions, f"{head}\n\nYOUR LAST DRAFT\n{previous}\nCaption:\n{cap}{tail}"
 
 
@@ -255,9 +300,10 @@ def _loads(text: str) -> Any:
     return None
 
 
-def parse_draft(reply: dict | str | None) -> tuple[list[str], str] | None:
-    """(hooks, caption) from a dict, a JSON string, or JSON in a ``` fence; None if the
-    shape is wrong (hooks not exactly 3 non-empty strings, caption missing or empty)."""
+def parse_draft(reply: dict | str | None) -> tuple[list[str], str, str] | None:
+    """(hooks, caption, use_case) from a dict, a JSON string, or JSON in a ``` fence; None
+    if the shape is wrong (hooks not exactly 3 non-empty strings, caption or use_case
+    missing or empty)."""
     data = _loads(reply) if isinstance(reply, str) else reply
     if not isinstance(data, dict):
         return None
@@ -268,7 +314,10 @@ def parse_draft(reply: dict | str | None) -> tuple[list[str], str] | None:
         return None
     if not isinstance(caption, str) or not caption.strip():
         return None
-    return [h.strip() for h in hooks], caption.strip()
+    use_case = data.get("use_case")
+    if not isinstance(use_case, str) or not use_case.strip():
+        return None
+    return [h.strip() for h in hooks], caption.strip(), use_case.strip()
 
 
 # Errors a model call can raise at runtime (provider, network, decoding). Anything
@@ -281,7 +330,7 @@ class _Asker:
         self.host = host
         self.last_error: BaseException | None = None
 
-    def __call__(self, instructions: str, text: str) -> tuple[list[str], str] | None:
+    def __call__(self, instructions: str, text: str) -> tuple[list[str], str, str] | None:
         try:
             reply = self.host.complete_json(instructions, text, DRAFT_SCHEMA)
         except _CALL_ERRORS as exc:
@@ -290,11 +339,16 @@ class _Asker:
         return parse_draft(reply)
 
 
-def _failures(hooks: Sequence[str], caption: str, brief: Brief, refs: Sequence[Reference],
-              voice: Sequence[str], facts: str) -> list[Failure]:
+def _failures(hooks: Sequence[str], caption: str, use_case: str, brief: Brief,
+              refs: Sequence[Reference], voice: Sequence[str], facts: str) -> list[Failure]:
     captions = [r.caption for r in refs]
     found = list(check(caption, network=brief.network, reference_captions=captions, voice_samples=voice))
     found += unsupported_details(caption, facts)
+    if not use_case_carried(use_case, caption):
+        found.append(Failure(USE_CASE_MISSING, "The caption does not say the use case.",
+                             "Say the use case in the caption."))
+    found += [Failure(f"use-case:{f.rule_id}", f"Use case: {f.message}", f.fix)
+              for f in unsupported_details(use_case, facts)]
     for n, hook in enumerate(hooks, 1):
         hook_fails = [f for f in check(hook, network=brief.network, reference_captions=captions,
                                        voice_samples=voice) if f.rule_id in HOOK_RULES]
@@ -318,16 +372,16 @@ def draft_post(host: Host, brief: Brief, brand: BrandKit, refs: Sequence[Referen
     first = ask(instructions, text) or ask(instructions, text)
     if first is None:
         raise DraftError() from ask.last_error
-    hooks, caption = first
-    failures = _failures(hooks, caption, brief, refs, voice, facts)
+    hooks, caption, use_case = first
+    failures = _failures(hooks, caption, use_case, brief, refs, voice, facts)
     if not failures:
-        return Draft(tuple(hooks), caption, (), False)
+        return Draft(tuple(hooks), caption, (), False, use_case)
     r_instructions, r_text = build_redraft_prompt(brief, brand, refs, shapes, relaxed,
-                                                  hooks, caption, failures)
+                                                  hooks, caption, failures, use_case)
     second = ask(r_instructions, r_text)
     if second is not None:
-        hooks2, caption2 = second
-        failures2 = _failures(hooks2, caption2, brief, refs, voice, facts)
+        hooks2, caption2, use_case2 = second
+        failures2 = _failures(hooks2, caption2, use_case2, brief, refs, voice, facts)
         if len(failures2) <= len(failures):
-            return Draft(tuple(hooks2), caption2, tuple(failures2), True)
-    return Draft(tuple(hooks), caption, tuple(failures), False)
+            return Draft(tuple(hooks2), caption2, tuple(failures2), True, use_case2)
+    return Draft(tuple(hooks), caption, tuple(failures), False, use_case)

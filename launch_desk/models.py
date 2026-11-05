@@ -58,3 +58,4 @@ class Draft:
     caption: str
     failures: tuple[Failure, ...]
     redrafted: bool
+    use_case: str = ""  # one concrete use of what shipped, from the facts; the caption carries it
