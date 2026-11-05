@@ -18,8 +18,8 @@ SLUG_WHAT_MAX = 40
 # judge-by-conversion) for an image post, plus a read-through line.
 CHECKLIST: tuple[str, ...] = (
     "Put the first line in a real feed. Would you stop scrolling for it?",
-    "Look at the card first. Does your product or your headline carry the point on its own?",
-    "Look at the card with the sound off and the caption hidden. Is the point still clear?",
+    "Choose the card for the people you want: their tool, their screen. Does the card carry the hook on its own?",
+    "Cover the caption and look at the card alone. Is the point still clear?",
     "Read the post once, start to finish, and change anything that is not true. The draft can carry a detail you never gave it.",
     "Judge it by sign-ups or downloads, with a tracked link, and by who comes back. Not by views.",
 )
