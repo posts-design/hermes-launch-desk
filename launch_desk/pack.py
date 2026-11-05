@@ -1,0 +1,124 @@
+"""The launch pack: the folder the founder takes away. Nothing is posted from here."""
+from __future__ import annotations
+
+import json
+import re
+import shutil
+import unicodedata
+import urllib.parse
+from datetime import date
+from pathlib import Path
+
+from .models import BrandKit, Brief, Draft, Reference
+
+ALT_MAX = 1000
+SLUG_WHAT_MAX = 40
+
+# Reworded from the posts.design playbook checks (feed-test, first-frame, muted-check,
+# judge-by-conversion) for an image post, plus a read-through line.
+CHECKLIST: tuple[str, ...] = (
+    "Put the first line in a real feed. Would you stop scrolling for it?",
+    "Look at the card first. Does your product or your headline carry the point on its own?",
+    "Look at the card with the sound off and the caption hidden. Is the point still clear?",
+    "Read the post once, start to finish, and change anything that is not true. The draft can carry a detail you never gave it.",
+    "Judge it by sign-ups or downloads, with a tracked link, and by who comes back. Not by views.",
+)
+
+
+def x_intent_url(text: str) -> str:
+    return "https://x.com/intent/post?text=" + urllib.parse.quote(text, safe="")
+
+
+def _clip(text: str, limit: int) -> str:
+    text = " ".join(text.split())
+    return text if len(text) <= limit else text[: limit - 1].rstrip() + "…"
+
+
+def alt_text(brief: Brief, brand: BrandKit, has_screenshot: bool) -> str:
+    name = " ".join(brand.name.split()) or "the product"
+    what = _clip(brief.what, 400)
+    parts = [f"Launch card for {name}.", f"Headline: {what}."]
+    if has_screenshot:
+        parts.append(f"It shows a screenshot of {name}.")
+    else:
+        parts.append(f"The card is text only: the product name {name} and the headline.")
+    if brand.tagline:
+        parts.append(_clip(brand.tagline, 200))
+    return _clip(" ".join(parts), ALT_MAX)
+
+
+def _slug(text: str, limit: int | None = None) -> str:
+    text = unicodedata.normalize("NFKD", text).encode("ascii", "ignore").decode()
+    slug = re.sub(r"[^a-z0-9]+", "-", text.lower()).strip("-")
+    if limit:
+        slug = slug[:limit].strip("-")
+    return slug or "launch"
+
+
+def _new_folder(base: Path, name: str) -> Path:
+    base.mkdir(parents=True, exist_ok=True)
+    n = 1
+    while True:
+        path = base / (name if n == 1 else f"{name}-{n}")
+        try:
+            path.mkdir()
+            return path
+        except FileExistsError:
+            n += 1
+
+
+def _post_text(draft: Draft, hook: str) -> str:
+    lines = draft.caption.strip().splitlines()
+    if lines and lines[0].strip() != hook.strip():
+        lines[0] = hook.strip()
+    elif not lines:
+        lines = [hook.strip()]
+    return "\n".join(lines).strip()
+
+
+def _fmt_views(views: int | None) -> str:
+    return f"{views:,} views" if views is not None else "views not shown"
+
+
+def write_pack(out_dir: Path, brief: Brief, brand: BrandKit, draft: Draft, hook: str,
+               cards: dict[str, Path], refs: list[Reference],
+               has_screenshot: bool = False) -> Path:
+    name = f"{date.today().isoformat()}-{_slug(brand.name)}-{_slug(brief.what, SLUG_WHAT_MAX)}"
+    pack = _new_folder(Path(out_dir), name)
+
+    text = _post_text(draft, hook)
+    intent = x_intent_url(text)
+    files = {"post": "post-x.txt", "alt_text": "alt-text.txt", "checklist": "checklist.md",
+             "references": "references.md"}
+    (pack / "post-x.txt").write_text(text + "\n", encoding="utf-8")
+
+    for key, src in cards.items():
+        dest = f"card-{key}.png"
+        shutil.copyfile(src, pack / dest)
+        files[f"card_{key}"] = dest
+    (pack / "alt-text.txt").write_text(alt_text(brief, brand, has_screenshot) + "\n", encoding="utf-8")
+
+    check = ["# Before you post", "", f"Open this link to post on X with the text filled in: {intent}", "",
+             "Nothing was posted. You send it.", ""]
+    check += [f"- [ ] {line}" for line in CHECKLIST]
+    (pack / "checklist.md").write_text("\n".join(check) + "\n", encoding="utf-8")
+
+    ref_lines = ["# References", "", "Posts that did well and shaped the draft.", ""]
+    for r in refs:
+        ref_lines.append(f"- {r.brand}, {_fmt_views(r.views)}: {r.url}")
+    (pack / "references.md").write_text("\n".join(ref_lines) + "\n", encoding="utf-8")
+
+    files["pack"] = "pack.json"
+    data = {
+        "brief": {"shipped": brief.shipped, "network": brief.network, "what": brief.what,
+                  "product_url": brief.product_url},
+        "brand": {"name": brand.name, "url": brand.url, "bg": brand.bg, "ink": brand.ink,
+                  "accent": brand.accent},
+        "hook": hook,
+        "caption": text,
+        "references": [{"id": r.id, "brand": r.brand, "url": r.url, "views": r.views} for r in refs],
+        "intent_url": intent,
+        "files": files,
+    }
+    (pack / "pack.json").write_text(json.dumps(data, ensure_ascii=False, indent=2) + "\n", encoding="utf-8")
+    return pack
