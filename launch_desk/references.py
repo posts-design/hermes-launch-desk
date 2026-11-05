@@ -3,6 +3,7 @@ from __future__ import annotations
 
 import json
 import math
+import re
 from pathlib import Path
 
 from .host import Host, SourceUnavailable
@@ -18,17 +19,28 @@ CATEGORY = {
 }
 
 ALSO = {
-    "feature": ("new feature announcement", "product update"),
-    "product": ("product launch", "now available"),
-    "rebrand": ("rebrand reveal", "new brand identity"),
-    "partnership": ("partnership announcement", "teaming up"),
+    "feature": "new feature announcement",
+    "product": "product launch",
+    "rebrand": "rebrand reveal",
+    "partnership": "partnership announcement",
 }
+
+STOPWORDS = frozenset(
+    "a an and are as at be by for from how i in into is it its of on or our so that the "
+    "their this to we with you your just now new".split()
+)
+
+
+def keyword_phrase(what: str, limit: int = 4) -> str:
+    words = [w for w in re.findall(r"[a-z0-9]+", what.lower()) if w not in STOPWORDS]
+    return " ".join(words[:limit])
 
 
 def build_search_args(brief: Brief) -> dict:
+    also = [p for p in (keyword_phrase(brief.what), ALSO[brief.shipped]) if p]
     return {
         "query": brief.what[:160],
-        "alsoQueries": list(ALSO[brief.shipped]),
+        "alsoQueries": list(dict.fromkeys(also)),
         "category": CATEGORY[brief.shipped],
         "collection": "posts",
         "limit": 10,
@@ -63,32 +75,49 @@ def _short(n: int) -> str:
     return str(n)
 
 
-def _why(match: bool, views: int | None) -> str:
-    text = "Same kind of launch" if match else "A related launch"
+def _why(kind: str, views: int | None) -> str:
+    text = {"close": "Close match for your launch", "same": "Same kind of launch"}.get(kind, "A related launch")
     return f"{text}, {_short(views)} views" if views else text
+
+
+def _tier(item: dict) -> float | None:
+    """Fit by origin: main-query exact 3, main looser 2, also-query exact 1.5, also looser 1."""
+    origin = item.get("_origin")
+    if origin is None:
+        return None
+    loose = bool(item.get("_loose"))
+    if origin == "main":
+        return 2.0 if loose else 3.0
+    return 1.0 if loose else 1.5
 
 
 def _score(item: dict, wanted: str) -> float:
     views = _views(item) or 0
-    return ((2 if item.get("category") == wanted else 0)
-            + (1 if (item.get("caption") or "").strip() else 0)
-            + math.log10(views + 1) / 2)
+    tier = _tier(item)
+    if tier is None:  # sample pack item: category match stands in for fit
+        return ((2 if item.get("category") == wanted else 0) + 1 + math.log10(views + 1) / 2)
+    return tier - 0.05 * int(item.get("_pos") or 0) + math.log10(views + 1) / 4
 
 
 def _reference(item: dict, wanted: str) -> Reference:
     views = _views(item)
+    tier = _tier(item)
+    if tier is None:
+        kind = "same" if item.get("category") == wanted else "other"
+    else:
+        kind = "close" if tier >= 2.0 else "same"
     category = item.get("category")
     return Reference(
         id=_id(item), brand=_brand(item), url=str(item.get("url") or ""),
         caption=(item.get("caption") or "").strip(), views=views, category=category,
-        why=_why(category == wanted, views),
+        why=_why(kind, views),
     )
 
 
 def rank_references(items: list[dict], brief: Brief, k: int = 3,
                     exclude: set[str] = frozenset()) -> list[Reference]:
     wanted = CATEGORY[brief.shipped]
-    pool = [i for i in items if _id(i) and _id(i) not in exclude]
+    pool = [i for i in items if _id(i) and _id(i) not in exclude and (i.get("caption") or "").strip()]
     pool.sort(key=lambda i: (_score(i, wanted), _views(i) or 0), reverse=True)
     picked: list[Reference] = []
     brands: set[str] = set()
@@ -109,17 +138,18 @@ class McpSource:
 
     def search(self, args: dict) -> list[dict]:
         data = self.host.mcp("search_references", args)
-        groups = [data.get("items")] + [a.get("items") for a in (data.get("also") or []) if isinstance(a, dict)]
+        groups = [("main", data.get("items"))] + [
+            ("also", a.get("items")) for a in (data.get("also") or []) if isinstance(a, dict)]
         seen: set[str] = set()
         out: list[dict] = []
-        for group in groups:
-            for it in group or []:
+        for origin, group in groups:
+            for pos, it in enumerate(group or []):
                 if not isinstance(it, dict) or it.get("kind", "post") != "post":
                     continue
                 if not _id(it) or _id(it) in seen:
                     continue
                 seen.add(_id(it))
-                out.append({**it, "category": args.get("category")})
+                out.append({**it, "_origin": origin, "_pos": pos, "_loose": bool(it.get("matched"))})
         return out
 
     def get(self, id: str) -> dict:
@@ -143,23 +173,11 @@ class SamplePackSource:
 
 
 def _pick_live(host: Host, brief: Brief, exclude: set[str]) -> list[Reference]:
-    source = McpSource(host)
-    items = source.search(build_search_args(brief))
-    by_id = {_id(i): i for i in items}
+    items = McpSource(host).search(build_search_args(brief))
     picked = rank_references(items, brief, exclude=exclude)
     if len(picked) < 3:
         raise SourceUnavailable("too few results")
-    out = []
-    for ref in picked:
-        if not ref.caption:
-            full = source.get(ref.id)
-            caption = (full.get("caption") or "").strip()
-            merged = {**by_id[ref.id], "caption": caption}
-            if not _views(merged) and _views(full):
-                merged["sourceMetrics"] = full.get("sourceMetrics")
-            ref = _reference(merged, CATEGORY[brief.shipped])
-        out.append(ref)
-    return out
+    return picked
 
 
 def pick_references(host: Host, brief: Brief,

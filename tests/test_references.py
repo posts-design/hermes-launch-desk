@@ -25,6 +25,12 @@ def item(id, brand, views, category="feature-update", caption="A caption here"):
             "views": views, "category": category}
 
 
+def live(id, brand, views, origin="main", pos=0, loose=False, caption="A caption here"):
+    return {"key": {"id": id}, "url": f"https://posts.design/{id}", "caption": caption,
+            "brand": {"name": brand}, "sourceMetrics": {"views": views},
+            "_origin": origin, "_pos": pos, "_loose": loose}
+
+
 def test_args_for_feature_use_feature_update_category():
     args = build_search_args(FEATURE)
     assert args["category"] == "feature-update"
@@ -32,6 +38,15 @@ def test_args_for_feature_use_feature_update_category():
     assert args["limit"] == 10
     assert args["query"] == FEATURE.what
     assert len(args["alsoQueries"]) == 2
+
+
+def test_also_queries_include_keyword_phrase_from_what():
+    also = build_search_args(FEATURE)["alsoQueries"]
+    assert also[0] == "custom themes pet profile"
+    assert also[1] and also[1] != also[0]
+    long = build_search_args(Brief("product", "x", "The very best app for you and your dogs and cats", "u"))
+    assert len(long["alsoQueries"][0].split()) <= 4
+    assert "the" not in long["alsoQueries"][0].split()
 
 
 def test_args_category_per_kind_and_query_cut():
@@ -42,22 +57,44 @@ def test_args_category_per_kind_and_query_cut():
     assert len(build_search_args(Brief("feature", "x", "y" * 400, "u"))["query"]) == 160
 
 
-def test_rank_prefers_category_then_views_one_per_brand():
+def test_rank_prefers_tier_then_views_one_per_brand():
     items = [
-        item("a1", "Acme", 1_000_000, category="announcement"),
-        item("b1", "Beta", 5_000),
-        item("b2", "Beta", 90_000),
-        item("c1", "Cora", 200_000),
-        item("d1", "Dune", 300),
+        live("a1", "Acme", 1_000_000, origin="also"),
+        live("b1", "Beta", 5_000, loose=True),
+        live("b2", "Beta", 90_000),
+        live("c1", "Cora", 200_000, loose=True, pos=1),
+        live("d1", "Dune", 300, origin="also", pos=2),
     ]
     out = rank_references(items, FEATURE)
-    assert [r.id for r in out] == ["c1", "b2", "d1"]
+    assert [r.id for r in out] == ["b2", "c1", "a1"]
     assert len({r.brand for r in out}) == 3
     assert all(r.why for r in out)
+    assert all(r.category is None for r in out)
+
+
+def test_pack_items_still_rank_by_category_match():
+    items = [item("p1", "P", 9_000_000, category="announcement"), item("p2", "Q", 1_000)]
+    assert rank_references(items, FEATURE, k=2)[0].id == "p2"
+
+
+def test_items_without_caption_are_skipped():
+    items = [live("n", "No Cap", 9_000_000, caption=None), live("k", "Known", 10)]
+    assert [r.id for r in rank_references(items, FEATURE, k=3)] == ["k"]
+
+
+def test_main_query_hits_outrank_also_query_hits():
+    raw = _fix("search_references.json")
+    items = McpSource(FakeHost(mcp_replies={"search_references": raw})).search(build_search_args(FEATURE))
+    origin = {i["key"]["id"]: i["_origin"] for i in items}
+    ranked = rank_references(items, FEATURE, k=50)
+    mains = [r for r in ranked if origin[r.id] == "main"]
+    assert mains
+    first_also = next(n for n, r in enumerate(ranked) if origin[r.id] == "also")
+    assert all(ranked.index(r) < first_also for r in mains)
 
 
 def test_missing_views_rank_below_known_views():
-    items = [item("n", "None Co", None), item("k", "Known", 10)]
+    items = [live("n", "None Co", None), live("k", "Known", 10)]
     assert [r.id for r in rank_references(items, FEATURE, k=2)] == ["k", "n"]
 
 
@@ -86,7 +123,7 @@ def test_mcp_error_falls_back_to_sample_pack_once():
     assert all(r.url.startswith("https://posts.design/") for r in refs)
 
 
-def test_pick_uses_mcp_and_fills_missing_caption_with_get():
+def test_pick_uses_mcp_without_extra_calls():
     search = {"items": [
         {"key": {"id": "x1"}, "url": "https://posts.design/x1", "caption": None, "brand": {"name": "X"},
          "sourceMetrics": {"views": 5000}},
@@ -97,22 +134,18 @@ def test_pick_uses_mcp_and_fills_missing_caption_with_get():
         {"key": {"id": "w1"}, "url": "https://posts.design/w1", "caption": "W says hi", "brand": {"name": "W"},
          "sourceMetrics": {"views": 10}},
     ], "also": []}
-    got = {"key": {"id": "x1"}, "url": "https://posts.design/x1", "caption": "Full caption", "brand": {"name": "X"}}
-    host = FakeHost(mcp_replies={"search_references": search, "get_reference": got})
+    host = FakeHost(mcp_replies={"search_references": search})
     refs, used_pack = pick_references(host, FEATURE)
     assert used_pack is False
-    assert [r.id for r in refs] == ["y1", "z1", "x1"]
-    assert refs[2].caption == "Full caption"
-    assert [t for t, _ in host.mcp_calls] == ["search_references", "get_reference"]
+    assert [r.id for r in refs] == ["y1", "z1", "w1"]
+    assert len(host.mcp_calls) == 1
 
 
-def test_get_failure_switches_whole_call_to_pack():
-    search = {"items": [{"key": {"id": "x%d" % i}, "url": "https://posts.design/x", "caption": None,
-                         "brand": {"name": "B%d" % i}, "sourceMetrics": {"views": 9}} for i in range(5)]}
-    host = FakeHost(mcp_replies={"search_references": search, "get_reference": SourceUnavailable("t", kind="timeout")})
-    refs, used_pack = pick_references(host, FEATURE)
+def test_too_few_captioned_results_use_pack():
+    search = {"items": [{"key": {"id": "x1"}, "url": "https://posts.design/x1", "caption": None,
+                         "brand": {"name": "X"}, "sourceMetrics": {"views": 5}}]}
+    refs, used_pack = pick_references(FakeHost(mcp_replies={"search_references": search}), FEATURE)
     assert used_pack is True and len(refs) == 3
-    assert len(host.mcp_calls) <= 4
 
 
 def test_pack_source_search_filters_by_category():
