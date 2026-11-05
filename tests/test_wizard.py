@@ -376,7 +376,7 @@ def test_approve_on_a_local_client_shows_the_raw_intent_url_and_full_folder(surf
     assert any(str(pack_json.parent) in line for line in lines)
 
 
-@pytest.mark.parametrize("surface", ["telegram", "discord"])
+@pytest.mark.parametrize("surface", ["telegram", "discord", "slack", "some-new-app"])
 def test_approve_in_a_chat_app_links_the_intent_and_names_only_the_folder(surface):
     host = make_host(PHASE1, surface=surface)
     start(host)
