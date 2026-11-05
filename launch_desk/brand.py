@@ -136,16 +136,26 @@ def _font_family(sources: Sequence[str]) -> str | None:
     return None
 
 
+_TAGLINE_MIN_PART = 40  # a sentence or clause shorter than this is not worth keeping alone
+
+
 def _cut_tagline(text: str) -> str:
+    """At most 120 characters, ending on a whole sentence, else a whole clause, else a word
+    plus an ellipsis, so the card never shows a phrase that stops mid-way."""
     text = re.sub(r"\s+", " ", text).strip()
     if len(text) <= TAGLINE_MAX:
         return text
-    cut = text[: TAGLINE_MAX + 1]
-    if " " in cut:
-        cut = cut.rsplit(" ", 1)[0]
-    else:
-        cut = cut[:TAGLINE_MAX]
-    return cut.rstrip(" ,;:-–")
+    head = text[: TAGLINE_MAX + 1]
+    ends = [m.end() for m in re.finditer(r"[.!?](?=\s)", head)]
+    if ends and ends[-1] >= _TAGLINE_MIN_PART:
+        return head[: ends[-1]]
+    # The first clause break past the minimum: a later comma is often inside a list.
+    breaks = [m.start() for m in re.finditer(r",\s|;\s|\s[–-]\s", head) if m.start() >= _TAGLINE_MIN_PART]
+    if breaks:
+        return head[: breaks[0]].rstrip(" ,;:-–")
+    cut = head[:TAGLINE_MAX - 1]
+    cut = cut.rsplit(" ", 1)[0] if " " in cut else cut
+    return cut.rstrip(" ,;:-–") + "…"
 
 
 def _name(page: _Page, url: str) -> str:

@@ -1,6 +1,6 @@
 from pathlib import Path
 
-from launch_desk.brand import NEUTRAL, PRESET_ACCENTS, fetch_brand, parse_brand
+from launch_desk.brand import NEUTRAL, PRESET_ACCENTS, _cut_tagline, fetch_brand, parse_brand
 
 FIX = Path(__file__).parent / "fixtures"
 PNG = b"\x89PNG\r\n\x1a\n" + b"0" * 20
@@ -54,7 +54,7 @@ def test_tagline_cut_at_word_within_120():
     html = f'<meta name="description" content="{desc}">'
     kit, _ = parse_brand("https://x.test", html, [])
     assert len(kit.tagline) <= 120
-    assert kit.tagline.endswith("word")
+    assert kit.tagline.endswith("word…")  # cut at a word, marked as cut
 
 
 def test_font_family_skips_generics():
@@ -230,3 +230,20 @@ def test_http_get_allows_three_redirects_not_four(server):
 def test_http_get_refuses_non_http(bad):
     with pytest.raises(ValueError):
         http_get(bad)
+
+
+@pytest.mark.parametrize("text,expected", [
+    ("one pawrful page for everything you are, do, and care about. 50+ rich link types, "
+     "drag-and-drop bento grid, free for 7 days. More text here.",
+     "one pawrful page for everything you are, do, and care about."),
+    ("Social media post design inspiration: 4,300+ real posts from 1,060+ brands, including launch, "
+     "hiring, event and product posts for every kind of team",
+     "Social media post design inspiration: 4,300+ real posts from 1,060+ brands"),
+])
+def test_long_tagline_is_cut_at_a_sentence_or_clause(text, expected):
+    assert _cut_tagline(text) == expected
+
+
+def test_long_tagline_without_a_break_ends_with_ellipsis():
+    out = _cut_tagline("word " * 60)
+    assert len(out) <= 121 and out.endswith("…")
