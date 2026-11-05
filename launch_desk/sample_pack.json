@@ -9,15 +9,6 @@
   "why": "Same kind of launch, 56.8M views"
  },
  {
-  "id": "x-twitter-bot-2095168633559462197-grok-bot-android",
-  "brand": "Grok Bot",
-  "url": "https://posts.design/grok-bot-is-now-available-on-android-2026-09-02",
-  "caption": "Grok Bot is now available on Android.",
-  "views": 36300000,
-  "category": "announcement",
-  "why": "Same kind of launch, 36.3M views"
- },
- {
   "id": "x-twitter-midjourney-2067421950314688759-midjourney-division-midjourney-called-m",
   "brand": "Midjourney",
   "url": "https://posts.design/midjourney-a-new-division-of-midjourney-called-midjourney-2026-06-18",
@@ -43,24 +34,6 @@
   "views": 9728372,
   "category": "announcement",
   "why": "Same kind of launch, 9.7M views"
- },
- {
-  "id": "x-twitter-playstation-2093013168897552897-playstation-27-gaming-monitor-dualsens",
-  "brand": "PlayStation",
-  "url": "https://posts.design/playstation-the-27-gaming-monitor-with-dualsense-charging-2026-08-27",
-  "caption": "The 27\" Gaming Monitor with DualSense Charging Hook is available today:\n\n🔵 QHD screen with HDR visuals\n🔵 Up to 240 Hz refresh rate\n🔵 VRR support for smooth gameplay\n🔵 Convenient DualSense charging",
-  "views": 3667159,
-  "category": "announcement",
-  "why": "Same kind of launch, 3.7M views"
- },
- {
-  "id": "x-twitter-usmint-2095104491536167250-united-states-mint-purchase-12pm-et",
-  "brand": "United States Mint",
-  "url": "https://posts.design/united-states-mint-available-for-purchase-today-at-2026-09-02",
-  "caption": "Available for purchase today at 12PM ET: 2026 President Donald J. Trump $1 Coin. These coins are also in circulation, so check your pocket change. Collect them today! #CoinCollecting #America250",
-  "views": 2761274,
-  "category": "announcement",
-  "why": "Same kind of launch, 2.8M views"
  },
  {
   "id": "x-twitter-quiverai-2100295136261349802-quiverai-arrow-2",
@@ -126,13 +99,40 @@
   "why": "Same kind of launch, 807.1K views"
  },
  {
-  "id": "x-twitter-whitehouse-2116333656801189961-white-house-one-month-ago-president",
-  "brand": "White House",
-  "url": "https://posts.design/the-white-house-one-month-ago-president-trump-2026-10-31",
-  "caption": "One month ago, President Trump launched a government built around you.\n\nIt puts you first. Respects your time. And actually works for YOU.\n\nSee the historic launch yourself in Hello, America. 🇺🇸",
-  "views": 624712,
+  "id": "x-twitter-cursor-ai-2105012114200887434-cursor-build-charts-diagrams-right-chat",
+  "brand": "Cursor",
+  "url": "https://posts.design/cursor-can-now-build-charts-and-diagrams-right-2026-09-29",
+  "caption": "Cursor can now build charts and diagrams right in the chat.\n\nUse /visualize to analyze data and see the answer inline. Available now in the Agents Window.",
+  "views": 437943,
   "category": "announcement",
-  "why": "Same kind of launch, 624.7K views"
+  "why": "Same kind of launch, 437.9K views"
+ },
+ {
+  "id": "x-twitter-twentycrm-2118056653861896668-twenty-ui-here",
+  "brand": "Twenty",
+  "url": "https://posts.design/twenty-ui-is-here-2026-11-04",
+  "caption": "Twenty UI is here.\n79 components and a Figma file, all open source.",
+  "views": 12001,
+  "category": "announcement",
+  "why": "Same kind of launch, 12K views"
+ },
+ {
+  "id": "x-twitter-resend-2044848908048994431-need-catch-up-resend-launch-week",
+  "brand": "Resend",
+  "url": "https://posts.design/need-to-catch-up-on-resend-launch-week-2026-04-16",
+  "caption": "Need to catch up on Resend launch week?\n\nPick your VHS tape.\nPress play.\n\n(🔊 volume up)",
+  "views": 8445,
+  "category": "announcement",
+  "why": "Same kind of launch, 8.4K views"
+ },
+ {
+  "id": "x-twitter-relume-ai-2117671901015506972-launching-relume-studio",
+  "brand": "Relume",
+  "url": "https://posts.design/we-re-launching-relume-studio-2026-11-03",
+  "caption": "Today we’re launching Relume Studio!\n\nMost AI image tools give you one great picture. Then the face changes, the office moves and everything starts to look like generic AI. You can’t run a brand on images that don’t match.\n\nStudio fixes that by locking things in:\n→ Styles lock",
+  "views": 3727,
+  "category": "announcement",
+  "why": "Same kind of launch, 3.7K views"
  },
  {
   "id": "x-twitter-x-2102147636702634195-x-timeline",
@@ -162,15 +162,6 @@
   "why": "Same kind of launch, 945.3K views"
  },
  {
-  "id": "x-twitter-xai-2060102590122385460-grok-cli-update-card",
-  "brand": "Grok",
-  "url": "https://posts.design/xai-grok-build-0-2-7-update-card-2026-05-28",
-  "caption": "Grok Build 0.2.7 is now out, with /usage, /login, shared terminals across subagents, and improved image understanding\n\nSee all updates at",
-  "views": 793825,
-  "category": "feature-update",
-  "why": "Same kind of launch, 793.8K views"
- },
- {
   "id": "x-twitter-fomo-2093380902751465572-fomo-conviction-rewarded-real-time",
   "brand": "fomo",
   "url": "https://posts.design/fomo-your-conviction-rewarded-in-real-time-2026-08-28",
@@ -187,15 +178,6 @@
   "views": 209573,
   "category": "feature-update",
   "why": "Same kind of launch, 209.6K views"
- },
- {
-  "id": "x-twitter-spacexai-2105744399179383124-spacexai-grok-4-7-gemini-enterprise",
-  "brand": "SpaceX AI",
-  "url": "https://posts.design/spacexai-grok-4-7-is-now-available-on-2026-10-01",
-  "caption": "Grok 4.7 is now available on the Gemini Enterprise Agent Platform",
-  "views": 179804,
-  "category": "feature-update",
-  "why": "Same kind of launch, 179.8K views"
  },
  {
   "id": "x-twitter-fomo-2097770600966090895-multi-factor-authentication-live-fomo-users",
@@ -268,5 +250,41 @@
   "views": 72620,
   "category": "feature-update",
   "why": "Same kind of launch, 72.6K views"
+ },
+ {
+  "id": "linear-agent-mcp-support-card",
+  "brand": "Linear",
+  "url": "https://posts.design/linear-agent-mcp-support-card-2026-04-23",
+  "caption": "New: MCP support for Linear Agent\n\nConnect tools like Granola, Notion, PostHog, and many others to pull in context for creating issues, drafting PRDs, and writing project updates.",
+  "views": 58861,
+  "category": "feature-update",
+  "why": "Same kind of launch, 58.9K views"
+ },
+ {
+  "id": "x-twitter-vercel-dev-2116229954551812364-vercel-developers-fx-v0-0-16",
+  "brand": "Vercel",
+  "url": "https://posts.design/vercel-developers-fx-v0-0-16-2026-10-30",
+  "caption": "fx v0.0.16\n\nThis version has better prompt caching and smaller downloads & binaries.\n\n• 41% fewer uncached input tokens\n• About 60% smaller libfx npm downloads\n• 2.8% smaller CLI binary\n\nChangelog →",
+  "views": 40031,
+  "category": "feature-update",
+  "why": "Same kind of launch, 40K views"
+ },
+ {
+  "id": "x-twitter-v0-2097745295706833121-v0-vercel-integrations-use-vercel-coming",
+  "brand": "v0",
+  "url": "https://posts.design/v0-it-s-all-vercel-the-integrations-you-2026-09-09",
+  "caption": "It's all Vercel: the integrations you use on Vercel are coming directly to v0.\n\nTo start, Resend, Amazon OpenSearch, MongoDB Atlas, Algolia, and Clerk are now one click from the chat. Auto-setup, skills loaded. Build without leaving v0.",
+  "views": 27301,
+  "category": "feature-update",
+  "why": "Same kind of launch, 27.3K views"
+ },
+ {
+  "id": "x-twitter-raycast-2106009649271255198-raycast-ios",
+  "brand": "Raycast",
+  "url": "https://posts.design/new-in-raycast-for-ios-2026-10-02",
+  "caption": "New in Raycast for iOS ✨\n\n🧭 New customizable tab bar to get around faster\n📌 Keep your favorites within reach, everything else in More\n🔍 Unified search across the app\n🤖 Top up AI credits without leaving the app\n\nFull changelog 👉",
+  "views": 18669,
+  "category": "feature-update",
+  "why": "Same kind of launch, 18.7K views"
  }
 ]

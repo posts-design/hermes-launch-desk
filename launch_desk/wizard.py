@@ -29,7 +29,7 @@ from .hooks import pick_hook_shapes
 from .host import Host, SourceUnavailable
 from .models import BrandKit, Brief, Draft, Failure, Reference
 from .pack import post_text, write_pack
-from .references import McpSource, SamplePackSource, build_search_args, rank_references
+from .references import CATEGORY, McpSource, SamplePackSource, build_search_args, rank_references
 from .render import render_card, render_feed_preview
 from .rules import check
 from .setup_check import check_setup
@@ -409,6 +409,8 @@ def _phase1(host: Host, args: Args, stored: BrandKit | None, get: Callable[[str]
     items, pack_note = _search(host, brief, offline=bool(issues))
     if pack_note:
         host.say(pack_note)
+        if not any(i.get("category") == CATEGORY[brief.shipped] for i in items):
+            notes.append(f"There are no {brief.shipped} posts in the sample pack, so these are other launch posts.")
     refs = rank_references(items, brief)
 
     host.say("Drafting the post.")

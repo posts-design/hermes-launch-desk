@@ -216,6 +216,22 @@ def test_too_few_live_matches_falls_back_and_says_it_differently():
     assert set(host.said) - set(down.said) and set(down.said) - set(host.said)
 
 
+def plain(reply):
+    return [line for line in reply.splitlines() if not line.startswith("MEDIA:")]
+
+
+@pytest.mark.parametrize("kind", ["rebrand", "partnership"])
+def test_pack_without_the_category_adds_one_note_to_the_reply(kind):
+    down = SourceUnavailable("MCP server 'posts' is not connected")
+    feature = make_host(PHASE1, access=down)
+    other = make_host([kind, "x", "keep", "1"], access=down)
+    feature_reply, other_reply = start(feature), start(other)
+    extra = [line for line in plain(other_reply) if line and line not in plain(feature_reply)]
+    assert len(extra) == 1
+    assert len(plain(other_reply)) == len(plain(feature_reply)) + 1
+    assert {r["id"] for r in pending(other)["refs"]} <= PACK_IDS
+
+
 @pytest.mark.parametrize("answered", range(len(PHASE1)))
 def test_none_at_each_phase1_question_saves_nothing(answered):
     host = make_host(PHASE1[:answered])
