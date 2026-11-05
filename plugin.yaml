@@ -3,8 +3,9 @@ version: 0.1.0
 description: >-
   Turns "I just shipped X" into a launch post pack: three hooks, a caption, a share card and a
   feed preview, checked against a scroll test. What you shipped (first 160 characters) is sent to
-  posts.design as the search text, through your own account; your site is fetched; the brand kit and
-  drafts are stored locally in the plugin data directory; nothing is posted.
+  posts.design as the search text, through your own account; your site is fetched (at most 4
+  requests); the brand kit, voice samples, drafts and their search results are stored locally in the
+  plugin data directory; nothing is posted.
 author: posts.design
 license: MIT
 homepage: https://github.com/posts-design/hermes-launch-desk

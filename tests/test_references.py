@@ -2,13 +2,11 @@ import json
 from pathlib import Path
 
 from fakes import FakeHost
-from launch_desk.host import SourceUnavailable
 from launch_desk.models import Brief
 from launch_desk.references import (
     McpSource,
     SamplePackSource,
     build_search_args,
-    pick_references,
     rank_references,
 )
 
@@ -114,45 +112,16 @@ def test_rank_reads_real_search_shape():
     assert len({r.id for r in out}) == 3
 
 
-def test_mcp_error_falls_back_to_sample_pack_once():
-    host = FakeHost(mcp_replies={"search_references": SourceUnavailable("signed out", kind="permission")})
-    refs, used_pack = pick_references(host, FEATURE)
-    assert used_pack is True
-    assert len(refs) == 3
-    assert len(host.mcp_calls) == 1
-    assert all(r.url.startswith("https://posts.design/") for r in refs)
 
 
-def test_pick_uses_mcp_without_extra_calls():
-    search = {"items": [
-        {"key": {"id": "x1"}, "url": "https://posts.design/x1", "caption": None, "brand": {"name": "X"},
-         "sourceMetrics": {"views": 5000}},
-        {"key": {"id": "y1"}, "url": "https://posts.design/y1", "caption": "Y says hi", "brand": {"name": "Y"},
-         "sourceMetrics": {"views": 4000}},
-        {"key": {"id": "z1"}, "url": "https://posts.design/z1", "caption": "Z says hi", "brand": {"name": "Z"},
-         "sourceMetrics": {"views": 3000}},
-        {"key": {"id": "w1"}, "url": "https://posts.design/w1", "caption": "W says hi", "brand": {"name": "W"},
-         "sourceMetrics": {"views": 10}},
-    ], "also": []}
-    host = FakeHost(mcp_replies={"search_references": search})
-    refs, used_pack = pick_references(host, FEATURE)
-    assert used_pack is False
-    assert [r.id for r in refs] == ["y1", "z1", "w1"]
-    assert len(host.mcp_calls) == 1
 
 
-def test_too_few_captioned_results_use_pack():
-    search = {"items": [{"key": {"id": "x1"}, "url": "https://posts.design/x1", "caption": None,
-                         "brand": {"name": "X"}, "sourceMetrics": {"views": 5}}]}
-    refs, used_pack = pick_references(FakeHost(mcp_replies={"search_references": search}), FEATURE)
-    assert used_pack is True and len(refs) == 3
 
 
 def test_pack_source_search_filters_by_category():
     pack = SamplePackSource()
     out = pack.search({"category": "announcement"})
     assert out and all(i["category"] == "announcement" for i in out)
-    assert pack.get(out[0]["id"])["id"] == out[0]["id"]
 
 
 def test_sample_pack_entries_have_required_fields():

@@ -6,7 +6,7 @@ import math
 import re
 from pathlib import Path
 
-from .host import Host, SourceUnavailable
+from .host import Host
 from .models import Brief, Reference
 
 PACK_PATH = Path(__file__).parent / "sample_pack.json"
@@ -152,9 +152,6 @@ class McpSource:
                 out.append({**it, "_origin": origin, "_pos": pos, "_loose": bool(it.get("matched"))})
         return out
 
-    def get(self, id: str) -> dict:
-        return self.host.mcp("get_reference", {"id": id})
-
 
 class SamplePackSource:
     def __init__(self, path: Path = PACK_PATH):
@@ -165,26 +162,3 @@ class SamplePackSource:
         found = [e for e in self.entries if e.get("category") == wanted]
         return found or list(self.entries)
 
-    def get(self, id: str) -> dict:
-        for e in self.entries:
-            if e["id"] == id:
-                return e
-        raise SourceUnavailable("not in the sample pack")
-
-
-def _pick_live(host: Host, brief: Brief, exclude: set[str]) -> list[Reference]:
-    items = McpSource(host).search(build_search_args(brief))
-    picked = rank_references(items, brief, exclude=exclude)
-    if len(picked) < 3:
-        raise SourceUnavailable("too few results")
-    return picked
-
-
-def pick_references(host: Host, brief: Brief,
-                    exclude: set[str] = frozenset()) -> tuple[list[Reference], bool]:
-    try:
-        return _pick_live(host, brief, set(exclude)), False
-    except SourceUnavailable:
-        pack = SamplePackSource()
-        items = pack.search(build_search_args(brief))
-        return rank_references(items, brief, exclude=set(exclude)), True

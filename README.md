@@ -66,20 +66,20 @@ Sent to posts.design, through your own account:
 
 - The first 160 characters of what you shipped, as the search text.
 - A short keyword phrase from it, a fixed phrase for the kind of launch, and a category.
-- An access check (`get_my_access`) on each run, and when needed a lookup of a reference by id.
+- An access check (`get_my_access`) on each run.
 
 Not sent to posts.design: the detail after ` -- `, your site link, the draft, your brand kit and your screenshot.
 
-Sent to the model Hermes is configured with, which may be a hosted provider: the brief (what you shipped and your detail), your product name and tagline, the reference captions, and your voice samples if any.
+Sent to the model Hermes is configured with, which may be a hosted provider: the brief (what you shipped and your detail), your product name, tagline and link, the reference captions, and your voice samples if any.
 
-Fetched from the internet: your site, plus the logo it links to (at most 4 requests).
+Fetched from the internet: your site, its stylesheets and the logo it links to (at most 4 requests, each following up to 3 redirects).
 
 Stored on your machine, in the plugin's data folder and Hermes plugin state:
 
-- The brand kit: name, tagline, colours and logo file.
-- A pending draft with its card and preview, kept up to 24 hours or until you approve or discard it.
+- The brand kit: name, site link, tagline, colours, font name, logo file and voice samples.
+- A pending draft with its card, its preview and the search results it came from (items.json), kept up to 24 hours or until you approve or discard it.
 - Finished packs, kept until you delete them.
-- The path of an attached screenshot. The file is not copied; the screenshot tool reads the image where it is and leaves it there.
+- The path of an attached screenshot, until you approve or discard the draft. The file is not copied; the screenshot tool reads the image where it is and leaves it there.
 
 Nothing is posted, scheduled or sent to any social network.
 
