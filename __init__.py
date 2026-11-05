@@ -51,7 +51,7 @@ def register(ctx):
     ctx.register_command(
         "launch", launch,
         description="Turn what you just shipped into a launch post pack",
-        args_hint="<what you shipped>",
+        args_hint="<what you shipped> [-- <one real detail>]",
     )
     ctx.register_tool(
         name="launch_desk_attach_screenshot",
