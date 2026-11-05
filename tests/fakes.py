@@ -19,6 +19,7 @@ class FakeHost:
         self.asked: list[tuple[str, list[dict]]] = []
         self.llm_calls: list[tuple[str, str, dict]] = []
         self.mcp_calls: list[tuple[str, dict]] = []
+        self.said: list[str] = []
 
     def choose(self, question: str, choices: list[dict]) -> str | None:
         self.asked.append((question, choices))
@@ -52,3 +53,6 @@ class FakeHost:
 
     def unattended(self) -> bool:
         return self._unattended
+
+    def say(self, text: str) -> None:
+        self.said.append(text)

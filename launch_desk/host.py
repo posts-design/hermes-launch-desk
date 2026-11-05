@@ -33,6 +33,8 @@ class Host(Protocol):
 
     def unattended(self) -> bool: ...
 
+    def say(self, text: str) -> None: ...
+
 
 class HermesHost:
     """Host backed by a Hermes PluginContext."""
@@ -99,3 +101,10 @@ class HermesHost:
 
     def unattended(self) -> bool:
         return self.ctx.current_cron_execution() is not None
+
+    def say(self, text: str) -> None:
+        """A progress line in the chat. Best effort: a refused or failed post is ignored."""
+        try:
+            self.ctx.post_message(text)
+        except Exception:
+            pass

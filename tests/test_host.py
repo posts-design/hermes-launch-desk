@@ -102,3 +102,21 @@ def test_complete_json_non_dict_parsed_falls_back_to_text():
 
 def test_complete_json_exception_is_none():
     assert HermesHost(LlmCtx(exc=ValueError("schema"))).complete_json("i", "t", {}) is None
+
+
+def test_say_posts_message_and_never_raises():
+    class Ctx:
+        def __init__(self, exc=None):
+            self.posted, self.exc = [], exc
+
+        def post_message(self, text):
+            if self.exc:
+                raise self.exc
+            self.posted.append(text)
+            return object()
+
+    ctx = Ctx()
+    HermesHost(ctx).say("Reading the site.")
+    assert ctx.posted == ["Reading the site."]
+    HermesHost(Ctx(exc=RuntimeError("no gateway"))).say("x")  # no raise
+    HermesHost(object()).say("x")  # a ctx without post_message: no raise
