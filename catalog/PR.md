@@ -44,7 +44,8 @@ It also ships a skill, `launch-desk:launch-desk`, so the agent steers founders t
 - Sent to the model Hermes is configured with: the brief (what shipped and the detail), the product name, tagline and link, the reference captions, and any voice samples.
 - Fetched: the product site, its stylesheets and the logo it links to, at most 4 requests, each following up to 3 redirects.
 - Stored locally, in the plugin data folder and Hermes plugin state: the brand kit with any voice samples; a pending draft with its card, preview and search results, kept up to 24 hours or until approve or discard; finished packs; the path of an attached screenshot (the file is not copied). Copies of the card and preview go to Hermes' image cache so chat apps can show them.
-- Nothing is posted, scheduled or sent to any social network. No credentials are read, no shell commands are run, no background work, no telemetry.
+- Scheduled, only on the founder's Yes after approve: two check-ins (a day and three days later), created as ordinary Hermes cron jobs through Hermes' own `cronjob_manage` tool. They post to the same chat, show in `hermes cron list`, and each sends the pack it reads to the configured model. Sign-ups the founder reports are stored in the pack.
+- Nothing is posted or sent to any social network. No credentials are read, no shell commands are run, no telemetry.
 
 ## Tier
 

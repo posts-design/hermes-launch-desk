@@ -32,8 +32,22 @@ Never generate or invent an image for the card.
 ## What you must not do
 
 - Do not write the launch post yourself in place of `/launch`. The command picks references and checks the draft in code; a post written in chat skips every check.
-- Never post, schedule or send anything. The founder posts from the pack.
+- Never post or send anything, and never schedule a post. The founder posts from the pack. The only scheduled things are the check-ins the founder said Yes to.
 - If the user wants edits, send them back through `/launch` (change the hook) or help them edit the pack's text by hand, keeping to the rules below.
+
+## Check-ins after a launch
+
+After Approve, `/launch` asks: "Check in with you tomorrow and in 3 days?" Only a Yes creates two jobs on Hermes' scheduler, named `Launch Desk check-in: <pack>`, which post to the same chat.
+
+When a check-in runs:
+
+1. Call `launch_desk_followup` with the pack name.
+2. Write one short message: ask how many sign-ups each channel brought, and suggest one next post from `suggestions` (a reply that carries the founder's detail, an unused hook, or the shape of a reference they did not see). Use only what the result gives; never make up numbers or details.
+3. Name the pack in the message. Do not wait for an answer.
+
+When the founder replies to a check-in with numbers, call `launch_desk_record_results` once per channel: the pack name from the check-in, the channel (like X or LinkedIn) and the sign-ups as a whole number. Never guess a number they did not give. Then say what was recorded, in one line.
+
+To cancel a check-in: `/cron remove <job id>` in chat, or `hermes cron remove <job id>` in a terminal. `/launch` names the ids when it schedules them.
 
 ## The launch workflow in short
 
