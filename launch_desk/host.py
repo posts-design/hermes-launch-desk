@@ -1,7 +1,19 @@
 from __future__ import annotations
 
+import json
 from pathlib import Path
 from typing import Any, Protocol
+
+
+class SourceUnavailable(Exception):
+    """posts.design could not be reached or refused the call.
+
+    kind: "permission", "timeout" or "error".
+    """
+
+    def __init__(self, message: str = "", kind: str = "error"):
+        super().__init__(message)
+        self.kind = kind
 
 
 class Host(Protocol):
@@ -46,7 +58,24 @@ class HermesHost:
         return getattr(result, "parsed", None)
 
     def mcp(self, tool: str, args: dict) -> dict:
-        return self.ctx.call_mcp("posts", tool, args, timeout=30)
+        try:
+            envelope = self.ctx.call_mcp("posts", tool, args, timeout=30)
+        except PermissionError as exc:
+            raise SourceUnavailable(str(exc), kind="permission") from exc
+        except TimeoutError as exc:
+            raise SourceUnavailable(str(exc), kind="timeout") from exc
+        except Exception as exc:
+            raise SourceUnavailable(str(exc), kind="error") from exc
+        if not isinstance(envelope, dict) or not envelope.get("ok"):
+            detail = envelope.get("error") if isinstance(envelope, dict) else None
+            raise SourceUnavailable(str(detail or "call failed"), kind="error")
+        try:
+            data = json.loads(envelope.get("result"))
+        except (TypeError, ValueError) as exc:
+            raise SourceUnavailable("unreadable reply", kind="error") from exc
+        if not isinstance(data, dict):
+            raise SourceUnavailable("unexpected reply shape", kind="error")
+        return data
 
     def state_get(self, key: str) -> Any:
         return self.ctx.state.get(key)
