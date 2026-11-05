@@ -2,6 +2,8 @@ import json
 import re
 from pathlib import Path
 
+import pytest
+
 from fakes import FakeHost
 from launch_desk.models import Brief
 from launch_desk.references import (
@@ -162,3 +164,90 @@ def test_sample_pack_entries_have_required_fields():
     for e in entries:
         brands[e["brand"]] = brands.get(e["brand"], 0) + 1
     assert max(brands.values()) <= 2
+
+
+# ------------------------------------------------------------------ shape notes
+
+from launch_desk.references import caption_shape, shape_note  # noqa: E402
+
+
+def _captions():
+    """Every real caption we keep: the recorded search reply and the sample pack, by brand and first words."""
+    raw = _fix("search_references.json")
+    groups = [raw["items"]] + [a.get("items") or [] for a in raw.get("also") or []]
+    found = {}
+    for it in [i for g in groups for i in g] + SamplePackSource().entries:
+        cap = it.get("caption")
+        if cap:
+            brand = it["brand"]["name"] if isinstance(it.get("brand"), dict) else (it.get("brand") or "")
+            found[(brand, " ".join(cap.split()[:3]))] = cap
+    return found
+
+
+CAPS = _captions()
+
+
+def cap(brand, start):
+    return next(c for (b, s), c in CAPS.items() if b == brand and s.startswith(start))
+
+
+@pytest.mark.parametrize("brand,start,opening", [
+    ("Perplexity", "You can now", "can-now"),
+    ("Notion", "Small QoL", "can-now"),
+    ("Cursor", "Cursor can now", "can-now"),
+    ("beehiiv 🐝", "five new ways", "number"),
+    ("Resend", "Need to catch", "question"),
+    ("Airbnb", "Hey everyone,", "audience"),
+    ("Granola", "Introducing People", "announce"),
+    ("Linear", "New: MCP", "announce"),
+    ("Relume", "Today we’re launching", "announce"),
+    ("X", "timeline. ticker.", "short-claim"),
+    ("fomo", "Your conviction,", "short-claim"),
+    ("MetaMask", "swap fees on", "statement"),
+])
+def test_opening_move_of_real_captions(brand, start, opening):
+    assert caption_shape(cap(brand, start))["opening"] == opening
+
+
+def test_lists_links_and_line_counts_of_real_captions():
+    raycast = caption_shape(cap("Raycast", "New update is"))
+    assert raycast["list"] and raycast["link"]
+    vercel = caption_shape(cap("Vercel", "fx v0.0.16"))
+    assert vercel["list"] and vercel["link"]
+    assert caption_shape(cap("Linear", "New └ Nested"))["list"]
+    perplexity = caption_shape(cap("Perplexity", "You can now"))
+    assert (perplexity["lines"], perplexity["list"], perplexity["link"]) == (2, False, False)
+    assert caption_shape(cap("Grok", "An early beta"))["link"]  # ends on "Try it at"
+    assert caption_shape(cap("X", "timeline. ticker."))["lines"] == 1
+
+
+def test_length_bucket_grows_with_the_caption():
+    sizes = ["short", "medium", "long"]
+    short = caption_shape(cap("X", "timeline. ticker."))["size"]
+    medium = caption_shape(cap("Perplexity", "You can now"))["size"]
+    long = caption_shape(cap("beehiiv 🐝", "five new ways"))["size"]
+    assert sizes.index(short) < sizes.index(medium) < sizes.index(long)
+
+
+def test_every_real_caption_gets_a_note_and_shapes_differ():
+    notes = {c: shape_note(c) for c in CAPS.values()}
+    assert all(n and "\n" not in n and len(n) <= 80 for n in notes.values())
+    assert len(set(notes.values())) >= 8
+    assert shape_note(cap("Perplexity", "You can now")) != shape_note(cap("beehiiv 🐝", "five new ways"))
+
+
+def test_empty_caption_has_a_shape():
+    assert caption_shape("")["lines"] == 0 and shape_note("")
+
+
+def test_reference_line_carries_brand_shape_views_and_fit():
+    from launch_desk.models import Reference
+    from launch_desk.references import reference_line
+    r = Reference("a", "Perplexity", "https://posts.design/a", cap("Perplexity", "You can now"),
+                  42749, None, "Close match for your launch, 42.7K views")
+    line = reference_line(r)
+    assert line.startswith("Perplexity")
+    assert shape_note(r.caption) in line and "42.7K" in line and "Close match for your launch" in line
+    assert line.count("42.7K") == 1
+    none = reference_line(Reference("b", "", "u", "Hi.", None, None, "A related launch"))
+    assert shape_note("Hi.") in none and "A related launch" in none and "views" not in none

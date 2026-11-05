@@ -157,6 +157,116 @@ def rank_references(items: list[dict], brief: Brief, k: int = 3,
     return picked
 
 
+# ------------------------------------------------------------------ shape notes
+# What a reference lends, read from its caption in code: the opening move, how many
+# lines and how long, and whether it carries a list or ends on a link.
+
+_URL = re.compile(r"https?://\S+", re.IGNORECASE)
+_NUMBER_WORDS = ("one two three four five six seven eight nine ten eleven twelve "
+                 "a dozen dozens hundreds thousands").split()
+_AUDIENCE = re.compile(r"^(?:hey|hi|dear|attention|calling all|if you|for (?:all |every )?\w+s\b)",
+                       re.IGNORECASE)
+_ANNOUNCE = re.compile(
+    r"^(?:introducing|announcing|meet\b|new\b|today\b|launching|just (?:shipped|launched|landed)"
+    r"|product update|update:|(?:we|i)(?:'re|’re| are| just| have|'ve|’ve)?\s+"
+    r"(?:shipped|launched|launching|announced|introducing|built|made|released|happy|excited|thrilled)"
+    r"|(?:i'm|i’m) (?:happy|excited|thrilled))",
+    re.IGNORECASE)
+_LIST_ITEM = re.compile(r"^(?:[-*•→└▪>–]|\d+[.)]\s)")
+_ENDS_ON_LINK = re.compile(r"(?:👉|→|↓|⬇️?|\bat|\bhere\s*-?|\bbelow|:)\s*$", re.IGNORECASE)
+SHORT_CLAIM_WORDS = 8
+
+OPENINGS = {
+    "question": "opens with a question",
+    "number": "opens with a number",
+    "audience": "opens by calling out its audience",
+    "can-now": 'opens with what you "can now" do',
+    "announce": "opens by naming the launch",
+    "short-claim": "opens with a short claim",
+    "statement": "opens by saying what it does",
+}
+
+
+def _lines(caption: str) -> list[str]:
+    return [ln.strip() for ln in (caption or "").splitlines()
+            if ln.strip() and not _URL.fullmatch(ln.strip())]
+
+
+def _bare(line: str) -> str:
+    """The line without leading emoji, bullets or punctuation."""
+    return re.sub(r"^[\W_]+", "", line)
+
+
+def _opening(first: str) -> str:
+    bare = _bare(first)
+    sentence = re.split(r"(?<=[.!?])\s+", bare, maxsplit=1)[0]
+    words = sentence.lower().split()
+    if "?" in first:
+        return "question"
+    if words and (words[0][0].isdigit() or words[0] in _NUMBER_WORDS
+                  or " ".join(words[:2]) in _NUMBER_WORDS):
+        return "number"
+    if _AUDIENCE.match(bare):
+        return "audience"
+    if re.search(r"\bcan now\b", sentence, re.IGNORECASE):
+        return "can-now"
+    if _ANNOUNCE.match(bare):
+        return "announce"
+    if len(words) <= SHORT_CLAIM_WORDS:
+        return "short-claim"
+    return "statement"
+
+
+def _is_item(line: str) -> bool:
+    if _LIST_ITEM.match(line):
+        return True
+    first = line[:1]
+    return bool(first) and not first.isalnum() and first not in "\"'“‘@#(" and ord(first) > 0x2000
+
+
+def caption_shape(caption: str) -> dict:
+    """The shape of a caption as data: opening move, line count, size, list, link."""
+    lines = _lines(caption)
+    text = " ".join(lines)
+    size = "short" if len(text) < 120 else "medium" if len(text) < 240 else "long"
+    return {
+        "opening": _opening(lines[0]) if lines else "statement",
+        "lines": len(lines),
+        "size": size,
+        "list": sum(1 for ln in lines[1:] if _is_item(ln)) >= 2,
+        "link": bool(_URL.search(caption or "")) or bool(lines and _ENDS_ON_LINK.search(lines[-1])),
+    }
+
+
+def shape_note(caption: str) -> str:
+    """One line on what a caption lends: "opens with a question, 3 short lines, a list"."""
+    s = caption_shape(caption)
+    n = s["lines"]
+    count = f"{n} {'line' if n == 1 else 'lines'}"
+    if s["size"] == "short":
+        count = f"{n} short {'line' if n == 1 else 'lines'}"
+    elif s["size"] == "long":
+        count += ", long"
+    parts = [OPENINGS[s["opening"]], count]
+    if s["list"]:
+        parts.append("a list")
+    if s["link"]:
+        parts.append("ends on a link")
+    return ", ".join(parts)
+
+
+_VIEWS_TAIL = re.compile(r",\s*[\d.]+[KM]? views$")
+
+
+def reference_line(ref: Reference) -> str:
+    """'<brand> — <shape note>, <views> views. <fit>.' for the reference list."""
+    line = f"{ref.brand or 'A brand'} — {shape_note(ref.caption)}"
+    if ref.views:
+        line += f", {_short(ref.views)} views"
+    fit = _VIEWS_TAIL.sub("", ref.why or "").strip()
+    return f"{line}. {fit}." if fit else f"{line}."
+
+
 class McpSource:
     def __init__(self, host: Host):
         self.host = host
