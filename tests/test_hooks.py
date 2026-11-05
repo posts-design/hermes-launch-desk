@@ -17,3 +17,7 @@ def test_every_shipped_kind_gets_two_distinct_shapes():
 
 def test_unknown_kind_falls_back_to_feature():
     assert pick_hook_shapes("nonsense") == pick_hook_shapes("feature")
+
+
+def test_feature_launches_use_check_this_out_and_identity_news():
+    assert [s.id for s in pick_hook_shapes("feature")] == ["check-this-out", "identity-news"]

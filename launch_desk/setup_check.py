@@ -34,7 +34,10 @@ def _issue(code: str) -> SetupIssue:
     if code == "server":
         return SetupIssue("server", "posts.design is not connected in Hermes. Add it with the command below; if you already did, run `hermes mcp list` and restart Hermes.", ADD_SERVER)
     if code == "allowlist":
-        return SetupIssue("allowlist", "Launch Desk is not allowed to use the posts.design server yet.", ALLOWLIST)
+        # Hermes checks the allowlist before it looks for the server, so this can also mean
+        # the server was never added: give both steps, in order.
+        return SetupIssue("allowlist", "Launch Desk can't use posts.design yet. Run these two commands; "
+                          "skip the first if you already added the server.", f"{ADD_SERVER}\n{ALLOWLIST}")
     if code == "signin":
         return SetupIssue("signin", "posts.design needs you to sign in.", SIGN_IN)
     return SetupIssue("unreachable", "posts.design didn't answer; the sample pack will be used.", "")

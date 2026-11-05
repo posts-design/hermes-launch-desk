@@ -28,7 +28,7 @@ HOOK_SHAPES: dict[str, HookShape] = {
 }
 
 _BY_KIND: dict[str, tuple[str, str]] = {
-    "feature": ("demo-promise", "check-this-out"),
+    "feature": ("check-this-out", "identity-news"),
     "product": ("identity-news", "bold-contrast"),
     "rebrand": ("time-jump", "bold-contrast"),
     "partnership": ("identity-news", "audience-call-out"),

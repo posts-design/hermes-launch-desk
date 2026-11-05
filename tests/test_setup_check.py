@@ -1,7 +1,7 @@
 import pytest
 
 from launch_desk.host import SourceUnavailable
-from launch_desk.setup_check import SetupIssue, check_setup
+from launch_desk.setup_check import ADD_SERVER, ALLOWLIST, SetupIssue, check_setup
 
 
 def _raises(exc):
@@ -19,10 +19,14 @@ def test_all_good_returns_empty():
     assert check_setup(lambda: {}) == []
 
 
-def test_permission_error_from_probe_reports_allowlist():
-    issues = check_setup(_raises(SourceUnavailable("not allowed", kind="permission")))
+@pytest.mark.parametrize("exc", [SourceUnavailable("not allowed", kind="permission"), PermissionError("no")])
+def test_permission_error_gives_add_server_then_allowlist(exc):
+    # Hermes checks the allowlist before the server exists, so a permission error can also
+    # mean no server: both commands, add first.
+    issues = check_setup(_raises(exc))
     assert [i.code for i in issues] == ["allowlist"]
-    assert issues[0].command == "hermes config set plugins.entries.launch-desk.mcp_allowlist '[\"posts\"]'"
+    lines = issues[0].command.splitlines()
+    assert lines == [ADD_SERVER, ALLOWLIST]
 
 
 @pytest.mark.parametrize("message", [
