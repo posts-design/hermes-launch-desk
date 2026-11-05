@@ -476,3 +476,90 @@ def test_swap_draft_error_keeps_the_draft_waiting(caplog):
         reply = resume(host, "swap")
     assert "Traceback" not in reply and pending(host) == before
     assert Path(before["card"]).is_file()
+
+
+# ------------------------------------------------------------------ voice samples
+
+def with_brand(**kw):
+    """A host with the pawr brand stored (one approved launch) and nothing waiting."""
+    host = make_host(PHASE1, llm=(CLEAN, CLEAN), **kw)
+    start(host)
+    resume(host, "approve")
+    return host
+
+
+def voice(host, text):
+    return wizard.run_launch(host, f"voice {text}", get=no_get)
+
+
+def samples(host):
+    return host.state_get("brand")["voice_samples"]
+
+
+def test_voice_without_a_brand_saves_nothing():
+    host = make_host()
+    reply = voice(host, "We shipped themes. People asked.")
+    assert reply.strip() and host.state_get("brand") is None
+    assert host.asked == [] and host.mcp_calls == [] and host.llm_calls == []
+
+
+def test_voice_keeps_the_last_three_samples_and_clear_empties_them():
+    host = with_brand()
+    brand_before = dict(host.state_get("brand"))
+    for n in range(1, 5):
+        assert voice(host, f"Past post number {n}.").strip()
+    assert samples(host) == ["Past post number 2.", "Past post number 3.", "Past post number 4."]
+    after = host.state_get("brand")
+    assert {k: v for k, v in after.items() if k != "voice_samples"} == \
+        {k: v for k, v in brand_before.items() if k != "voice_samples"}
+    assert Path(after["logo_path"]).is_file()
+    voice(host, "clear")
+    assert samples(host) == []
+    assert len(host.llm_calls) == 1  # only the launch drafted; voice calls nothing
+
+
+def test_stored_voice_reaches_the_draft():
+    host = with_brand()
+    voice(host, "Pet pages got themes. Ask and you shall receive.")
+    host.choices.extend(["feature", "x", "1"])
+    start(host, args="dark mode for pet pages", get=no_get)
+    assert "Ask and you shall receive." in host.llm_calls[-1][1]
+
+
+def test_relaxed_rules_add_one_note_to_the_phase1_reply():
+    plain_host, styled = with_brand(), with_brand()
+    voice(styled, "Themes — finally — are here.")
+    for h in (plain_host, styled):
+        h.choices.extend(["feature", "x", "1"])
+        h.llm_replies.append(CLEAN)
+    a = start(plain_host, args="dark mode for pet pages", get=no_get)
+    b = start(styled, args="dark mode for pet pages", get=no_get)
+    extra = [line for line in plain(b) if line and line not in plain(a)]
+    assert len(extra) == 1
+
+
+# ------------------------------------------------------------------ screenshot reuse
+
+def test_reused_screenshot_is_named_in_progress_and_reply(tmp_path):
+    shot = tmp_path / "pricing-page.png"
+    Image.new("RGB", (1600, 900), "white").save(shot)
+    host = make_host(PHASE1)
+    host.state_set("screenshot", str(shot))
+    reply = start(host)
+    assert any(shot.name in line for line in host.said)
+    assert sum(shot.name in line for line in plain(reply)) == 1
+    none = make_host(PHASE1)
+    assert "pricing-page" not in start(none)
+
+
+@pytest.mark.parametrize("choice", ["approve", "discard"])
+def test_screenshot_is_forgotten_after_approve_or_discard(tmp_path, choice):
+    shot = tmp_path / "shot.png"
+    Image.new("RGB", (1600, 900), "white").save(shot)
+    host = make_host(PHASE1)
+    host.state_set("screenshot", str(shot))
+    start(host)
+    assert host.state_get("screenshot") == str(shot)
+    resume(host, choice)
+    assert host.state_get("screenshot") is None
+    assert shot.is_file()  # the founder's file stays where it was

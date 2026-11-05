@@ -31,7 +31,7 @@ from .models import BrandKit, Brief, Draft, Failure, Reference
 from .pack import post_text, write_pack
 from .references import CATEGORY, McpSource, SamplePackSource, build_search_args, rank_references
 from .render import render_card, render_feed_preview
-from .rules import check
+from .rules import check, relaxed_rules
 from .setup_check import check_setup
 
 logger = logging.getLogger(__name__)
@@ -40,9 +40,11 @@ X_CARD = (1200, 675)
 HEADLINE_MAX = 70
 PENDING_KEY = "pending"
 PENDING_TTL_S = 24 * 60 * 60
+VOICE_MAX = 3
 
 EXAMPLE = "/launch https://yoursite.com dark mode for the editor -- people kept asking for it"
-USAGE = f"Usage: /launch <what you shipped> [-- <one real detail>], for example: {EXAMPLE}"
+USAGE = (f"Usage: /launch <what you shipped> [-- <one real detail>], for example: {EXAMPLE}\n"
+         "/launch help also shows brand and voice.")
 HELP = "\n".join((
     "/launch <what you shipped> [-- <one real detail>]",
     f"Example: {EXAMPLE}",
@@ -51,6 +53,8 @@ HELP = "\n".join((
     "You get the draft, the card and a feed preview. Send /launch again to approve, change the hook, "
     "swap references or discard.",
     "/launch brand <url> reads your site's colours and logo again.",
+    "/launch voice <a past post of yours> keeps it as a voice sample, up to 3; drafts follow its style. "
+    "/launch voice clear forgets them.",
     "Nothing is ever posted. You get a pack to post yourself.",
 ))
 UNATTENDED = "/launch needs you to answer a few questions; run it in a chat."
@@ -60,6 +64,11 @@ DISCARDED = "Discarded. Nothing was posted."
 NEXT_STEP = "Send /launch to approve, change the hook, swap references or discard."
 REPLACED = "This draft replaces the one that was waiting."
 LINKEDIN_LATER = "LinkedIn isn't ready yet, so this draft is for X."
+VOICE_USAGE = "Usage: /launch voice <a past post of yours>, or /launch voice clear"
+VOICE_NO_BRAND = ("There's no brand saved yet, and voice samples are kept with it. "
+                  "Send /launch brand https://yoursite.com first.")
+STYLE_WORDS = {"em-dash": "more than one em-dash", "emoji": "more than one emoji",
+               "hashtags": "more than two hashtags"}
 NO_MORE_REFS = "There are no other references to swap in, so these stay."
 PACK_UNAVAILABLE = "posts.design isn't available, so these come from the sample pack of launch posts."
 PACK_TOO_FEW = "Not enough close matches on posts.design; using the sample pack."
@@ -405,6 +414,10 @@ def _phase1(host: Host, args: Args, stored: BrandKit | None, get: Callable[[str]
     line = f"Finding launch posts like yours for {brand.name or _hostname(brand.url)}."
     if shot is None:
         line += " Tip: send a screenshot and ask me to use it for the launch; the card is better with one."
+    else:
+        used = f"Using the screenshot you attached: {shot.name}"
+        line += f" {used}."
+        notes.append(f"{used}.")
     host.say(line)
     items, pack_note = _search(host, brief, offline=bool(issues))
     if pack_note:
@@ -414,6 +427,9 @@ def _phase1(host: Host, args: Args, stored: BrandKit | None, get: Callable[[str]
     refs = rank_references(items, brief)
 
     host.say("Drafting the post.")
+    kept = [STYLE_WORDS[r] for r in sorted(relaxed_rules(brand.voice_samples)) if r in STYLE_WORDS]
+    if kept:
+        notes.append(f"Kept your style: your past posts use {' and '.join(kept)}, so the draft may too.")
     draft = draft_post(host, brief, brand, refs, pick_hook_shapes(brief.shipped))
     hook = _pick_hook(host, list(draft.hooks), draft.caption, refs, bool(pack_note))
 
@@ -460,6 +476,7 @@ def _approve(host: Host, p: _Pending) -> str:
     if p.data.get("brand_new"):
         _store_brand(host, p.brand)
     _drop_pending(host, p.data)
+    host.state_set("screenshot", None)
     data = json.loads((pack / "pack.json").read_text(encoding="utf-8"))
     text = (pack / data["files"]["post"]).read_text(encoding="utf-8").strip()
     return "\n".join((
@@ -483,6 +500,7 @@ def _resume(host: Host, p: _Pending) -> str:
         return _approve(host, p)
     if picked == "discard":
         _drop_pending(host, p.data)
+        host.state_set("screenshot", None)
         return DISCARDED
     notes: list[str] = []
     if picked == "swap":
@@ -509,15 +527,35 @@ def _resume(host: Host, p: _Pending) -> str:
 def _brand_command(host: Host, url: str, get: Callable[[str], bytes]) -> str:
     if not url:
         return "Usage: /launch brand https://yoursite.com"
+    stored = _kit_from(host.state_get("brand"))
     root = host.data_dir() / "work"
     root.mkdir(parents=True, exist_ok=True)
     work = Path(tempfile.mkdtemp(prefix="brand-", dir=root))
     try:
-        kit = _store_brand(host, _read_brand(host, url, get, work))
+        kit = _read_brand(host, url, get, work)
+        if stored is not None and _hostname(stored.url) == _hostname(url):
+            kit = replace(kit, voice_samples=stored.voice_samples)
+        kit = _store_brand(host, kit)
     finally:
         shutil.rmtree(work, ignore_errors=True)
     return (f"Saved the brand for {kit.name or _hostname(url)}: accent {kit.accent}. "
             "Next: /launch <what you shipped>.")
+
+
+def _voice_command(host: Host, text: str) -> str:
+    """Keep a past post as a voice sample (the last three), or forget them all."""
+    if not text:
+        return VOICE_USAGE
+    stored = _kit_from(host.state_get("brand"))
+    if stored is None:
+        return VOICE_NO_BRAND
+    if text.lower() == "clear":
+        _store_brand(host, replace(stored, voice_samples=()))
+        return "Voice samples cleared."
+    kept = [s for s in stored.voice_samples if s != text] + [text]
+    kit = _store_brand(host, replace(stored, voice_samples=tuple(kept[-VOICE_MAX:])))
+    return (f"Kept as a voice sample ({len(kit.voice_samples)} of {VOICE_MAX}). "
+            "Your next drafts follow its style.")
 
 
 def _went_wrong(where: str, line: str) -> str:
@@ -547,6 +585,8 @@ def _run(host: Host, raw: str, get: Callable[[str], bytes]) -> str:
     first, _, rest = text.partition(" ")
     if first.lower() == "brand" and (not rest.strip() or _URL_RE.fullmatch(rest.strip())):
         return _guarded(lambda: _brand_command(host, rest.strip(), get), STOPPED)
+    if first.lower() == "voice":
+        return _guarded(lambda: _voice_command(host, rest.strip()), STOPPED)
     if not text:
         pending = _load_pending(host)
         if pending is None:

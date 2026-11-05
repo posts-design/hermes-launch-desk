@@ -21,6 +21,7 @@ For example: `/launch https://yoursite.com dark mode for the editor -- people ke
 - The part after ` -- ` is one true detail, like who asked for it or what it replaced. The draft treats it as a fact and uses nothing it cannot find. Ask for one if they have none; a real detail is the best thing a launch post can have.
 - `/launch` always takes two steps. The first run ends with the draft, the card and a feed preview. Sending `/launch` again lets them approve, change the hook, swap references or discard.
 - `/launch brand <url>` reads the site's colours and logo again. `/launch help` shows the usage.
+- `/launch voice <a past post>` keeps one of the founder's own posts as a voice sample (the last three are kept); drafts follow its style. `/launch voice clear` forgets them. It needs a saved brand first: `/launch brand <url>`, or one approved launch.
 
 ## Screenshots
 

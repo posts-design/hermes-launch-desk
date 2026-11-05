@@ -46,6 +46,8 @@ The text after ` -- ` is one true detail, such as who asked for it. The draft tr
 
 It takes two steps. The first run ends with the draft, the card and a feed preview. Send `/launch` again to approve, change the hook, swap references or discard. `/launch brand <url>` reads your site's colours and logo again, and `/launch help` shows the usage.
 
+To make drafts sound like you, send `/launch voice <a past post of yours>`. It keeps your last three; `/launch voice clear` forgets them. If your posts use more em-dashes, emoji or hashtags than the checks allow, the draft may too, and the reply says so.
+
 To put your product on the card, send a screenshot and the agent attaches it with `launch_desk_attach_screenshot`. The plugin also ships a skill, `launch-desk:launch-desk`, that teaches the agent the launch workflow, so it steers you well even when you do not type the command.
 
 ## What it checks
