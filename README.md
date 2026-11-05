@@ -60,11 +60,26 @@ To put your product on the card, send a screenshot and the agent attaches it wit
 
 ## What goes where
 
-- posts.design receives only the search phrasings and filters. Your draft, brand and screenshot are not sent.
-- Your own model, the one Hermes is configured with, receives the brief: what you shipped, your detail, your product name and tagline, and the reference captions.
-- Your product site is fetched to read colours and logo: at most 4 requests.
-- The brand kit, drafts and pending drafts are stored in the plugin's data folder on your machine.
-- Nothing is posted, scheduled or sent to any social network.
+Sent to posts.design, through your own account:
+
+- The first 160 characters of what you shipped, as the search text.
+- A short keyword phrase from it, a fixed phrase for the kind of launch, and a category.
+- An access check (`get_my_access`) on each run, and when needed a lookup of a reference by id.
+
+Not sent to posts.design: the detail after ` -- `, your site link, the draft, your brand kit and your screenshot.
+
+Sent to the model Hermes is configured with, which may be a hosted provider: the brief (what you shipped and your detail), your product name and tagline, the reference captions, and your voice samples if any.
+
+Fetched from the internet: your site, plus the logo it links to (at most 4 requests).
+
+Stored on your machine, in the plugin's data folder and Hermes plugin state:
+
+- The brand kit: name, tagline, colours and logo file.
+- A pending draft with its card and preview, kept up to 24 hours or until you approve or discard it.
+- Finished packs, kept until you delete them.
+- The path of an attached screenshot. The file is not copied; the screenshot tool reads the image where it is and leaves it there.
+
+Nothing is posted, scheduled or sent to any social network.
 
 ## Credits
 
