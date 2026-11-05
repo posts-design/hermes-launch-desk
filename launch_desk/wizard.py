@@ -147,13 +147,37 @@ def _cut(text: str, limit: int) -> str:
     return cut.rstrip(" ,;:-–—")
 
 
+_CARD_PREFIX = re.compile(r"^check this out:\s*", re.IGNORECASE)
+
+
+def _cap(text: str) -> str:
+    return text[:1].upper() + text[1:]
+
+
 def card_headline(hook: str, what: str) -> str:
-    """The hook when it fits on the card (70 characters), else what shipped, cut at a word."""
-    hook = " ".join(hook.split())
-    return hook if hook and len(hook) <= HEADLINE_MAX else _cut(what, HEADLINE_MAX)
+    """The hook when it fits on the card (70 characters), else what shipped, cut at a word.
+    A leading "Check this out:" is for the feed, so the card leaves it out."""
+    hook = _CARD_PREFIX.sub("", " ".join(hook.split()))
+    return _cap(hook if hook and len(hook) <= HEADLINE_MAX else _cut(what, HEADLINE_MAX))
 
 
 # ------------------------------------------------------------------ host helpers
+
+LOCAL_SURFACES = {"cli", "tui", "local", "desktop", "acp"}
+
+
+def _tell(host: Host, notes: list[str], line: str) -> None:
+    """A line the founder must see once: in the reply on a local client, where it arrives
+    together with the progress lines; as a message on a chat app, where the reply comes later."""
+    try:
+        local = host.surface() in LOCAL_SURFACES
+    except Exception:
+        local = True
+    if local:
+        notes.append(line)
+    else:
+        host.say(line)
+
 
 def _unattended(host: Host) -> bool:
     try:
@@ -397,8 +421,7 @@ def _phase1(host: Host, args: Args, stored: BrandKit | None, get: Callable[[str]
     shipped = _ask(host, "What kind of launch is this?", SHIPPED)
     network = _ask(host, "Where will you post it?", NETWORKS)
     if network != "x":
-        host.say(LINKEDIN_LATER)
-        notes.append(LINKEDIN_LATER)
+        _tell(host, notes, LINKEDIN_LATER)
 
     brand_new = bool(args.url) and (stored is None or _hostname(args.url) != _hostname(stored.url))
     brand = _read_brand(host, args.url, get, folder / "brand") if brand_new else stored
@@ -406,9 +429,7 @@ def _phase1(host: Host, args: Args, stored: BrandKit | None, get: Callable[[str]
 
     issues = [i for i in check_setup(lambda: host.mcp("get_my_access", {})) if i.code != "unreachable"]
     if issues:
-        line = f"{issues[0].message}\n{issues[0].command}"
-        host.say(line)
-        notes.append(line)
+        _tell(host, notes, f"{issues[0].message}\n{issues[0].command}")
 
     shot = _screenshot(host.state_get("screenshot"))
     line = f"Finding launch posts like yours for {brand.name or _hostname(brand.url)}."

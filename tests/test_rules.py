@@ -95,3 +95,8 @@ def test_voice_with_emoji_relaxes_emoji_rule():
 def test_stock_phrases_never_relaxed():
     voice = ["We are thrilled to say hi \U0001f680\U0001f389"]
     assert "stock-phrase" in ids("thrilled to share", voice_samples=voice)
+
+
+def test_stock_phrase_matches_a_curly_apostrophe():
+    ids = [f.rule_id for f in check("In today\u2019s fast-paced world, themes ship.", network="x")]
+    assert "stock-phrase" in ids

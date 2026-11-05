@@ -179,14 +179,19 @@ def test_remaining_failures_are_shown_in_the_phase1_reply():
     assert len(flagged) == 1
 
 
-def test_linkedin_soon_is_said_in_the_reply_and_continues_with_x():
-    x_host = make_host(PHASE1)
-    li_host = make_host(["feature", "linkedin", "keep", "1"])
+@pytest.mark.parametrize("surface,in_reply", [("cli", True), ("tui", True), ("local", True),
+                                              ("telegram", False)])
+def test_setup_and_linkedin_lines_appear_once(surface, in_reply):
+    down = SourceUnavailable("MCP server 'posts' is not connected")
+    x_host = make_host(PHASE1, access=down, surface=surface)
+    li_host = make_host(["feature", "linkedin", "keep", "1"], access=down, surface=surface)
     x_reply, li_reply = start(x_host), start(li_host)
     assert pending(li_host)["brief"]["network"] == "x"
-    plain = lambda r: [line for line in r.splitlines() if not line.startswith("MEDIA:")]
-    extra = [line for line in plain(li_reply) if line not in plain(x_reply)]
-    assert len(extra) == 1 and extra[0] in li_host.said
+    said = "\n".join(li_host.said)
+    assert (li_reply.count(ADD_SERVER), said.count(ADD_SERVER)) == ((1, 0) if in_reply else (0, 1))
+    extra_reply = [line for line in plain(li_reply) if line and line not in plain(x_reply)]
+    extra_said = [line for line in li_host.said if line not in x_host.said]
+    assert (len(extra_reply), len(extra_said)) == ((1, 0) if in_reply else (0, 1))
 
 
 def test_mcp_down_uses_sample_pack_and_says_so_in_reply():
@@ -295,7 +300,30 @@ def test_long_hook_falls_back_to_what_for_card_headline(monkeypatch):
 
     monkeypatch.setattr(wizard, "render_card", spy)
     start(make_host(PHASE1, llm=(long, long)))
-    assert seen == ["custom themes for pet profile pages"]
+    assert seen == ["Custom themes for pet profile pages"]
+
+
+def test_card_drops_check_this_out_but_the_post_keeps_it(monkeypatch):
+    seen = []
+    real = wizard.render_card
+
+    def spy(brand, screenshot, headline, size, out):
+        seen.append(headline)
+        return real(brand, screenshot, headline, size, out)
+
+    monkeypatch.setattr(wizard, "render_card", spy)
+    host = make_host(["feature", "x", "keep", "2"])
+    start(host)
+    hook = CLEAN["hooks"][1]
+    assert seen == ["Your pet's page in your colours."]
+    assert pending(host)["hook"] == hook
+    resume(host, "approve")
+    assert json.loads(packs(host)[0].read_text())["caption"].splitlines()[0] == hook
+
+
+def test_card_headline_capitalises_the_fallback():
+    assert wizard.card_headline("", "dark mode for pet pages") == "Dark mode for pet pages"
+    assert wizard.card_headline("check this out: dark mode.", "x") == "Dark mode."
 
 
 def test_unreadable_site_offers_the_five_presets_and_continues():

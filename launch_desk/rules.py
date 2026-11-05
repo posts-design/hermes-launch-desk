@@ -117,6 +117,7 @@ def _first_line_short(text: str) -> bool:
 
 
 def _stock(text: str) -> bool:
+    text = text.replace("\u2019", "'")
     return bool(_STOCK_RE.search(text)) or _bare_introducing(_first_line(text))
 
 
