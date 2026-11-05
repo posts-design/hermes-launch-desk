@@ -1,0 +1,1975 @@
+{
+ "items": [
+  {
+   "schemaVersion": 1,
+   "key": {
+    "kind": "gallery-item",
+    "id": "bluesky-raycast-com-3mkani4iytg2e-raycast-windows-custom-themes"
+   },
+   "kind": "post",
+   "title": "Raycast Windows custom themes",
+   "url": "https://posts.design/raycast-windows-custom-themes-2026-04-24",
+   "caption": null,
+   "creator": {
+    "name": "Raycast",
+    "handle": "raycast.com"
+   },
+   "brand": {
+    "name": "Raycast"
+   },
+   "sourceUrl": "https://bsky.app/profile/raycast.com/post/3mkani4iytg2e",
+   "sourcePublishedAt": "2026-04-24",
+   "classification": {
+    "type": "announcement",
+    "intent": "product-update",
+    "format": "single-image",
+    "fields": [
+     "tech",
+     "productivity",
+     "design"
+    ],
+    "primaryPattern": "product-screenshot",
+    "secondaryPatterns": [],
+    "visualStyle": [
+     "technical"
+    ],
+    "colorMode": "dark",
+    "editorPick": false,
+    "colours": []
+   },
+   "palette": [
+    {
+     "hex": "#010101",
+     "share": 0.5143
+    },
+    {
+     "hex": "#151515",
+     "share": 0.3776
+    },
+    {
+     "hex": "#262626",
+     "share": 0.0667
+    },
+    {
+     "hex": "#FDFDFD",
+     "share": 0.0071
+    }
+   ],
+   "subjects": [],
+   "previewUrl": "https://posts.design/images/posts/bluesky-raycast-com-3mkani4iytg2e-raycast-windows-custom-themes-thumb.webp",
+   "description": {
+    "text": "A dark promotional interface graphic presents a large white “Custom Themes” headline on the left, a pill-shaped “WINDOWS v0.55” label above it, and a cropped dark-theme selection interface on the right. The interface includes a search field and a list of theme options with cir...",
+    "shows": [
+     "Large white two-line headline reading “Custom Themes”",
+     "Pill-shaped platform/version label",
+     "Windows-style four-pane icon",
+     "Dark theme selector interface",
+     "Search field with back arrow"
+    ],
+    "basis": "model",
+    "source": "visual-profile"
+   }
+  },
+  {
+   "schemaVersion": 1,
+   "key": {
+    "kind": "gallery-item",
+    "id": "x-twitter-perplexitydevs-2104646637381660738-perplexity-developers-build-custom"
+   },
+   "kind": "post",
+   "title": "Perplexity Developers: You can now build custom reusable agents in the Perplexity Agent API",
+   "url": "https://posts.design/perplexity-developers-you-can-now-build-custom-reusable-2026-09-28",
+   "caption": "You can now build custom reusable agents in the Perplexity Agent API with Profiles, Skills, and managed connectors.\n\nConfigure an agent once in the API Portal and reuse it across applications and workflows.",
+   "captionFacts": {
+    "characters": 206,
+    "words": 33,
+    "lines": 2,
+    "firstLine": "You can now build custom reusable agents in the Perplexity Agent API with Profiles, Skills, and managed connectors.",
+    "hashtags": [],
+    "mentions": [],
+    "emoji": 0,
+    "links": 0
+   },
+   "creator": {
+    "name": "Perplexity Developers",
+    "handle": "perplexitydevs"
+   },
+   "brand": {
+    "name": "Perplexity"
+   },
+   "sourceUrl": "https://x.com/perplexitydevs/status/2104646637381660738",
+   "publishedAt": "2026-09-29T00:46:36.503Z",
+   "sourcePublishedAt": "2026-09-28",
+   "classification": {
+    "type": "announcement",
+    "intent": "product-update",
+    "format": "video-cover",
+    "fields": [
+     "tech",
+     "developer-tools",
+     "ai"
+    ],
+    "primaryPattern": "product-screenshot",
+    "secondaryPatterns": [],
+    "visualStyle": [
+     "technical",
+     "soft-ui"
+    ],
+    "colorMode": "dark",
+    "editorPick": false,
+    "colours": []
+   },
+   "palette": [
+    {
+     "hex": "#141211",
+     "share": 0.7571
+    },
+    {
+     "hex": "#242020",
+     "share": 0.1542
+    },
+    {
+     "hex": "#373231",
+     "share": 0.0325
+    },
+    {
+     "hex": "#FEFEFE",
+     "share": 0.0204
+    }
+   ],
+   "subjects": [
+    {
+     "id": "ai",
+     "label": "AI"
+    },
+    {
+     "id": "developer-tools",
+     "label": "Developer Tools"
+    }
+   ],
+   "previewUrl": "https://posts.design/images/posts/x-twitter-perplexitydevs-2104646637381660738-perplexity-developers-build-custom-thumb.webp",
+   "video": {
+    "url": "https://posts.design/media/posts/x-twitter-perplexitydevs-2104646637381660738-perplexity-developers-build-custom-detail.mp4",
+    "role": "analysis",
+    "mimeType": "video/mp4",
+    "posterUrl": "https://posts.design/images/posts/x-twitter-perplexitydevs-2104646637381660738-perplexity-developers-build-custom.webp",
+    "width": 1920,
+    "height": 1080,
+    "durationSeconds": 76.565333,
+    "hasAudio": true,
+    "pacing": {
+     "scenes": 3,
+     "averageShotSeconds": 25.52
+    },
+    "byteLength": 10940209,
+    "frameCount": 19,
+    "hasBreakdown": true
+   },
+   "sourceMetrics": {
+    "views": 42749,
+    "unit": "views",
+    "capturedAt": "2026-10-12T14:57:49.972Z",
+    "evidenceKind": "refresh-observed-public"
+   },
+   "description": {
+    "text": "A 77-second continuous 16:9 film with no hard cuts. A title card opens onto a dark grid ground, then a left-hand serif caption and a right-hand frosted-glass panel walk through creating a profile, tools, skills and connectors, followed by an API request, a response stack and t...",
+    "shows": [],
+    "basis": "model",
+    "source": "breakdown"
+   },
+   "matched": "some-words"
+  },
+  {
+   "schemaVersion": 1,
+   "key": {
+    "kind": "gallery-item",
+    "id": "x-twitter-beehiiv-2100584618621640839-beehiiv-five-ways-turn-audience-room"
+   },
+   "kind": "post",
+   "title": "Beehiiv: five new ways to turn an audience into a room full of people who know",
+   "url": "https://posts.design/beehiiv-five-new-ways-to-turn-an-audience-2026-09-17",
+   "caption": "five new ways to turn an audience into a room full of people who know each other. here’s what’s new in communities -\n\n👤 Custom Profile Fields: collect what you actually want to know\n🗺️ Member Directory: members find each other on their own\n🔔 Email Notifications: one click back",
+   "captionFacts": {
+    "characters": 277,
+    "words": 46,
+    "lines": 4,
+    "firstLine": "five new ways to turn an audience into a room full of people who know each other. here’s what’s new in communities -",
+    "hashtags": [],
+    "mentions": [],
+    "emoji": 3,
+    "links": 0
+   },
+   "creator": {
+    "name": "beehiiv 🐝",
+    "handle": "beehiiv"
+   },
+   "brand": {
+    "name": "beehiiv 🐝"
+   },
+   "sourceUrl": "https://x.com/beehiiv/status/2100584618621640839",
+   "publishedAt": "2026-09-18T10:15:59.692Z",
+   "sourcePublishedAt": "2026-09-17",
+   "classification": {
+    "type": "announcement",
+    "intent": "product-update",
+    "format": "video-cover",
+    "fields": [
+     "tech",
+     "developer-tools",
+     "ai"
+    ],
+    "primaryPattern": "ui-mockup",
+    "secondaryPatterns": [],
+    "visualStyle": [],
+    "colorMode": "dark",
+    "editorPick": false,
+    "colours": []
+   },
+   "palette": [
+    {
+     "hex": "#060316",
+     "share": 0.2749
+    },
+    {
+     "hex": "#FAFAFA",
+     "share": 0.2671
+    },
+    {
+     "hex": "#88848F",
+     "share": 0.0477
+    },
+    {
+     "hex": "#EE48BE",
+     "share": 0.0363
+    },
+    {
+     "hex": "#2F1BB2",
+     "share": 0.0278
+    }
+   ],
+   "subjects": [
+    {
+     "id": "social-media",
+     "label": "Social Media"
+    }
+   ],
+   "previewUrl": "https://posts.design/images/posts/x-twitter-beehiiv-2100584618621640839-beehiiv-five-ways-turn-audience-room-thumb.webp",
+   "video": {
+    "url": "https://posts.design/media/posts/x-twitter-beehiiv-2100584618621640839-beehiiv-five-ways-turn-audience-room-detail.mp4",
+    "role": "analysis",
+    "mimeType": "video/mp4",
+    "posterUrl": "https://posts.design/images/posts/x-twitter-beehiiv-2100584618621640839-beehiiv-five-ways-turn-audience-room.webp",
+    "width": 1920,
+    "height": 1080,
+    "durationSeconds": 65.294512,
+    "hasAudio": true,
+    "pacing": {
+     "scenes": 18,
+     "averageShotSeconds": 3.63
+    },
+    "byteLength": 22341165,
+    "frameCount": 20,
+    "hasBreakdown": true
+   },
+   "sourceMetrics": {
+    "views": 4256,
+    "unit": "views",
+    "capturedAt": "2026-10-12T16:15:07.083Z",
+    "evidenceKind": "refresh-observed-public"
+   },
+   "description": {
+    "text": "65.3 s, 16:9, 8 shots (average 8.2 s), spoken over the UI with pink caption pills. Dark gradient scenes and light lavender UI scenes show notifications, a member directory, profile fields and a community manager role, then a black logo end card. Spoken voice-over: a voiceover ...",
+    "shows": [],
+    "basis": "model",
+    "source": "breakdown"
+   },
+   "matched": "some-words"
+  },
+  {
+   "schemaVersion": 1,
+   "key": {
+    "kind": "gallery-item",
+    "id": "x-twitter-notionhq-2085123644578254961-notion-small-qol-improvement-share-pages"
+   },
+   "kind": "post",
+   "title": "Notion: Small QoL improvement: you can now share pages with your Custom Agents",
+   "url": "https://posts.design/notion-small-qol-improvement-you-can-now-share-2026-08-05",
+   "caption": "Small QoL improvement: you can now share pages with your Custom Agents straight from the Share menu.\n\nEasier to give them all the context they need 🫡",
+   "captionFacts": {
+    "characters": 149,
+    "words": 26,
+    "lines": 2,
+    "firstLine": "Small QoL improvement: you can now share pages with your Custom Agents straight from the Share menu.",
+    "hashtags": [],
+    "mentions": [],
+    "emoji": 1,
+    "links": 0
+   },
+   "creator": {
+    "name": "Notion",
+    "handle": "NotionHQ"
+   },
+   "brand": {
+    "name": "Notion"
+   },
+   "sourceUrl": "https://x.com/notionhq/status/2085123644578254961",
+   "publishedAt": "2026-09-05T17:41:11.739Z",
+   "sourcePublishedAt": "2026-08-05",
+   "classification": {
+    "type": "announcement",
+    "intent": "product-update",
+    "format": "single-image",
+    "fields": [
+     "tech",
+     "ai"
+    ],
+    "primaryPattern": "product-screenshot",
+    "secondaryPatterns": [],
+    "visualStyle": [
+     "soft-ui"
+    ],
+    "colorMode": "light",
+    "editorPick": false,
+    "colours": [
+     "blue"
+    ]
+   },
+   "palette": [
+    {
+     "hex": "#FDFDFD",
+     "share": 0.7226
+    },
+    {
+     "hex": "#6FBAFB",
+     "share": 0.1326
+    },
+    {
+     "hex": "#D1D1D1",
+     "share": 0.0458
+    },
+    {
+     "hex": "#999997",
+     "share": 0.0142
+    },
+    {
+     "hex": "#447DDA",
+     "share": 0.0024
+    }
+   ],
+   "subjects": [
+    {
+     "id": "ai",
+     "label": "AI"
+    },
+    {
+     "id": "productivity",
+     "label": "Productivity"
+    }
+   ],
+   "previewUrl": "https://posts.design/images/posts/x-twitter-notionhq-2085123644578254961-notion-small-qol-improvement-share-pages-thumb.webp",
+   "sourceMetrics": {
+    "views": 20483,
+    "unit": "views",
+    "capturedAt": "2026-10-12T22:31:23.160Z",
+    "evidenceKind": "refresh-observed-public"
+   },
+   "description": {
+    "text": "A wide product-interface screenshot shows a feature-request table in the background with a centered Share dialog overlaid. The dialog contains a contact search field, access controls, an Import contacts row, and a highlighted Morning brief agent entry. A blue browser-like fram...",
+    "shows": [
+     "Feature Requests table",
+     "Share dialog",
+     "Contact search field",
+     "Full access dropdown",
+     "Share button"
+    ],
+    "basis": "model",
+    "source": "visual-profile"
+   },
+   "matched": "some-words"
+  }
+ ],
+ "total": 1,
+ "revision": "be9505391839f32419cf8288",
+ "nextCursor": null,
+ "also": [
+  {
+   "query": "new feature announcement",
+   "items": [
+    {
+     "schemaVersion": 1,
+     "key": {
+      "kind": "gallery-item",
+      "id": "x-twitter-fomo-2097378824136659133-receive-ponsdotfamily-updates-fomo-team-tag"
+     },
+     "kind": "post",
+     "title": "Receive @ponsdotfamily updates on fomo with our new team tag feature",
+     "url": "https://posts.design/receive-ponsdotfamily-updates-on-fomo-with-our-new-2026-09-08",
+     "caption": "Receive @ponsdotfamily updates on fomo with our new team tag feature.\n\nNews, updates, announcements all in the same place you trade.",
+     "captionFacts": {
+      "characters": 132,
+      "words": 21,
+      "lines": 2,
+      "firstLine": "Receive @ponsdotfamily updates on fomo with our new team tag feature.",
+      "hashtags": [],
+      "mentions": [
+       "@ponsdotfamily"
+      ],
+      "emoji": 0,
+      "links": 0
+     },
+     "creator": {
+      "name": "fomo",
+      "handle": "fomo"
+     },
+     "brand": {
+      "name": "fomo"
+     },
+     "sourceUrl": "https://x.com/fomo/status/2097378824136659133",
+     "publishedAt": "2026-09-09T15:14:48.886Z",
+     "sourcePublishedAt": "2026-09-08",
+     "classification": {
+      "type": "announcement",
+      "intent": "product-update",
+      "format": "single-image",
+      "fields": [
+       "tech"
+      ],
+      "primaryPattern": "ui-mockup",
+      "secondaryPatterns": [],
+      "visualStyle": [],
+      "colorMode": "dark",
+      "editorPick": false,
+      "colours": []
+     },
+     "palette": [
+      {
+       "hex": "#08081A",
+       "share": 0.6438
+      },
+      {
+       "hex": "#14163A",
+       "share": 0.1144
+      },
+      {
+       "hex": "#2A347D",
+       "share": 0.0468
+      },
+      {
+       "hex": "#FAFBFF",
+       "share": 0.0142
+      },
+      {
+       "hex": "#575973",
+       "share": 0.0111
+      }
+     ],
+     "subjects": [
+      {
+       "id": "crypto",
+       "label": "Crypto"
+      },
+      {
+       "id": "social-media",
+       "label": "Social Media"
+      }
+     ],
+     "previewUrl": "https://posts.design/images/posts/x-twitter-fomo-2097378824136659133-receive-ponsdotfamily-updates-fomo-team-tag-thumb.webp",
+     "sourceMetrics": {
+      "views": 96476,
+      "unit": "views",
+      "capturedAt": "2026-10-12T21:55:26.443Z",
+      "evidenceKind": "refresh-observed-public"
+     },
+     "description": {
+      "text": "Square promotional graphic with a dark navy-to-purple background. The upper portion shows a cropped smartphone interface featuring a feed post about PONS, while the lower portion presents a large centered marketing statement and two small brand marks.",
+      "shows": [
+       "Cropped smartphone with rounded metallic frame",
+       "Dark-themed social or finance feed interface",
+       "Feed post about PONS",
+       "Circular PONS logo",
+       "Large promotional headline"
+      ],
+      "basis": "model",
+      "source": "visual-profile"
+     }
+    },
+    {
+     "schemaVersion": 1,
+     "key": {
+      "kind": "gallery-item",
+      "id": "x-twitter-fomo-2099520091683430526-get-token-works-updates-fomos-team"
+     },
+     "kind": "post",
+     "title": "Get @token_works updates with fomo's new team tag feature",
+     "url": "https://posts.design/get-token-works-updates-with-fomo-s-new-2026-09-14",
+     "caption": "Get @token_works updates with fomo's new team tag feature.\n\nNews, ships, announcements, all in the same place you trade.\n\nReal devs, real updates, nothing behind closed doors.",
+     "captionFacts": {
+      "characters": 175,
+      "words": 27,
+      "lines": 3,
+      "firstLine": "Get @token_works updates with fomo's new team tag feature.",
+      "hashtags": [],
+      "mentions": [
+       "@token_works"
+      ],
+      "emoji": 0,
+      "links": 0
+     },
+     "creator": {
+      "name": "fomo",
+      "handle": "fomo"
+     },
+     "brand": {
+      "name": "fomo"
+     },
+     "sourceUrl": "https://x.com/fomo/status/2099520091683430526",
+     "publishedAt": "2026-09-15T17:16:43.052Z",
+     "sourcePublishedAt": "2026-09-14",
+     "classification": {
+      "type": "announcement",
+      "intent": "product-update",
+      "format": "single-image",
+      "fields": [
+       "tech"
+      ],
+      "primaryPattern": "ui-mockup",
+      "secondaryPatterns": [],
+      "visualStyle": [],
+      "colorMode": "dark",
+      "editorPick": false,
+      "colours": []
+     },
+     "palette": [
+      {
+       "hex": "#0A091A",
+       "share": 0.645
+      },
+      {
+       "hex": "#2A347D",
+       "share": 0.0468
+      },
+      {
+       "hex": "#C7C8C7",
+       "share": 0.0092
+      },
+      {
+       "hex": "#E496AF",
+       "share": 0.0054
+      },
+      {
+       "hex": "#AD4C97",
+       "share": 0.0009
+      }
+     ],
+     "subjects": [
+      {
+       "id": "crypto",
+       "label": "Crypto"
+      }
+     ],
+     "previewUrl": "https://posts.design/images/posts/x-twitter-fomo-2099520091683430526-get-token-works-updates-fomos-team-thumb.webp",
+     "sourceMetrics": {
+      "views": 61503,
+      "unit": "views",
+      "capturedAt": "2026-10-12T16:28:49.594Z",
+      "evidenceKind": "refresh-observed-public"
+     },
+     "description": {
+      "text": "Square promotional graphic showing a dark mobile-app interface inside a rounded smartphone frame above large marketing text. The composition promotes FWA updates appearing directly on fomo, with a feed post, pricing card, interface tabs, logos, and blue-purple gradient backgro...",
+      "shows": [
+       "Rounded smartphone interface mockup",
+       "Dark social or trading-style feed screen",
+       "Pink FWA logo",
+       "Feed post from Rhynotic",
+       "Verified badge"
+      ],
+      "basis": "model",
+      "source": "visual-profile"
+     }
+    },
+    {
+     "schemaVersion": 1,
+     "key": {
+      "kind": "gallery-item",
+      "id": "raycast-gpt4-feature-card"
+     },
+     "kind": "post",
+     "title": "Raycast GPT-4 feature card",
+     "url": "https://posts.design/raycast-gpt-4-feature-card-2023-07-27",
+     "caption": "New update is out! This week we've got:\n💫 GPT-4 for the AI Chat and AI Commands\n🎡 Smarter scroll behavior in AI Chat and Quick AI\n🔣 Refined Emoji Picker design, including a more compact option\n🚀 Improved launch at login behavior\n\nFull changelog 👉",
+     "captionFacts": {
+      "characters": 246,
+      "words": 41,
+      "lines": 6,
+      "firstLine": "New update is out! This week we've got:",
+      "hashtags": [],
+      "mentions": [],
+      "emoji": 5,
+      "links": 0
+     },
+     "creator": {
+      "name": "Raycast",
+      "handle": "raycast"
+     },
+     "brand": {
+      "name": "Raycast"
+     },
+     "sourceUrl": "https://x.com/raycast/status/1684571865858334722",
+     "sourcePublishedAt": "2023-07-27",
+     "classification": {
+      "type": "announcement",
+      "intent": "feature-announcement",
+      "format": "single-image",
+      "fields": [
+       "tech",
+       "ai",
+       "developer-tools",
+       "productivity",
+       "design"
+      ],
+      "primaryPattern": "announcement-card",
+      "secondaryPatterns": [
+       "product-screenshot"
+      ],
+      "visualStyle": [
+       "3d-render"
+      ],
+      "colorMode": "dark",
+      "editorPick": true,
+      "colours": []
+     },
+     "palette": [
+      {
+       "hex": "#120713",
+       "share": 0.2688
+      },
+      {
+       "hex": "#4E111D",
+       "share": 0.126
+      },
+      {
+       "hex": "#FEFBF8",
+       "share": 0.0787
+      },
+      {
+       "hex": "#DB978D",
+       "share": 0.0385
+      },
+      {
+       "hex": "#C14A4D",
+       "share": 0.0181
+      }
+     ],
+     "subjects": [
+      {
+       "id": "ai",
+       "label": "AI"
+      }
+     ],
+     "previewUrl": "https://posts.design/images/posts/raycast-gpt4-feature-card-media-hq-thumb.webp",
+     "sourceMetrics": {
+      "views": 72620,
+      "unit": "views",
+      "capturedAt": "2026-10-13T00:05:30.271Z",
+      "evidenceKind": "refresh-observed-public"
+     },
+     "description": {
+      "text": "Wide promotional graphic with a dark burgundy-to-black background, bright red and white atmospheric glow, left-aligned branding and headline text, a rounded GPT-4 label near the lower left, and a large glowing abstract emblem occupying the right side.",
+      "shows": [
+       "Raycast AI wordmark",
+       "Abstract glowing geometric emblem",
+       "Large promotional headline",
+       "Rounded GPT-4 label",
+       "Dark red and black gradient background"
+      ],
+      "basis": "model",
+      "source": "visual-profile"
+     }
+    },
+    {
+     "schemaVersion": 1,
+     "key": {
+      "kind": "gallery-item",
+      "id": "x-twitter-typesafeai-2110536685805355064-typesafe-ai-announced-jev-1-14"
+     },
+     "kind": "post",
+     "title": "TypeSafe AI: we announced Jev 1.14 on 10.14 at 1:14pm PT",
+     "url": "https://posts.design/typesafe-ai-we-announced-jev-1-14-on-2026-10-15",
+     "caption": "we announced Jev 1.14 on 10.14 at 1:14pm PT 🔥\n\na new and improved model, along with experimental features for our dreamers:\n\n• images\n• a new box type\n• longer context\n\nsurprise, Jev was already able to see you! 👁️\n\nBUT our bar for production-grade intelligence is quite",
+     "captionFacts": {
+      "characters": 270,
+      "words": 45,
+      "lines": 7,
+      "firstLine": "we announced Jev 1.14 on 10.14 at 1:14pm PT 🔥",
+      "hashtags": [],
+      "mentions": [],
+      "emoji": 2,
+      "links": 0
+     },
+     "creator": {
+      "name": "TypeSafe AI",
+      "handle": "typesafeai"
+     },
+     "brand": {
+      "name": "TypeSafe AI"
+     },
+     "sourceUrl": "https://x.com/typesafeai/status/2110536685805355064",
+     "publishedAt": "2026-10-15T15:01:37.361Z",
+     "sourcePublishedAt": "2026-10-15",
+     "classification": {
+      "type": "announcement",
+      "intent": "launch",
+      "format": "single-image",
+      "fields": [
+       "tech",
+       "ai"
+      ],
+      "primaryPattern": "brand-graphic",
+      "secondaryPatterns": [],
+      "visualStyle": [],
+      "colorMode": null,
+      "editorPick": false,
+      "colours": [
+       "pink"
+      ]
+     },
+     "palette": [
+      {
+       "hex": "#F6BFCD",
+       "share": 0.8648
+      },
+      {
+       "hex": "#D7A2AF",
+       "share": 0.0873
+      },
+      {
+       "hex": "#34282A",
+       "share": 0.0111
+      },
+      {
+       "hex": "#4F3E42",
+       "share": 0.0105
+      },
+      {
+       "hex": "#907178",
+       "share": 0.007
+      }
+     ],
+     "subjects": [
+      {
+       "id": "ai",
+       "label": "AI"
+      }
+     ],
+     "previewUrl": "https://posts.design/images/posts/x-twitter-typesafeai-2110536685805355064-typesafe-ai-announced-jev-1-14-thumb.webp",
+     "sourceMetrics": {
+      "views": 335817,
+      "unit": "views",
+      "capturedAt": "2026-11-05T14:26:21.836Z",
+      "evidenceKind": "refresh-observed-public"
+     },
+     "description": {
+      "text": "A pink graphic composition centered on a dark outlined eye surrounded by radiating sunburst lines, sparkles, dots, and four corner-bracket marks. Halftone textures appear mainly in the upper-right and lower-left background areas.",
+      "shows": [
+       "Central stylized eye outline",
+       "Radiating sunburst lines",
+       "Sparkle and star-like symbols",
+       "Small circular decorative marks",
+       "Four corner-bracket framing marks"
+      ],
+      "basis": "model",
+      "source": "visual-profile"
+     }
+    },
+    {
+     "schemaVersion": 1,
+     "key": {
+      "kind": "gallery-item",
+      "id": "granola-people-companies-views-card"
+     },
+     "kind": "post",
+     "title": "Granola people and companies views card",
+     "url": "https://posts.design/granola-people-and-companies-views-card-2025-09-08",
+     "caption": "Introducing People and Companies views!\n\nA new way to stay up to date with what's happening with your most important relationships over time ✨",
+     "captionFacts": {
+      "characters": 142,
+      "words": 23,
+      "lines": 2,
+      "firstLine": "Introducing People and Companies views!",
+      "hashtags": [],
+      "mentions": [],
+      "emoji": 1,
+      "links": 0
+     },
+     "creator": {
+      "name": "Granola",
+      "handle": "meetgranola"
+     },
+     "brand": {
+      "name": "Granola"
+     },
+     "sourceUrl": "https://x.com/meetgranola/status/1965094996585177257",
+     "sourcePublishedAt": "2025-09-08",
+     "classification": {
+      "type": "announcement",
+      "intent": "feature-announcement",
+      "format": "single-image",
+      "fields": [
+       "tech",
+       "productivity",
+       "design"
+      ],
+      "primaryPattern": "product-screenshot",
+      "secondaryPatterns": [
+       "ui-mockup"
+      ],
+      "visualStyle": [
+       "soft-ui"
+      ],
+      "colorMode": "light",
+      "editorPick": false,
+      "colours": []
+     },
+     "palette": [
+      {
+       "hex": "#F9F8E9",
+       "share": 0.8478
+      },
+      {
+       "hex": "#EAF1A3",
+       "share": 0.0504
+      },
+      {
+       "hex": "#82837F",
+       "share": 0.0121
+      },
+      {
+       "hex": "#F96C6C",
+       "share": 0.0014
+      },
+      {
+       "hex": "#242A7D",
+       "share": 0.0005
+      }
+     ],
+     "subjects": [
+      {
+       "id": "productivity",
+       "label": "Productivity"
+      }
+     ],
+     "previewUrl": "https://posts.design/images/posts/granola-people-companies-views-card-thumb.webp",
+     "sourceMetrics": {
+      "views": 166428,
+      "unit": "views",
+      "capturedAt": "2026-10-13T00:04:34.771Z",
+      "evidenceKind": "refresh-observed-public"
+     },
+     "description": {
+      "text": "A polished interface presentation on a pale yellow-green background shows overlapping white panels for navigation, people, companies, and notes. The left panel lists People and Companies, the center panel lists contacts and companies, and the right panel displays a selected co...",
+      "shows": [
+       "Overlapping application interface panels",
+       "People navigation section",
+       "Companies navigation section",
+       "Contact profile photos",
+       "Company logos"
+      ],
+      "basis": "model",
+      "source": "visual-profile"
+     },
+     "matched": "some-words"
+    },
+    {
+     "schemaVersion": 1,
+     "key": {
+      "kind": "gallery-item",
+      "id": "linear-agent-mcp-support-card"
+     },
+     "kind": "post",
+     "title": "Linear Agent MCP support card",
+     "url": "https://posts.design/linear-agent-mcp-support-card-2026-04-23",
+     "caption": "New: MCP support for Linear Agent\n\nConnect tools like Granola, Notion, PostHog, and many others to pull in context for creating issues, drafting PRDs, and writing project updates.",
+     "captionFacts": {
+      "characters": 179,
+      "words": 28,
+      "lines": 2,
+      "firstLine": "New: MCP support for Linear Agent",
+      "hashtags": [],
+      "mentions": [],
+      "emoji": 0,
+      "links": 0
+     },
+     "creator": {
+      "name": "Linear",
+      "handle": "linear"
+     },
+     "brand": {
+      "name": "Linear"
+     },
+     "sourceUrl": "https://x.com/linear/status/2047353403936743883",
+     "sourcePublishedAt": "2026-04-23",
+     "classification": {
+      "type": "announcement",
+      "intent": "feature-announcement",
+      "format": "single-image",
+      "fields": [
+       "tech",
+       "ai",
+       "developer-tools",
+       "productivity"
+      ],
+      "primaryPattern": "product-screenshot",
+      "secondaryPatterns": [
+       "product-screenshot",
+       "announcement-card"
+      ],
+      "visualStyle": [
+       "soft-ui"
+      ],
+      "colorMode": "dark",
+      "editorPick": false,
+      "colours": []
+     },
+     "palette": [
+      {
+       "hex": "#0A0C0D",
+       "share": 0.9258
+      },
+      {
+       "hex": "#212427",
+       "share": 0.0545
+      },
+      {
+       "hex": "#5C5D60",
+       "share": 0.0055
+      }
+     ],
+     "subjects": [
+      {
+       "id": "ai",
+       "label": "AI"
+      },
+      {
+       "id": "productivity",
+       "label": "Productivity"
+      }
+     ],
+     "previewUrl": "https://posts.design/images/posts/linear-agent-mcp-support-card-thumb.webp",
+     "sourceMetrics": {
+      "views": 58861,
+      "unit": "views",
+      "capturedAt": "2026-10-13T00:04:46.550Z",
+      "evidenceKind": "refresh-observed-public"
+     },
+     "description": {
+      "text": "A square, nearly black image presents a centered vertical column of rounded dark-gray logo panels. Each panel combines a monochrome emblem with a company name, with substantial empty space surrounding the column. Contrast decreases toward the top and bottom of the stack.",
+      "shows": [
+       "Centered vertical stack of logo panels",
+       "Rounded rectangular containers",
+       "Monochrome company emblems",
+       "Dark black background",
+       "Jam logo panel"
+      ],
+      "basis": "model",
+      "source": "visual-profile"
+     },
+     "matched": "some-words"
+    },
+    {
+     "schemaVersion": 1,
+     "key": {
+      "kind": "gallery-item",
+      "id": "x-twitter-square-2082928532519596133-square-fewer-taps-fewer-workarounds-fewer"
+     },
+     "kind": "post",
+     "title": "Square: Fewer taps, fewer workarounds, fewer surprises mid-shift",
+     "url": "https://posts.design/square-fewer-taps-fewer-workarounds-fewer-surprises-mid-2026-07-30",
+     "caption": "Fewer taps, fewer workarounds, fewer surprises mid-shift. Nine new features roll out next week:\n\n→ Schedule new feature installs for a time that works for you (like right after close)\n→ Accept SNAP EBT payments at checkout with taxes and split tenders handled for you\n→ Time",
+     "captionFacts": {
+      "characters": 274,
+      "words": 44,
+      "lines": 4,
+      "firstLine": "Fewer taps, fewer workarounds, fewer surprises mid-shift. Nine new features roll out next week:",
+      "hashtags": [],
+      "mentions": [],
+      "emoji": 0,
+      "links": 0
+     },
+     "creator": {
+      "name": "Square",
+      "handle": "Square"
+     },
+     "brand": {
+      "name": "Square"
+     },
+     "sourceUrl": "https://x.com/square/status/2082928532519596133",
+     "publishedAt": "2026-10-14T20:52:07.990Z",
+     "sourcePublishedAt": "2026-07-30",
+     "classification": {
+      "type": "announcement",
+      "intent": "product-update",
+      "format": "single-image",
+      "fields": [
+       "tech",
+       "commerce"
+      ],
+      "primaryPattern": "announcement-card",
+      "secondaryPatterns": [],
+      "visualStyle": [],
+      "colorMode": "dark",
+      "editorPick": false,
+      "colours": [
+       "blue"
+      ]
+     },
+     "palette": [
+      {
+       "hex": "#191919",
+       "share": 0.5996
+      },
+      {
+       "hex": "#014BFE",
+       "share": 0.1709
+      },
+      {
+       "hex": "#DADCE0",
+       "share": 0.1196
+      },
+      {
+       "hex": "#777778",
+       "share": 0.012
+      },
+      {
+       "hex": "#0A3499",
+       "share": 0.0065
+      }
+     ],
+     "subjects": [
+      {
+       "id": "commerce",
+       "label": "Commerce"
+      },
+      {
+       "id": "finance",
+       "label": "Finance"
+      },
+      {
+       "id": "payments",
+       "label": "Payments"
+      }
+     ],
+     "previewUrl": "https://posts.design/images/posts/x-twitter-square-2082928532519596133-square-fewer-taps-fewer-workarounds-fewer-thumb.webp",
+     "sourceMetrics": {
+      "views": 52002,
+      "unit": "views",
+      "capturedAt": "2026-11-05T14:28:53.889Z",
+      "evidenceKind": "refresh-observed-public"
+     },
+     "description": {
+      "text": "A black textured editorial-style graphic features large electric-blue abstract lettering across the lower half, a tilted stack of white paper centered over it, and a prominent barcode on the top sheet. White typographic labels appear in the upper corners, with a small outlined...",
+      "shows": [
+       "Tilted stack of white paper sheets",
+       "Black barcode printed on the top sheet",
+       "Large electric-blue abstract lettering",
+       "White uppercase editorial labels",
+       "Outlined square emblem with radiating lines"
+      ],
+      "basis": "model",
+      "source": "visual-profile"
+     },
+     "matched": "some-words"
+    },
+    {
+     "schemaVersion": 1,
+     "key": {
+      "kind": "gallery-item",
+      "id": "x-twitter-vickiheart-2107920024128381390-vicki-tan-im-happy-share-loom"
+     },
+     "kind": "post",
+     "title": "Vicki Tan: i'm happy to share that the new @loom has launched",
+     "url": "https://posts.design/vicki-tan-i-m-happy-to-share-that-2026-10-07",
+     "caption": "i'm happy to share that the new @loom has launched! lovingly built by @zachwaugh @rickmesser and team, including a new feature i worked on that lets you prompt with video! would love to hear what you think if you give it a whirl:",
+     "captionFacts": {
+      "characters": 229,
+      "words": 43,
+      "lines": 1,
+      "firstLine": "i'm happy to share that the new @loom has launched! lovingly built by @zachwaugh @rickmesser and team, including a new feature i worked on that lets you prompt with video! would love to hear what you think if you give it a whirl:",
+      "hashtags": [],
+      "mentions": [
+       "@loom",
+       "@zachwaugh",
+       "@rickmesser"
+      ],
+      "emoji": 0,
+      "links": 0
+     },
+     "creator": {
+      "name": "Vicki Tan",
+      "handle": "vickiheart"
+     },
+     "brand": {
+      "name": null
+     },
+     "sourceUrl": "https://x.com/vickiheart/status/2107920024128381390",
+     "publishedAt": "2026-10-08T12:35:14.092Z",
+     "sourcePublishedAt": "2026-10-07",
+     "classification": {
+      "type": "announcement",
+      "intent": "launch",
+      "format": "video-cover",
+      "fields": [
+       "tech"
+      ],
+      "primaryPattern": "product-screenshot",
+      "secondaryPatterns": [],
+      "visualStyle": [
+       "soft-ui",
+       "photographic"
+      ],
+      "colorMode": null,
+      "editorPick": false,
+      "colours": []
+     },
+     "palette": [
+      {
+       "hex": "#D6DEE4",
+       "share": 0.2927
+      },
+      {
+       "hex": "#20271B",
+       "share": 0.2218
+      },
+      {
+       "hex": "#738686",
+       "share": 0.0379
+      },
+      {
+       "hex": "#007AD0",
+       "share": 0.0018
+      },
+      {
+       "hex": "#05477C",
+       "share": 0.0007
+      }
+     ],
+     "subjects": [],
+     "previewUrl": "https://posts.design/images/posts/x-twitter-vickiheart-2107920024128381390-vicki-tan-im-happy-share-loom-thumb.webp",
+     "video": {
+      "url": "https://posts.design/media/posts/x-twitter-vickiheart-2107920024128381390-vicki-tan-im-happy-share-loom-detail.mp4",
+      "role": "analysis",
+      "mimeType": "video/mp4",
+      "posterUrl": "https://posts.design/images/posts/x-twitter-vickiheart-2107920024128381390-vicki-tan-im-happy-share-loom.webp",
+      "width": 1920,
+      "height": 1080,
+      "durationSeconds": 28.885333,
+      "hasAudio": true,
+      "pacing": {
+       "scenes": 11,
+       "averageShotSeconds": 2.63
+      },
+      "byteLength": 13833288,
+      "frameCount": 10,
+      "hasBreakdown": true
+     },
+     "sourceMetrics": {
+      "views": 3849,
+      "unit": "views",
+      "capturedAt": "2026-10-08T12:34:53.202Z",
+      "evidenceKind": "import-observed-public"
+     },
+     "description": {
+      "text": "28.9 s, 16:9, 0 hard cuts and 10 soft transitions (average gap about 2.6 s), audio track present at about -26.6 LUFS. A title chip over a blurred desktop opens a screen-recorded walkthrough in which a Loom recording bar, a Figma page, a Confluence page, a Loom agent prompt and...",
+      "shows": [],
+      "basis": "model",
+      "source": "breakdown"
+     },
+     "matched": "some-words"
+    }
+   ],
+   "total": 4,
+   "revision": "be9505391839f32419cf8288",
+   "nextCursor": null
+  },
+  {
+   "query": "product update",
+   "items": [
+    {
+     "schemaVersion": 1,
+     "key": {
+      "kind": "gallery-item",
+      "id": "x-twitter-gondixyz-2106068325201813792-product-update-gondi-profiles"
+     },
+     "kind": "post",
+     "title": "Product Update: GONDI Profiles Are Now Social",
+     "url": "https://posts.design/product-update-gondi-profiles-are-now-social-2026-10-02",
+     "caption": "Product Update: GONDI Profiles Are Now Social\n\nEvery wallet now has a home on GONDI.\n\nClaim your username at set any NFT you hold as your PFP, and add a bio and links. Bring your portfolio stats together in one place.\n\nFollow the wallets you trust. Their",
+     "captionFacts": {
+      "characters": 254,
+      "words": 47,
+      "lines": 4,
+      "firstLine": "Product Update: GONDI Profiles Are Now Social",
+      "hashtags": [],
+      "mentions": [],
+      "emoji": 0,
+      "links": 0
+     },
+     "creator": {
+      "name": "GONDI",
+      "handle": "gondixyz"
+     },
+     "brand": {
+      "name": "GONDI"
+     },
+     "sourceUrl": "https://x.com/gondixyz/status/2106068325201813792",
+     "publishedAt": "2026-10-02T17:46:49.233Z",
+     "sourcePublishedAt": "2026-10-02",
+     "classification": {
+      "type": "announcement",
+      "intent": "product-update",
+      "format": "video-cover",
+      "fields": [
+       "tech",
+       "developer-tools",
+       "ai"
+      ],
+      "primaryPattern": "product-screenshot",
+      "secondaryPatterns": [],
+      "visualStyle": [],
+      "colorMode": null,
+      "editorPick": false,
+      "colours": [
+       "green"
+      ]
+     },
+     "palette": [
+      {
+       "hex": "#1A4D3D",
+       "share": 0.3596
+      },
+      {
+       "hex": "#D0E5B8",
+       "share": 0.2472
+      },
+      {
+       "hex": "#000000",
+       "share": 0.1838
+      },
+      {
+       "hex": "#01FD56",
+       "share": 0.005
+      },
+      {
+       "hex": "#9B00FD",
+       "share": 0.0011
+      }
+     ],
+     "subjects": [
+      {
+       "id": "crypto",
+       "label": "Crypto"
+      },
+      {
+       "id": "social-media",
+       "label": "Social Media"
+      }
+     ],
+     "previewUrl": "https://posts.design/images/posts/x-twitter-gondixyz-2106068325201813792-product-update-gondi-profiles-thumb.webp",
+     "video": {
+      "url": "https://posts.design/media/posts/x-twitter-gondixyz-2106068325201813792-product-update-gondi-profiles-detail.mp4",
+      "role": "analysis",
+      "mimeType": "video/mp4",
+      "posterUrl": "https://posts.design/images/posts/x-twitter-gondixyz-2106068325201813792-product-update-gondi-profiles.webp",
+      "width": 1920,
+      "height": 1080,
+      "durationSeconds": 32.533333,
+      "hasAudio": true,
+      "pacing": {
+       "scenes": 11,
+       "averageShotSeconds": 2.96
+      },
+      "byteLength": 9313207,
+      "frameCount": 14,
+      "hasBreakdown": true
+     },
+     "sourceMetrics": {
+      "views": 3156,
+      "unit": "views",
+      "capturedAt": "2026-10-11T23:19:02.215Z",
+      "evidenceKind": "refresh-observed-public"
+     },
+     "description": {
+      "text": "32.5 s, 16:9, 5 hard-cut shots (average 6.5 s) with 6 further fades inside them, audio track present, no transcript. Flat dark-green UI-motion cards present wallet profiles, a follow graph, a loan offer and a five-card feature grid, then a pale-green URL card and a black logo ...",
+      "shows": [],
+      "basis": "model",
+      "source": "breakdown"
+     }
+    },
+    {
+     "schemaVersion": 1,
+     "key": {
+      "kind": "gallery-item",
+      "id": "x-twitter-sketch-2092595467750174912-sketch-better-stacks"
+     },
+     "kind": "post",
+     "title": "Sketch: Stack layout controls product video",
+     "url": "https://posts.design/sketch-better-stacks-2026-08-26",
+     "caption": "🆕 Better stacks! Blurs on groups! Glass and fade combined! It’s update day! 🆕\n\nFirst up, we’ve added min/max sizes, relative sizing, negative gap and z-index order options to stacks. Plus a whole bunch of smaller improvements, all based on your feedback. ↓",
+     "captionFacts": {
+      "characters": 256,
+      "words": 41,
+      "lines": 2,
+      "firstLine": "🆕 Better stacks! Blurs on groups! Glass and fade combined! It’s update day! 🆕",
+      "hashtags": [],
+      "mentions": [],
+      "emoji": 2,
+      "links": 0
+     },
+     "creator": {
+      "name": "Sketch",
+      "handle": "sketch"
+     },
+     "brand": {
+      "name": "Sketch"
+     },
+     "sourceUrl": "https://x.com/sketch/status/2092595467750174912",
+     "publishedAt": "2026-08-26T19:13:36.861Z",
+     "sourcePublishedAt": "2026-08-26",
+     "classification": {
+      "type": "announcement",
+      "intent": "product-update",
+      "format": "video-cover",
+      "fields": [
+       "tech"
+      ],
+      "primaryPattern": "ui-mockup",
+      "secondaryPatterns": [],
+      "visualStyle": [],
+      "colorMode": null,
+      "editorPick": false,
+      "colours": [
+       "yellow",
+       "red",
+       "orange"
+      ]
+     },
+     "palette": [
+      {
+       "hex": "#988D2E",
+       "share": 0.2535
+      },
+      {
+       "hex": "#EA340F",
+       "share": 0.1629
+      },
+      {
+       "hex": "#EB9709",
+       "share": 0.0895
+      },
+      {
+       "hex": "#FAFAF9",
+       "share": 0.0876
+      },
+      {
+       "hex": "#162527",
+       "share": 0.0167
+      }
+     ],
+     "subjects": [],
+     "previewUrl": "https://posts.design/images/posts/x-twitter-sketch-2092595467750174912-sketch-better-stacks-thumb.webp",
+     "video": {
+      "url": "https://posts.design/media/posts/x-twitter-sketch-2092595467750174912-sketch-better-stacks-detail.mp4",
+      "role": "analysis",
+      "mimeType": "video/mp4",
+      "posterUrl": "https://posts.design/images/posts/x-twitter-sketch-2092595467750174912-sketch-better-stacks.webp",
+      "width": 1280,
+      "height": 720,
+      "durationSeconds": 45.802667,
+      "hasAudio": true,
+      "pacing": {
+       "scenes": 14,
+       "averageShotSeconds": 3.27
+      },
+      "byteLength": 3857817,
+      "frameCount": 15,
+      "hasBreakdown": true
+     },
+     "sourceMetrics": {
+      "views": 33930,
+      "unit": "views",
+      "capturedAt": "2026-10-12T23:28:00.910Z",
+      "evidenceKind": "refresh-observed-public"
+     },
+     "description": {
+      "text": "A 46-second 16:9 product video for Sketch's Stack layout controls: it opens on a marble-textured gem over gold geometric guide lines on black, then shows the Layout and Stack inspector panels beside live demos (sport tags, avatars, wallet cards, a text window, a chat window, a...",
+      "shows": [],
+      "basis": "model",
+      "source": "breakdown"
+     }
+    },
+    {
+     "schemaVersion": 1,
+     "key": {
+      "kind": "gallery-item",
+      "id": "linear-nested-sub-issues-list-card"
+     },
+     "kind": "post",
+     "title": "Linear nested sub-issues list card",
+     "url": "https://posts.design/linear-nested-sub-issues-list-card-2026-02-09",
+     "caption": "New\n└ Nested sub-issues\n└ Now available in all list views",
+     "captionFacts": {
+      "characters": 57,
+      "words": 9,
+      "lines": 3,
+      "firstLine": "New",
+      "hashtags": [],
+      "mentions": [],
+      "emoji": 0,
+      "links": 0
+     },
+     "creator": {
+      "name": "Linear",
+      "handle": "linear"
+     },
+     "brand": {
+      "name": "Linear"
+     },
+     "sourceUrl": "https://x.com/linear/status/2020880005807456329",
+     "sourcePublishedAt": "2026-02-09",
+     "classification": {
+      "type": "announcement",
+      "intent": "product-update",
+      "format": "single-image",
+      "fields": [
+       "tech",
+       "developer-tools",
+       "productivity",
+       "design"
+      ],
+      "primaryPattern": "product-screenshot",
+      "secondaryPatterns": [
+       "announcement-card"
+      ],
+      "visualStyle": [
+       "technical"
+      ],
+      "colorMode": "dark",
+      "editorPick": true,
+      "colours": []
+     },
+     "palette": [
+      {
+       "hex": "#0E0F10",
+       "share": 0.9328
+      },
+      {
+       "hex": "#7D7D7D",
+       "share": 0.0153
+      },
+      {
+       "hex": "#606060",
+       "share": 0.0144
+      },
+      {
+       "hex": "#252625",
+       "share": 0.0124
+      }
+     ],
+     "subjects": [
+      {
+       "id": "productivity",
+       "label": "Productivity"
+      }
+     ],
+     "previewUrl": "https://posts.design/images/posts/linear-nested-sub-issues-list-card-thumb.webp",
+     "sourceMetrics": {
+      "views": 76997,
+      "unit": "views",
+      "capturedAt": "2026-10-13T00:04:57.955Z",
+      "evidenceKind": "refresh-observed-public"
+     },
+     "description": {
+      "text": "Dark-themed task hierarchy interface showing nested iOS performance tasks, status icons, assignee avatars, and repeated Feb 4 dates. The hierarchy is communicated through indentation and connector lines.",
+      "shows": [
+       "Dark task-management interface",
+       "Nested task hierarchy",
+       "iOS app startup performance tasks",
+       "Circular task status icons",
+       "Assignee avatar images"
+      ],
+      "basis": "model",
+      "source": "visual-profile"
+     }
+    },
+    {
+     "schemaVersion": 1,
+     "key": {
+      "kind": "gallery-item",
+      "id": "x-twitter-slackhq-2057865805237465149-slack-activity-tab-filtered-views-demo"
+     },
+     "kind": "post",
+     "title": "Slack Activity tab filtered-views demo",
+     "url": "https://posts.design/slack-activity-tab-filtered-views-demo-2026-05-22",
+     "caption": "Spring cleaning, Slack edition. 🌷\n\nThe new Activity tab pulls all your action items into a single filtered view, so you can see what needs your attention without any digging. Easily create custom views to take action on what matters (and clear out what doesn't).",
+     "captionFacts": {
+      "characters": 262,
+      "words": 44,
+      "lines": 2,
+      "firstLine": "Spring cleaning, Slack edition. 🌷",
+      "hashtags": [],
+      "mentions": [],
+      "emoji": 1,
+      "links": 0
+     },
+     "creator": {
+      "name": "Slack",
+      "handle": "SlackHQ"
+     },
+     "brand": {
+      "name": "Slack"
+     },
+     "sourceUrl": "https://x.com/slackhq/status/2057865805237465149",
+     "sourcePublishedAt": "2026-05-22",
+     "classification": {
+      "type": "announcement",
+      "intent": "product-update",
+      "format": "video-cover",
+      "fields": [
+       "productivity",
+       "tech"
+      ],
+      "primaryPattern": "product-screenshot",
+      "secondaryPatterns": [],
+      "visualStyle": [
+       "soft-ui"
+      ],
+      "colorMode": "light",
+      "editorPick": false,
+      "colours": [
+       "purple"
+      ]
+     },
+     "palette": [
+      {
+       "hex": "#FBFAFD",
+       "share": 0.8451
+      },
+      {
+       "hex": "#4F1951",
+       "share": 0.1038
+      },
+      {
+       "hex": "#947A90",
+       "share": 0.0087
+      },
+      {
+       "hex": "#231C1A",
+       "share": 0.0021
+      },
+      {
+       "hex": "#C38371",
+       "share": 0.0013
+      }
+     ],
+     "subjects": [
+      {
+       "id": "productivity",
+       "label": "Productivity"
+      }
+     ],
+     "previewUrl": "https://posts.design/images/posts/x-twitter-slackhq-2057865805237465149-slack-activity-tab-filtered-views-demo-thumb.webp",
+     "video": {
+      "url": "https://posts.design/media/posts/x-twitter-slackhq-2057865805237465149-slack-activity-tab-filtered-views-demo-detail.mp4",
+      "role": "analysis",
+      "mimeType": "video/mp4",
+      "posterUrl": "https://posts.design/images/posts/x-twitter-slackhq-2057865805237465149-slack-activity-tab-filtered-views-demo.webp",
+      "width": 1080,
+      "height": 1080,
+      "durationSeconds": 21.791667,
+      "hasAudio": false,
+      "pacing": {
+       "scenes": 5,
+       "averageShotSeconds": 4.36
+      },
+      "byteLength": 984238,
+      "frameCount": 12,
+      "hasBreakdown": true
+     },
+     "sourceMetrics": {
+      "views": 166,
+      "unit": "views",
+      "capturedAt": "2026-10-12T23:56:19.601Z",
+      "evidenceKind": "refresh-observed-public"
+     },
+     "description": {
+      "text": "A square demo that opens on a bell icon on Slack aubergine, then moves into a stylised Activity tab. A cursor opens Filters, a 'Create a new view' dialog adds a 'My view' tab, the list density is switched, and several rows are selected with a Mark as Read bar. It closes on a b...",
+      "shows": [],
+      "basis": "model",
+      "source": "breakdown"
+     }
+    },
+    {
+     "schemaVersion": 1,
+     "key": {
+      "kind": "gallery-item",
+      "id": "x-twitter-xai-2060102590122385460-grok-cli-update-card"
+     },
+     "kind": "post",
+     "title": "xAI Grok Build 0.2.7 update card",
+     "url": "https://posts.design/xai-grok-build-0-2-7-update-card-2026-05-28",
+     "caption": "Grok Build 0.2.7 is now out, with /usage, /login, shared terminals across subagents, and improved image understanding\n\nSee all updates at",
+     "captionFacts": {
+      "characters": 137,
+      "words": 21,
+      "lines": 2,
+      "firstLine": "Grok Build 0.2.7 is now out, with /usage, /login, shared terminals across subagents, and improved image understanding",
+      "hashtags": [],
+      "mentions": [],
+      "emoji": 0,
+      "links": 0
+     },
+     "creator": {
+      "name": "xAI",
+      "handle": "xai"
+     },
+     "brand": {
+      "name": "Grok"
+     },
+     "sourceUrl": "https://x.com/xai/status/2060102590122385460",
+     "sourcePublishedAt": "2026-05-28",
+     "classification": {
+      "type": "announcement",
+      "intent": "product-update",
+      "format": "single-image",
+      "fields": [
+       "tech",
+       "ai"
+      ],
+      "primaryPattern": "announcement-card",
+      "secondaryPatterns": [],
+      "visualStyle": [],
+      "colorMode": "dark",
+      "editorPick": false,
+      "colours": []
+     },
+     "palette": [
+      {
+       "hex": "#111111",
+       "share": 0.6174
+      },
+      {
+       "hex": "#404040",
+       "share": 0.0982
+      },
+      {
+       "hex": "#5F5F5F",
+       "share": 0.0812
+      },
+      {
+       "hex": "#D9D9D9",
+       "share": 0.0513
+      },
+      {
+       "hex": "#8E8E8E",
+       "share": 0.0337
+      }
+     ],
+     "subjects": [
+      {
+       "id": "ai",
+       "label": "AI"
+      }
+     ],
+     "previewUrl": "https://posts.design/images/posts/x-twitter-xai-2060102590122385460-grok-cli-update-card-thumb.webp",
+     "sourceMetrics": {
+      "views": 793825,
+      "unit": "views",
+      "capturedAt": "2026-10-12T23:55:30.699Z",
+      "evidenceKind": "refresh-observed-public"
+     },
+     "description": {
+      "text": "A wide monochrome graphic with a textured black-to-gray background and a bright vertical glow slightly left of center. Large white “Changelog” text sits along the lower-left edge, while a small geometric white mark appears in the upper-right corner.",
+      "shows": [
+       "Monochrome textured background",
+       "Vertical bright light gradient",
+       "Large white “Changelog” title",
+       "Geometric white logo-like mark"
+      ],
+      "basis": "model",
+      "source": "visual-profile"
+     }
+    },
+    {
+     "schemaVersion": 1,
+     "key": {
+      "kind": "gallery-item",
+      "id": "resend-editor-styles-card"
+     },
+     "kind": "post",
+     "title": "Resend editor styles card",
+     "url": "https://posts.design/resend-editor-styles-card-2024-04-23",
+     "caption": "Today, we are introducing new editor styles.\n\nThis will allow more control over the look-n-feel of your email broadcasts.\n\nHere are 3 updates...",
+     "captionFacts": {
+      "characters": 144,
+      "words": 23,
+      "lines": 3,
+      "firstLine": "Today, we are introducing new editor styles.",
+      "hashtags": [],
+      "mentions": [],
+      "emoji": 0,
+      "links": 0
+     },
+     "creator": {
+      "name": "Resend",
+      "handle": "resend"
+     },
+     "brand": {
+      "name": "Resend"
+     },
+     "sourceUrl": "https://x.com/resend/status/1782794091056840742",
+     "sourcePublishedAt": "2024-04-23",
+     "classification": {
+      "type": "announcement",
+      "intent": "feature-announcement",
+      "format": "single-image",
+      "fields": [
+       "tech",
+       "developer-tools",
+       "design"
+      ],
+      "primaryPattern": "product-screenshot",
+      "secondaryPatterns": [
+       "ui-mockup"
+      ],
+      "visualStyle": [
+       "technical"
+      ],
+      "colorMode": "dark",
+      "editorPick": false,
+      "colours": []
+     },
+     "palette": [
+      {
+       "hex": "#040405",
+       "share": 0.602
+      },
+      {
+       "hex": "#151517",
+       "share": 0.1571
+      },
+      {
+       "hex": "#4D4D4D",
+       "share": 0.0797
+      },
+      {
+       "hex": "#272727",
+       "share": 0.0771
+      },
+      {
+       "hex": "#6B6B6B",
+       "share": 0.0155
+      }
+     ],
+     "subjects": [
+      {
+       "id": "design",
+       "label": "Design"
+      },
+      {
+       "id": "developer-tools",
+       "label": "Developer Tools"
+      }
+     ],
+     "previewUrl": "https://posts.design/images/posts/resend-editor-styles-card-thumb.webp",
+     "sourceMetrics": {
+      "views": 21474,
+      "unit": "views",
+      "capturedAt": "2026-10-13T00:05:38.050Z",
+      "evidenceKind": "refresh-observed-public"
+     },
+     "description": {
+      "text": "A dark, monochrome design-editor interface is presented over a black background with soft gray glow, grid lines, geometric guide marks, a large title, a pill-shaped New button, stacked settings panels, and a vertical slider control.",
+      "shows": [
+       "Dark editor-style interface",
+       "Large title reading Editor Styles",
+       "Pill-shaped New button",
+       "Link settings panel",
+       "Button settings panel"
+      ],
+      "basis": "model",
+      "source": "visual-profile"
+     }
+    },
+    {
+     "schemaVersion": 1,
+     "key": {
+      "kind": "gallery-item",
+      "id": "bluesky-raycast-com-3mjox4z76zz24-raycast-windows-shortcut-product-card"
+     },
+     "kind": "post",
+     "title": "Raycast Windows shortcut product card",
+     "url": "https://posts.design/raycast-windows-shortcut-product-card-2026-04-17",
+     "caption": null,
+     "creator": {
+      "name": "Raycast",
+      "handle": "raycast.com"
+     },
+     "brand": {
+      "name": "Raycast"
+     },
+     "sourceUrl": "https://bsky.app/profile/raycast.com/post/3mjox4z76zz24",
+     "sourcePublishedAt": "2026-04-17",
+     "classification": {
+      "type": "announcement",
+      "intent": "product-update",
+      "format": "single-image",
+      "fields": [
+       "productivity"
+      ],
+      "primaryPattern": "announcement-card",
+      "secondaryPatterns": [],
+      "visualStyle": [
+       "3d-render"
+      ],
+      "colorMode": "dark",
+      "editorPick": false,
+      "colours": []
+     },
+     "palette": [
+      {
+       "hex": "#010101",
+       "share": 0.8688
+      },
+      {
+       "hex": "#151515",
+       "share": 0.0741
+      },
+      {
+       "hex": "#272629",
+       "share": 0.0212
+      },
+      {
+       "hex": "#FDFDFD",
+       "share": 0.0041
+      }
+     ],
+     "subjects": [],
+     "previewUrl": "https://posts.design/images/posts/bluesky-raycast-com-3mjox4z76zz24-raycast-windows-shortcut-product-card-thumb.webp",
+     "description": {
+      "text": "A wide black promotional graphic with a large white “Hyperkey” title on the left, a rounded pill containing a four-square icon, “WINDOWS,” and “v0.54,” plus a glossy abstract four-point form floating over dark geometric shapes on the right. Thin gray guide-like lines frame the...",
+      "shows": [
+       "Large white Hyperkey title",
+       "Rounded Windows version label",
+       "Four-square window icon",
+       "Glossy abstract four-point form",
+       "Dark geometric background shapes"
+      ],
+      "basis": "model",
+      "source": "visual-profile"
+     }
+    },
+    {
+     "schemaVersion": 1,
+     "key": {
+      "kind": "gallery-item",
+      "id": "x-twitter-planepowers-2102338627250651252-plane-agents-live-product-hunt"
+     },
+     "kind": "post",
+     "title": "Plane Agents are now live on Product Hunt",
+     "url": "https://posts.design/plane-agents-are-now-live-on-product-hunt-2026-09-22",
+     "caption": "Plane Agents are now live on Product Hunt! Support us here -",
+     "captionFacts": {
+      "characters": 60,
+      "words": 11,
+      "lines": 1,
+      "firstLine": "Plane Agents are now live on Product Hunt! Support us here -",
+      "hashtags": [],
+      "mentions": [],
+      "emoji": 0,
+      "links": 0
+     },
+     "creator": {
+      "name": "Plane",
+      "handle": "planepowers"
+     },
+     "brand": {
+      "name": "Plane"
+     },
+     "sourceUrl": "https://x.com/planepowers/status/2102338627250651252",
+     "publishedAt": "2026-09-22T23:17:12.313Z",
+     "sourcePublishedAt": "2026-09-22",
+     "classification": {
+      "type": "announcement",
+      "intent": "launch",
+      "format": "single-image",
+      "fields": [
+       "tech",
+       "ai"
+      ],
+      "primaryPattern": "product-screenshot",
+      "secondaryPatterns": [],
+      "visualStyle": [
+       "playful"
+      ],
+      "colorMode": null,
+      "editorPick": false,
+      "colours": []
+     },
+     "palette": [
+      {
+       "hex": "#656D5D",
+       "share": 0.3823
+      },
+      {
+       "hex": "#FAFAFA",
+       "share": 0.3803
+      },
+      {
+       "hex": "#38B0E2",
+       "share": 0.0157
+      },
+      {
+       "hex": "#F27A15",
+       "share": 0.0129
+      },
+      {
+       "hex": "#494FBA",
+       "share": 0.0036
+      }
+     ],
+     "subjects": [
+      {
+       "id": "ai",
+       "label": "AI"
+      },
+      {
+       "id": "productivity",
+       "label": "Productivity"
+      }
+     ],
+     "previewUrl": "https://posts.design/images/posts/x-twitter-planepowers-2102338627250651252-plane-agents-live-product-hunt-thumb.webp",
+     "sourceMetrics": {
+      "views": 7113,
+      "unit": "views",
+      "capturedAt": "2026-10-12T15:47:52.507Z",
+      "evidenceKind": "refresh-observed-public"
+     },
+     "description": {
+      "text": "A wide promotional graphic shows the headline “Plane Agents now live on” above a Product Hunt mark, with colorful cartoon agent figures behind a large project-management workboard interface. The interface occupies the lower half and includes columns, work items, navigation, co...",
+      "shows": [
+       "Large headline text",
+       "Product Hunt logo and wordmark",
+       "Row of colorful cartoon agent figures",
+       "Project-management dashboard interface",
+       "Work item kanban columns"
+      ],
+      "basis": "model",
+      "source": "visual-profile"
+     }
+    }
+   ],
+   "total": 23,
+   "revision": "be9505391839f32419cf8288",
+   "nextCursor": "eyJ2IjoxLCJxdWVyeSI6InByb2R1Y3QgdXBkYXRlIiwic29ydCI6InJlbGV2YW5jZSIsImNvbGxlY3Rpb24iOiJwb3N0cyIsImNhdGVnb3J5IjoiZmVhdHVyZS11cGRhdGUiLCJsaW1pdCI6OCwib2Zmc2V0Ijo4LCJyZXZpc2lvbiI6ImJlOTUwNTM5MTgzOWYzMjQxOWNmODI4OCJ9"
+  }
+ ]
+}
