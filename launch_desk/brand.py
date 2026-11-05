@@ -200,12 +200,28 @@ def parse_brand(url: str, html: str, css: Sequence[str]) -> tuple[BrandKit, str 
     return kit, _logo_url(page, url)
 
 
+MAX_REDIRECTS = 3
+
+
+class _HttpOnlyRedirects(urllib.request.HTTPRedirectHandler):
+    """Follow at most 3 redirects, and only to http(s) URLs."""
+
+    max_redirections = MAX_REDIRECTS
+
+    def redirect_request(self, req, fp, code, msg, headers, newurl):
+        target = urllib.parse.urljoin(req.full_url, newurl)
+        if urllib.parse.urlsplit(target).scheme not in ("http", "https"):
+            raise ValueError("redirected to a non-http URL")
+        return super().redirect_request(req, fp, code, msg, headers, newurl)
+
+
 def http_get(url: str) -> bytes:
     """GET with a 5 s timeout, a 2 MB cap, http(s) only. Raises on any failure."""
     if urllib.parse.urlsplit(url).scheme not in ("http", "https"):
         raise ValueError("only http and https URLs are allowed")
+    opener = urllib.request.build_opener(_HttpOnlyRedirects)
     req = urllib.request.Request(url, headers={"User-Agent": USER_AGENT})
-    with urllib.request.urlopen(req, timeout=TIMEOUT_S) as resp:  # noqa: S310
+    with opener.open(req, timeout=TIMEOUT_S) as resp:  # noqa: S310
         if urllib.parse.urlsplit(resp.geturl()).scheme not in ("http", "https"):
             raise ValueError("redirected to a non-http URL")
         data = resp.read(MAX_BYTES + 1)

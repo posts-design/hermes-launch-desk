@@ -135,3 +135,98 @@ def test_logo_failure_keeps_rest_of_kit(tmp_path):
     kit = fetch_brand("https://x.test", get, tmp_path)
     assert kit.name == "Acme"
     assert kit.logo_path is None
+
+
+# --- http_get, against a local server ---------------------------------------
+
+import http.server  # noqa: E402
+import threading  # noqa: E402
+
+import pytest  # noqa: E402
+
+from launch_desk.brand import USER_AGENT, http_get  # noqa: E402
+
+
+class _Handler(http.server.BaseHTTPRequestHandler):
+    seen_agents: list[str] = []
+
+    def log_message(self, *args):
+        pass
+
+    def do_GET(self):
+        try:
+            self._route()
+        except (BrokenPipeError, ConnectionResetError):
+            pass
+
+    def _route(self):
+        path = self.path
+        if path == "/ok":
+            type(self).seen_agents.append(self.headers.get("User-Agent", ""))
+            body = b"hello"
+        elif path == "/big":
+            body = b"x" * (2 * 1024 * 1024 + 10)
+        elif path == "/ftp":
+            self.send_response(302)
+            self.send_header("Location", "ftp://example.com/x")
+            self.send_header("Content-Length", "0")
+            self.end_headers()
+            return
+        elif path.startswith("/hop/"):
+            n = int(path.split("/")[2])
+            self.send_response(302)
+            self.send_header("Location", f"/hop/{n - 1}" if n > 0 else "/ok")
+            self.send_header("Content-Length", "0")
+            self.end_headers()
+            return
+        else:
+            self.send_error(404)
+            return
+        self.send_response(200)
+        self.send_header("Content-Length", str(len(body)))
+        self.end_headers()
+        self.wfile.write(body)
+
+
+@pytest.fixture
+def server():
+    srv = http.server.ThreadingHTTPServer(("127.0.0.1", 0), _Handler)
+    t = threading.Thread(target=srv.serve_forever, daemon=True)
+    t.start()
+    yield f"http://127.0.0.1:{srv.server_address[1]}"
+    srv.shutdown()
+    srv.server_close()
+    t.join()
+
+
+def test_http_get_returns_bytes_with_user_agent(server):
+    _Handler.seen_agents.clear()
+    assert http_get(server + "/ok") == b"hello"
+    assert _Handler.seen_agents == [USER_AGENT]
+
+
+def test_http_get_oversize_raises(server):
+    with pytest.raises(ValueError):
+        http_get(server + "/big")
+
+
+def test_http_get_404_raises(server):
+    with pytest.raises(OSError):
+        http_get(server + "/missing")
+
+
+def test_http_get_redirect_to_ftp_raises(server):
+    with pytest.raises(ValueError):
+        http_get(server + "/ftp")
+
+
+def test_http_get_allows_three_redirects_not_four(server):
+    assert http_get(server + "/hop/2") == b"hello"  # 3 hops in total
+    with pytest.raises(OSError):
+        http_get(server + "/hop/3")  # 4 hops
+
+
+@pytest.mark.parametrize("bad", ["ftp://x", "file:///x", "x"])
+def test_http_get_refuses_non_http(bad):
+    with pytest.raises(ValueError):
+        http_get(bad)
