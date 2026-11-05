@@ -103,12 +103,17 @@ def _luminance(hex_: str) -> float:
     return 0.2126 * r + 0.7152 * g + 0.0722 * b
 
 
+# Colours of embedded social posts and buttons (X, LinkedIn, Facebook, Instagram, YouTube):
+# common on a product page, never its brand. Normalised upper-case hex.
+SOCIAL_COLOURS = frozenset({"#1D9BF0", "#1DA1F2", "#0A66C2", "#0077B5", "#1877F2", "#E1306C", "#FF0000"})
+
+
 def _accent(sources: Sequence[str]) -> str:
     counts: Counter[str] = Counter()
     for text in sources:
         for m in _HEX_RE.finditer(text):
             h = _norm_hex(m.group(0))
-            if _is_saturated(h):
+            if _is_saturated(h) and h not in SOCIAL_COLOURS:
                 counts[h] += 1
     return counts.most_common(1)[0][0] if counts else NEUTRAL.accent
 

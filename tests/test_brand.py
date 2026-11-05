@@ -246,4 +246,13 @@ def test_long_tagline_is_cut_at_a_sentence_or_clause(text, expected):
 
 def test_long_tagline_without_a_break_ends_with_ellipsis():
     out = _cut_tagline("word " * 60)
-    assert len(out) <= 121 and out.endswith("…")
+    assert len(out) <= 120 and out.endswith("…")
+
+
+def test_accent_skips_social_platform_colours():
+    css = (".tweet{color:#1D9BF0}.a{color:#1d9bf0}.b{border-color:#1D9BF0}.li{color:#0A66C2}"
+           ".yt{color:#ff0000}.brand{color:#E8590C}")
+    kit, _ = parse_brand("https://x.test", "", [css])
+    assert kit.accent == "#E8590C"
+    only_social, _ = parse_brand("https://x.test", "", [".t{color:#1DA1F2}.f{color:#1877F2}"])
+    assert only_social.accent == NEUTRAL.accent
