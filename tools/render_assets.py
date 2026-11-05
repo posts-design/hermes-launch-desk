@@ -300,7 +300,7 @@ def _font_for(ch: str, style: str, size: int):
 
 
 def _width(ch: str) -> int:
-    if unicodedata.combining(ch) or 0xFE00 <= ord(ch) <= 0xFE0F or ch == "‍":
+    if unicodedata.combining(ch) or 0xFE00 <= ord(ch) <= 0xFE0F or ch == "\u200d":
         return 0
     return 2 if unicodedata.east_asian_width(ch) in ("W", "F") else 1
 
