@@ -112,6 +112,15 @@ def test_preview_is_390_wide(tmp_path):
         assert im.size[1] > 390
 
 
+def test_preview_scale_multiplies_both_sides(tmp_path):
+    card = render_card(KIT, _shot(tmp_path), "Custom themes are live.", (1200, 675), tmp_path / "card.png")
+    caption = "Custom themes are live.\n\nPick a look."
+    one = render_feed_preview(KIT, caption, card, tmp_path / "p1.png")
+    two = render_feed_preview(KIT, caption, card, tmp_path / "p2.png", scale=2)
+    with Image.open(one) as a, Image.open(two) as b:
+        assert b.size == (a.size[0] * 2, a.size[1] * 2)
+
+
 def test_card_uses_brand_background_at_corner_pixel(tmp_path):
     for kit in (KIT, BrandKit(**{**KIT.__dict__, "bg": "#0B0B10", "ink": "#F5F5F5"})):
         for shot in (_shot(tmp_path), None):

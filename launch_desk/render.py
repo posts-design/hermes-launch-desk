@@ -711,8 +711,9 @@ def _actions(draw: ImageDraw.ImageDraw, x0: int, y: int, col: RGB) -> None:
               fill=col, width=lw, joint="curve")
 
 
-def render_feed_preview(brand: BrandKit, caption: str, card: Path, out: Path) -> Path:
-    """The post as it would sit in a light, phone-width feed. 390 px wide, height as needed."""
+def render_feed_preview(brand: BrandKit, caption: str, card: Path, out: Path, scale: int = 1) -> Path:
+    """The post as it would sit in a light, phone-width feed. 390 px wide, height as needed;
+    scale 2 or 3 gives a sharper image for high-density screens, same layout."""
     S = _SS
     font_path = str(FONT_PATH)
     x0, text_w = 68, FEED_W - 68 - 16
@@ -781,7 +782,8 @@ def render_feed_preview(brand: BrandKit, caption: str, card: Path, out: Path) ->
     y += 1
     _skeleton_post(draw, y, image=True)
 
-    final = im.resize((FEED_W, total), Image.Resampling.LANCZOS)
+    k = min(max(int(scale), 1), S)
+    final = im if k == S else im.resize((FEED_W * k, total * k), Image.Resampling.LANCZOS)
     out = Path(out)
     out.parent.mkdir(parents=True, exist_ok=True)
     final.save(out, "PNG", optimize=True)
