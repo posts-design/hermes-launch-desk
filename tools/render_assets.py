@@ -415,6 +415,50 @@ def box_char(d: ImageDraw.ImageDraw, ch: str, x: float, y: float, cw: float, lh:
         d.arc((bx, by, bx + 2 * r, by + 2 * r), start, start + 90, fill=col, width=1)
 
 
+def _cell_index(cells, ch: str) -> int | None:
+    return next((k for k, c in enumerate(cells) if c[0] == ch), None)
+
+
+def _break_at(text, room: int) -> int:
+    """After the last '-' or '/' that fits, in the second half of the row, unless that leaves
+    a scrap of under 8 characters for the next row (a date's day, say)."""
+    spots = [k + 1 for k in range(room) if text[k][0] in "-/" and k + 1 > room // 2]
+    good = [k for k in spots if len(text) - k >= 8]
+    return (good or spots or [room])[-1]
+
+
+def _wrap_overruns(rows):
+    """Hermes' question box keeps a fixed width, so a long link pushes that row's right
+    border past the box edge. Re-wrap such rows inside the box, breaking the long text
+    after a '-' or '/' where it can, so every border sits on the box edge."""
+    out, left, edge = [], None, None
+    for cells in rows:
+        top = _cell_index(cells, "╭")
+        if top is not None:
+            left, edge = top, _cell_index(cells, "╮")
+        elif _cell_index(cells, "╰") is not None:
+            left = edge = None
+        last = max((k for k, c in enumerate(cells) if c[0] == "│"), default=None)
+        if edge is None or last is None or last <= edge or not cells or cells[left][0] != "│":
+            out.append(cells)
+            continue
+        body = cells[left + 1:last]
+        while body and body[-1][0] in (" ", ""):
+            body.pop()
+        indent = 0
+        while indent < len(body) and body[indent][0] == " ":
+            indent += 1
+        text, room = body[indent:], edge - 1 - (left + 1 + indent)
+        border, blank = cells[left], (" ", TERM_FG, "")
+        while text:
+            cut = len(text) if len(text) <= room else _break_at(text, room)
+            piece, text = text[:cut], text[cut:]
+            line = [border] + [blank] * indent + piece
+            line += [blank] * (edge - len(line)) + [cells[last]]
+            out.append(line)
+    return out
+
+
 def terminal(ansi: Path, out: Path, start: str, end: str, size: int = 17) -> Path:
     rows = parse_ansi(ansi.read_text(encoding="utf-8"))
     plain = ["".join(c[0] for c in r) for r in rows]
@@ -427,6 +471,7 @@ def terminal(ansi: Path, out: Path, start: str, end: str, size: int = 17) -> Pat
         if "╮" in line:
             edge = line.index("╮")
         rows[i] = _drop_undrawable(r, size, edge)
+    rows = _wrap_overruns(rows)
     while rows and not "".join(c[0] for c in rows[-1]).strip():
         rows.pop()
     for r in rows:
