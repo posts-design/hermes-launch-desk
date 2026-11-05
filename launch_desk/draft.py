@@ -103,8 +103,9 @@ def unsupported_details(text: str, facts: str) -> list[Failure]:
 
 
 def facts_text(brief: Brief, brand: BrandKit) -> str:
-    """What counts as a fact: product name, tagline, what shipped, link."""
-    return " ".join((brand.name or "", brand.tagline or "", brief.what or "", brief.product_url or ""))
+    """What counts as a fact: product name, tagline, what shipped, the founder's detail, link."""
+    return " ".join((brand.name or "", brand.tagline or "", brief.what or "", brief.detail or "",
+                     brief.product_url or ""))
 
 
 def _trim(text: str, limit: int) -> str:
@@ -153,7 +154,7 @@ def _instructions(brief: Brief, relaxed: set[str]) -> str:
     rules = [
         "Write like the founder talking to one friend: plain words, short sentences, first person (I or we).",
         "Say what changed and why someone would care.",
-        "Every detail must come from FACTS. Never describe what the founder or a user did. "
+        "Every detail must come from FACTS. Never describe what the founder or a user did beyond what FACTS says. "
         "Never add pets, people, times, steps, counts, results or UI actions that are not in FACTS.",
         "No exclamation marks. No questions to the reader unless a hook pattern asks for one. No \"it's not just X, it's Y\" lines.",
         "Use 3 to 5 short lines, with a blank line between them.",
@@ -177,6 +178,8 @@ def _facts(brief: Brief, brand: BrandKit) -> str:
     if brand.tagline:
         lines.append(f"What it is: {_one_line(brand.tagline, 200)}")
     lines.append(f"What just shipped ({brief.shipped}): {_one_line(brief.what, 300)}")
+    if brief.detail:
+        lines.append(f"A true detail from the founder: {_one_line(brief.detail, 300)}")
     lines.append(f"Link: {_one_line(brief.product_url, 120)}")
     return "FACTS\n" + "\n".join(lines)
 

@@ -280,3 +280,13 @@ def test_call_errors_become_draft_error_with_cause():
 def test_programming_errors_propagate():
     with pytest.raises(AttributeError):
         draft_post(RaisingHost(AttributeError("bug")), BRIEF, BRAND, REFS, SHAPES)
+
+
+def test_founder_detail_is_a_fact_in_prompt_and_check():
+    brief = Brief("feature", "x", "custom themes for pet profile pages", "https://pawr.link",
+                  detail="12 people asked to match their own site")
+    assert "12 people asked" in facts_text(brief, BRAND)
+    _instructions, text = build_brief_prompt(brief, BRAND, REFS, SHAPES, set())
+    assert "12 people asked to match their own site" in text.split("REAL LAUNCH POSTS")[0]
+    assert unsupported_details("12 people asked for this.", facts_text(brief, BRAND)) == []
+    assert Brief("feature", "x", "w", "u").detail == ""

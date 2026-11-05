@@ -23,6 +23,7 @@ class Brief:
     network: Literal["x", "linkedin"]
     what: str
     product_url: str
+    detail: str = ""  # one true detail from the founder, used as a fact
 
 
 @dataclass(frozen=True)
