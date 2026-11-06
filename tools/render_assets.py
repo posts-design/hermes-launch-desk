@@ -1,14 +1,18 @@
-"""Render the catalog banner and screenshots in assets/ with the plugin's own code.
+"""Render the catalog screenshots (and, with --banner, the banner) in assets/ with the plugin's own code.
 
-Usage: python tools/render_assets.py INPUT_DIR [OUT_DIR]
+Usage: python tools/render_assets.py INPUT_DIR [OUT_DIR] [--banner]
 
 INPUT_DIR holds files fetched once by hand (not committed):
   pawr-og.png     pawr.link's og:image, used as the card's screenshot
+  pawr-page.png   a pawr.link profile page (a phone-shaped crop of pawr.link's own
+                  landing-screenshot-max.webp), the split card's second screenshot
   pawr-logo.png   the logo fetch_brand() saved for https://pawr.link
   posts-logo.png  the logo fetch_brand() saved for https://posts.design
   cli.ansi        `tmux capture-pane -p -e` of a live `hermes chat` run of /launch
-OUT_DIR defaults to the repo's assets/. Card and preview text come from live /launch runs
-on 2026-11-05; the brand colours are what fetch_brand() read from each site that day.
+OUT_DIR defaults to the repo's assets/. The three cards (hero, statement, split) and the feed
+preview carry the post from a live /launch run on 2026-11-06, the run cli.ansi captures. The
+banner keeps the card and post of the 2026-11-05 run. The brand colours are what fetch_brand()
+read from each site on 2026-11-05.
 """
 from __future__ import annotations
 
@@ -25,7 +29,7 @@ sys.path.insert(0, str(ROOT))
 
 from launch_desk.draft import facts_text, unsupported_details  # noqa: E402
 from launch_desk.models import BrandKit, Brief  # noqa: E402
-from launch_desk.render import FONT_PATH, load_font, render_card, render_feed_preview  # noqa: E402
+from launch_desk.render import FONT_PATH, choose_layout, load_font, render_card, render_feed_preview  # noqa: E402
 from launch_desk.rules import check, x_length  # noqa: E402
 from launch_desk.wizard import card_headline  # noqa: E402
 
@@ -36,6 +40,15 @@ INTER = str(FONT_PATH)
 
 PAWR_BRIEF = Brief("feature", "x", "custom themes for pet profile pages", "https://pawr.link",
                    detail="people kept asking to match their pet page to their own site")
+# The 2026-11-06 run (cli.ansi): the cards and the feed preview.
+RUN_HOOK = "Your pet page should match your own site."
+RUN_CAPTION = (
+    "Your pet page should match your own site.\n\n"
+    "Custom themes are live for pet profile pages on pawr.link.\n\n"
+    "One page for everything you are, do, and care about.\n\n"
+    "https://pawr.link"
+)
+# The 2026-11-05 run: the banner's card and its scroll test.
 PAWR_HOOK = "Check this out: pet pages can now use custom themes."
 PAWR_CAPTION = (
     "Check this out: pet pages can now use custom themes.\n\n"
@@ -43,7 +56,6 @@ PAWR_CAPTION = (
     "One change, but it means your pet's page can sit next to your work without looking out of place.\n\n"
     "https://pawr.link"
 )
-POSTS_HOOK = "Launch Desk turns 'I just shipped X' into a launch post."
 
 
 def pawr_kit(inp: Path) -> BrandKit:
@@ -134,13 +146,13 @@ def save(im: Image.Image, path: Path, colors: int | None = None) -> Path:
 
 # ------------------------------------------------------------------ scroll test (real values)
 
-def scroll_test(kit: BrandKit) -> list[str]:
+def scroll_test(kit: BrandKit, hook: str = PAWR_HOOK, caption: str = PAWR_CAPTION) -> list[str]:
     """The checks the plugin runs on the post, as banner rows. Fails loudly if the post fails."""
-    failures = check(PAWR_CAPTION, network="x") + unsupported_details(PAWR_CAPTION, facts_text(PAWR_BRIEF, kit))
+    failures = check(caption, network="x") + unsupported_details(caption, facts_text(PAWR_BRIEF, kit))
     assert not failures, [f.rule_id for f in failures]
-    words = len(PAWR_HOOK.split())
+    words = len(hook.split())
     return [f"First line: {words} words", "No stock launch phrases", "No details you didn’t give",
-            f"{x_length(PAWR_CAPTION)} of 280 characters"]
+            f"{x_length(caption)} of 280 characters"]
 
 
 # ------------------------------------------------------------------ feed preview frame
@@ -517,6 +529,8 @@ def terminal(ansi: Path, out: Path, start: str, end: str, size: int = 17) -> Pat
 # ------------------------------------------------------------------ main
 
 def main(argv: list[str]) -> int:
+    with_banner = "--banner" in argv
+    argv = [a for a in argv if a != "--banner"]
     if len(argv) < 2:
         print(__doc__)
         return 2
@@ -526,12 +540,19 @@ def main(argv: list[str]) -> int:
     shots.mkdir(parents=True, exist_ok=True)
     pawr, posts = pawr_kit(inp), posts_kit(inp)
 
-    card = render_card(pawr, inp / "pawr-og.png", card_headline(PAWR_HOOK, PAWR_BRIEF.what), X,
-                       shots / "card-x.png")
-    preview = render_feed_preview(pawr, PAWR_CAPTION, card, shots / "feed-preview.png", scale=2)
+    scroll_test(pawr, RUN_HOOK, RUN_CAPTION)  # the post on the cards passes the plugin's checks
+    headline = card_headline(RUN_HOOK, PAWR_BRIEF.what)
+    og, page = inp / "pawr-og.png", inp / "pawr-page.png"
+    # Each layout as the wizard picks it: one screenshot, none, two.
+    for name, used in (("card-x.png", [og]), ("card-statement.png", []), ("card-split.png", [og, page])):
+        layout = choose_layout(used, headline)
+        render_card(pawr, used, headline, X, shots / name, layout=layout)
+    preview = render_feed_preview(pawr, RUN_CAPTION, shots / "card-x.png", shots / "feed-preview.png", scale=2)
     frame_preview(preview)
-    render_card(posts, None, card_headline(POSTS_HOOK, "Launch Desk"), X, shots / "posts-design-card.png")
-    banner(card, pawr, posts, out / "banner.png")
+    if with_banner:
+        card = render_card(pawr, og, card_headline(PAWR_HOOK, PAWR_BRIEF.what), X, out / "_banner-card.png")
+        banner(card, pawr, posts, out / "banner.png")
+        card.unlink()
     if (inp / "cli.ansi").exists():
         terminal(inp / "cli.ansi", shots / "cli-flow.png", start="/launch https", end="to select")
     for p in sorted(out.rglob("*.png")):
