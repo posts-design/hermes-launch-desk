@@ -270,14 +270,14 @@ def short_brand(brand: str) -> str:
 
 
 def reference_line(ref: Reference) -> str:
-    """'<brand> — <shape note>, <views> views. <fit>.' for the reference list. A reference
+    """'<brand>: <shape note>, <views> views. <fit>.' for the reference list. A reference
     without a caption has no shape note."""
     parts = [shape_note(ref.caption)] if (ref.caption or "").strip() else []
     if ref.views:
         parts.append(f"{_short(ref.views)} views")
     line = short_brand(ref.brand) or "A brand"
     if parts:
-        line += " — " + ", ".join(parts)
+        line += ": " + ", ".join(parts)
     fit = _VIEWS_TAIL.sub("", ref.why or "").strip()
     return f"{line}. {fit}." if fit else f"{line}."
 
