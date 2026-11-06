@@ -52,6 +52,14 @@ After you approve, `/launch` asks whether to check in tomorrow and in 3 days. Sa
 
 To put your product on the card, send a screenshot and the agent attaches it with `launch_desk_attach_screenshot`. Send two and the card shows them side by side; with none, the card sets your hook large as a quote. The plugin also ships a skill, `launch-desk:launch-desk`, that teaches the agent the launch workflow, so it steers you well even when you do not type the command.
 
+## Hermes Desktop
+
+In Hermes Desktop, Launch Desk adds a Launch Desk page to the sidebar (also in the command palette as Open Launch Desk). It shows every pack, newest first: the card and the feed preview, the post with your own words marked, the checks, the three reference posts with their views, the check-ins and the sign-ups you recorded. Copy post copies the text; Open X opens X with it filled in, in your browser. When a check-in is coming up, the status bar says so.
+
+The Desktop half ships off. Turn on Launch Desk in Capabilities → Plugins. If Desktop and Hermes run on different machines, install it from Desktop with Install from Git and the Desktop part checked, or with this link: `hermes://plugin/install?repo=posts-design/hermes-launch-desk`.
+
+The page only reads. Its backend (`dashboard/plugin_api.py`, loaded when the plugin is enabled in Hermes) reads this plugin's own packs folder and the names and times of the check-in jobs `/launch` created. It writes nothing and sends nothing anywhere.
+
 ## What it checks
 
 - The first line is 12 words or fewer, with no link in it.
