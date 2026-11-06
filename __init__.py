@@ -74,7 +74,8 @@ def register(ctx):
             return json.dumps({"ok": False, "error": "File not found."})
         if not _is_image(path):
             return json.dumps({"ok": False, "error": "Not a PNG, JPEG or WebP image."})
-        kept = [p for p in wizard.screenshot_paths(ctx.state.get("screenshot")) if p != str(path)]
+        kept = [p for p in wizard.screenshot_paths(ctx.state.get("screenshot"))
+                if p != str(path) and Path(p).is_file()]  # a deleted file never takes a slot
         ctx.state.set("screenshot", (kept + [str(path)])[-wizard.SCREENSHOTS_MAX:])
         return json.dumps({"ok": True, "path": str(path)})
 

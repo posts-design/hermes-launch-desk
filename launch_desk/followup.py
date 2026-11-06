@@ -34,7 +34,9 @@ PROMPT = (
     "If the tool is missing or its result has ok false, reply with one line saying the check-in "
     "for {pack} could not run, and stop. Do not wait for an answer."
 )
-TOOLSETS = ["launch_desk"]
+# no_mcp: Hermes' cron scheduler then attaches no MCP server to the job (else it adds every
+# enabled one); a check-in needs only the plugin's own tools, never posts.design's.
+TOOLSETS = ["launch_desk", "no_mcp"]
 
 CHANNEL_MAX = 40
 SIGNUPS_MAX = 1_000_000

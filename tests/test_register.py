@@ -104,6 +104,16 @@ def test_attach_keeps_a_screenshot_stored_by_an_older_version(tmp_path):
     assert ctx.state.get("screenshot") == [old, new]
 
 
+def test_a_stale_stored_path_never_takes_a_slot(tmp_path):
+    a, b = _pngs(tmp_path, "a.png", "b.png")
+    gone = str(tmp_path / "gone.png")
+    ctx = StubCtx()
+    ctx.state.set("screenshot", [a, gone])  # the file was deleted after it was attached
+    load_plugin().register(ctx)
+    ctx.tools["launch_desk_attach_screenshot"]["handler"]({"path": b})
+    assert ctx.state.get("screenshot") == [a, b]
+
+
 def test_attach_screenshot_rejects_missing_and_non_image(tmp_path):
     ctx = StubCtx()
     load_plugin().register(ctx)

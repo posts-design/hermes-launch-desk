@@ -59,7 +59,14 @@ def test_two_job_specs_one_day_and_three_days_out():
         # (or keeps it local when there is none). Never another chat.
         assert "deliver" not in spec
         assert spec["attach_to_session"] is True
-        assert spec["enabled_toolsets"] == ["launch_desk"]
+        assert "launch_desk" in spec["enabled_toolsets"]
+
+
+def test_check_in_jobs_run_without_mcp_servers():
+    # Hermes' cron scheduler reads the no_mcp sentinel in enabled_toolsets as "attach no MCP
+    # server"; without it every enabled server (posts.design included) rides along.
+    for spec in followup.job_specs(PACK):
+        assert spec["enabled_toolsets"] == ["launch_desk", "no_mcp"]
 
 
 def test_job_prompt_is_fixed_apart_from_the_pack_name():

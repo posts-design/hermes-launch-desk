@@ -588,7 +588,8 @@ def _approve(host: Host, p: _Pending) -> str:
                       {"x": Path(p.data["card"])}, p.refs,
                       has_screenshot=bool(_screenshots(_used_screenshots(p.data))),
                       preview=Path(p.data["preview"]),
-                      headline=card_headline(p.data["hook"], p.brief.what), more_refs=more)
+                      headline=card_headline(p.data["hook"], p.brief.what), more_refs=more,
+                      layout=p.data.get("layout"))
     if p.data.get("brand_new"):
         _store_brand(host, p.brand)
     _drop_pending(host, p.data)

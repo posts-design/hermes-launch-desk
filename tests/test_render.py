@@ -350,3 +350,15 @@ def test_split_labels_are_optional_and_stay_inside(tmp_path, size):
         boxes = [_bbox_of(im, red), _bbox_of(im, green)]
     W, H = size
     assert all(b and b[0] >= 16 and b[2] <= W - 16 and b[3] <= H - 16 for b in boxes)
+
+
+@pytest.mark.parametrize("size", SIZES)
+def test_split_with_one_undecodable_file_falls_back_to_hero_at_the_exact_size(tmp_path, size):
+    good = _solid(tmp_path, (1600, 900), (30, 60, 230), "good.png")
+    bad = tmp_path / "bad.png"
+    bad.write_bytes(b"not an image")
+    split = render_card(KIT, [good, bad], "Ship it", size, tmp_path / "split.png", layout="split")
+    hero = render_card(KIT, [good], "Ship it", size, tmp_path / "hero.png", layout="hero")
+    with Image.open(split) as a, Image.open(hero) as b:
+        assert a.size == b.size == size
+        assert a.convert("RGB").tobytes() == b.convert("RGB").tobytes()

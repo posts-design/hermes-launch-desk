@@ -36,14 +36,29 @@ def _clip(text: str, limit: int) -> str:
     return text if len(text) <= limit else text[: limit - 1].rstrip() + "…"
 
 
-def alt_text(brief: Brief, brand: BrandKit, has_screenshot: bool, headline: str | None = None) -> str:
+CARD_SHOTS = {"statement": 0, "hero": 1, "split": 2}
+
+
+def card_contents(layout: str | None, has_screenshot: bool) -> dict:
+    """What the card shows: its layout and how many screenshots are on it. `layout` is the one
+    the card was drawn with; without it (or an unknown one) it follows has_screenshot."""
+    if layout not in CARD_SHOTS:
+        layout = "hero" if has_screenshot else "statement"
+    return {"layout": layout, "screenshots": CARD_SHOTS[layout]}
+
+
+def alt_text(brief: Brief, brand: BrandKit, has_screenshot: bool, headline: str | None = None,
+             layout: str | None = None) -> str:
     name = " ".join(brand.name.split()) or "the product"
     what = _clip(headline or brief.what, 400).rstrip(".")
+    shots = card_contents(layout, has_screenshot)["screenshots"]
     parts = [f"Launch card for {name}.", f"Headline: {what}."]
-    if has_screenshot:
+    if shots == 2:
+        parts.append(f"It shows two screenshots of {name} side by side.")
+    elif shots == 1:
         parts.append(f"It shows a screenshot of {name}.")
     else:
-        parts.append(f"The card is text only: the product name {name} and the headline.")
+        parts.append(f"A text card: the headline set large as a quote, with {name} below it.")
     if brand.tagline:
         parts.append(_clip(brand.tagline, 200))
     return _clip(" ".join(parts), ALT_MAX)
@@ -86,7 +101,8 @@ def _fmt_views(views: int | None) -> str:
 def write_pack(out_dir: Path, brief: Brief, brand: BrandKit, draft: Draft, hook: str,
                cards: dict[str, Path], refs: list[Reference],
                has_screenshot: bool = False, preview: Path | None = None,
-               headline: str | None = None, more_refs: list[Reference] = ()) -> Path:
+               headline: str | None = None, more_refs: list[Reference] = (),
+               layout: str | None = None) -> Path:
     name = f"{date.today().isoformat()}-{_slug(brand.name, SLUG_WHAT_MAX)}-{_slug(brief.what, SLUG_WHAT_MAX)}"
     pack = _new_folder(Path(out_dir), name)
 
@@ -103,7 +119,7 @@ def write_pack(out_dir: Path, brief: Brief, brand: BrandKit, draft: Draft, hook:
     if preview is not None:
         shutil.copyfile(preview, pack / "preview-x.png")
         files["preview"] = "preview-x.png"
-    (pack / "alt-text.txt").write_text(alt_text(brief, brand, has_screenshot, headline) + "\n", encoding="utf-8")
+    (pack / "alt-text.txt").write_text(alt_text(brief, brand, has_screenshot, headline, layout) + "\n", encoding="utf-8")
 
     check = ["# Before you post", "", f"Open this link to post on X with the text filled in: {intent}", "",
              "Nothing was posted. You send it.", ""]
@@ -124,6 +140,7 @@ def write_pack(out_dir: Path, brief: Brief, brand: BrandKit, draft: Draft, hook:
         "hook": hook,
         "hooks": list(draft.hooks),
         "caption": text,
+        "card": card_contents(layout, has_screenshot),
         "references": [{"id": r.id, "brand": r.brand, "url": r.url, "views": r.views} for r in refs],
         # References the founder was not shown, as their shape (not their words), for check-ins.
         "more_references": [{"id": r.id, "brand": r.brand, "url": r.url, "views": r.views,

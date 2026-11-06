@@ -2,10 +2,12 @@ import json
 import urllib.parse
 from datetime import date
 
+import pytest
+
 from PIL import Image
 
 from launch_desk.models import BrandKit, Brief, Draft, Reference
-from launch_desk.pack import CHECKLIST, alt_text, write_pack, x_intent_url
+from launch_desk.pack import CHECKLIST, alt_text, card_contents, write_pack, x_intent_url
 
 
 def _brand(**kw):
@@ -153,3 +155,34 @@ def test_pack_json_keeps_all_hooks_and_the_extra_references(tmp_path):
 def test_judge_by_conversion_is_the_checklist_line():
     from launch_desk.pack import JUDGE_BY_CONVERSION
     assert JUDGE_BY_CONVERSION in CHECKLIST
+
+
+@pytest.mark.parametrize("layout,has_screenshot,shots", [
+    ("hero", True, 1), ("split", True, 2), ("statement", False, 0), ("statement", True, 0),
+    (None, True, 1), (None, False, 0), ("unknown", True, 1),
+])
+def test_card_contents_follow_the_layout(layout, has_screenshot, shots):
+    c = card_contents(layout, has_screenshot)
+    assert c["screenshots"] == shots
+    assert c["layout"] == {0: "statement", 1: "hero", 2: "split"}[shots]
+
+
+def test_alt_text_per_layout():
+    head = "Pet pages can wear your colours now"
+    hero = alt_text(_brief(), _brand(), True, head, layout="hero")
+    split = alt_text(_brief(), _brand(), True, head, layout="split")
+    statement = alt_text(_brief(), _brand(), True, head, layout="statement")
+    assert all(head in t and "Pawr Link" in t and len(t) <= 1000 for t in (hero, split, statement))
+    assert "screenshot" in split.lower() and split != hero
+    assert "screenshot" not in statement.lower()  # a statement card shows none, whatever was attached
+
+
+@pytest.mark.parametrize("layout,shots", [("split", 2), ("hero", 1), ("statement", 0)])
+def test_pack_records_the_card_layout_and_its_screenshot_count(tmp_path, layout, shots):
+    card = tmp_path / "c.png"
+    Image.new("RGB", (1200, 675)).save(card)
+    draft = Draft(("h", "b", "c"), "h\nbody", (), False)
+    pack = write_pack(tmp_path / "out", _brief(), _brand(), draft, "h", {"x": card}, [],
+                      has_screenshot=shots > 0, layout=layout)
+    data = json.loads((pack / "pack.json").read_text())
+    assert data["card"] == {"layout": layout, "screenshots": shots}

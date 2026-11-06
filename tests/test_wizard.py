@@ -765,6 +765,17 @@ def test_phase1_layout_follows_the_attached_screenshots(tmp_path, monkeypatch, s
     assert seen[0]["layout"] == layout == pending(host)["layout"]
 
 
+@pytest.mark.parametrize("state,layout,shots", [(0, "statement", 0), (1, "hero", 1), (2, "split", 2)])
+def test_approved_pack_describes_the_card_that_was_drawn(tmp_path, state, layout, shots):
+    host = make_host(PHASE1)
+    if state:
+        host.state_set("screenshot", [_shot(tmp_path, f"{i}.png") for i in range(state)])
+    start(host)
+    resume(host, "approve", "no")
+    [pack_json] = packs(host)
+    assert json.loads(pack_json.read_text())["card"] == {"layout": layout, "screenshots": shots}
+
+
 def test_missing_screenshot_files_are_skipped(tmp_path, monkeypatch):
     seen = _render_spy(monkeypatch)
     a = _shot(tmp_path, "a.png")
