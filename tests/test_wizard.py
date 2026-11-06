@@ -10,20 +10,20 @@ from PIL import Image
 from fakes import FakeHost
 from launch_desk import wizard
 from launch_desk.brand import PRESET_ACCENTS
+from launch_desk.draft import checklist, founder_hook, post_failures
 from launch_desk.host import SourceUnavailable
 from launch_desk.models import Brief
 from launch_desk.references import McpSource, build_search_args, rank_references
-from launch_desk.rules import RULES
 from launch_desk.setup_check import ADD_SERVER
 
 FIX = Path(__file__).parent / "fixtures"
 URL = "https://pawr.link"
 ARGS = f"{URL} custom themes for pet profile pages -- people kept asking to match their own site"
 DETAIL = "people kept asking to match their own site"
+FOUNDER = founder_hook(DETAIL)  # hook 1 whenever the founder gives a detail
 SEARCH = json.loads((FIX / "search_references.json").read_text(encoding="utf-8"))
 PACK_IDS = {e["id"] for e in json.loads(
     (Path(wizard.__file__).parent / "sample_pack.json").read_text(encoding="utf-8"))}
-EM_DASH_MESSAGE = next(r.message for r in RULES if r.id == "em-dash")
 
 CLEAN = {
     "use_case": "Pick a theme and the whole page follows.",
@@ -102,6 +102,10 @@ def pending(host):
     return host.state_get("pending")
 
 
+def pack_data(host):
+    return json.loads(packs(host)[0].read_text())
+
+
 # ------------------------------------------------------------------ stops before work
 
 @pytest.mark.parametrize("kw", [{"unattended": True}, {"surface": "cron"}])
@@ -157,7 +161,7 @@ def test_phase1_ends_with_media_lines_and_stores_pending():
     assert {Image.open(p).size for p in shown} >= {(1200, 675)}
 
     p = pending(host)
-    assert p["hooks"] == CLEAN["hooks"] and p["hook"] == CLEAN["hooks"][0]
+    assert p["hooks"] == [FOUNDER, *CLEAN["hooks"][:2]] and p["hook"] == FOUNDER
     assert p["caption"] == CLEAN["caption"]
     assert p["brief"]["what"] == "custom themes for pet profile pages"
     assert p["brief"]["detail"] == DETAIL and p["brief"]["network"] == "x"
@@ -197,12 +201,15 @@ def test_feature_detail_about_asking_picks_the_you_asked_hook():
 
 
 def test_remaining_failures_are_shown_in_the_phase1_reply():
-    bad = {"use_case": "Pick one.", "hooks": ["Pet pages — themes — are here.", "Themes.", "Your theme."],
-           "caption": "Pet pages — themes — are here.\n\nPick one.\n\nhttps://pawr.link"}
-    host = make_host(PHASE1, llm=(bad, bad))
-    reply = start(host)
-    flagged = [line for line in reply.splitlines() if EM_DASH_MESSAGE in line]
-    assert len(flagged) == 1
+    bad = {"use_case": "Pick a theme.", "hooks": ["Pet pages are here.", "Themes.", "Your theme."],
+           "caption": "Pet pages are here.\n\nPick a theme — any theme — and go.\n\nhttps://pawr.link"}
+    host = make_host(["feature", "x", "keep", "2"], llm=(bad, bad))
+    reply = start(host, args=f"{URL} custom themes for pet profile pages")
+    failed = [c for c in wizard._Pending(pending(host)).checks() if not c.ok]
+    assert [c.rules for c in failed] == [("em-dash", "emoji", "hashtags")]
+    assert sum(failed[0].text in line for line in reply.splitlines()) == 1
+    resume(host, "approve", "no")
+    assert [c["rules"] for c in pack_data(host)["checks"] if not c["ok"]] == [["em-dash", "emoji", "hashtags"]]
 
 
 @pytest.mark.parametrize("surface,in_reply", [("cli", True), ("tui", True), ("local", True),
@@ -311,12 +318,12 @@ def test_screenshot_from_state_is_used_only_if_file_exists(tmp_path, monkeypatch
     host.state_set("screenshot", str(shot))
     start(host)
     assert len(seen) == 1
-    assert bool(seen[0][0]) == exists and seen[0][1] == CLEAN["hooks"][0]
+    assert bool(seen[0][0]) == exists and seen[0][1] == FOUNDER
 
 
 def test_long_hook_falls_back_to_what_for_card_headline(monkeypatch):
-    long = dict(CLEAN, hooks=["Pet pages can wear your colours now, and so can every link page on it today",
-                              *CLEAN["hooks"][1:]])
+    long = "people kept asking to match their pet's page to the colours of their own site"
+    assert len(founder_hook(long)) > wizard.HEADLINE_MAX
     seen = []
     real = wizard.render_card
 
@@ -325,7 +332,9 @@ def test_long_hook_falls_back_to_what_for_card_headline(monkeypatch):
         return real(brand, screenshot, headline, size, out, **kw)
 
     monkeypatch.setattr(wizard, "render_card", spy)
-    start(make_host(PHASE1, llm=(long, long)))
+    host = make_host(PHASE1)
+    start(host, args=f"{URL} custom themes for pet profile pages -- {long}")
+    assert pending(host)["hook"] == founder_hook(long)
     assert seen == ["Custom themes for pet profile pages"]
 
 
@@ -355,7 +364,7 @@ def test_phase2_approve_writes_pack_and_clears_pending():
 
     [pack_json] = packs(host)
     data = json.loads(pack_json.read_text())
-    assert data["hook"] == CLEAN["hooks"][0] and data["brief"]["detail"] == DETAIL
+    assert data["hook"] == FOUNDER and data["brief"]["detail"] == DETAIL
     assert data["intent_url"] in reply and str(pack_json.parent) in reply
     shown = media(reply)
     assert len(shown) == 2 and all(p.is_file() and p.parent == pack_json.parent for p in shown)
@@ -366,7 +375,7 @@ def test_phase2_approve_writes_pack_and_clears_pending():
     assert stored["url"] == URL and stored["accent"] == data["brand"]["accent"]
     assert Path(stored["logo_path"]).parent == host.data_dir() / "brand"
     assert Path(stored["logo_path"]).is_file()
-    assert CLEAN["hooks"][0] in (pack_json.parent / "alt-text.txt").read_text()
+    assert FOUNDER in (pack_json.parent / "alt-text.txt").read_text()
 
 
 @pytest.mark.parametrize("surface", ["cli", "tui", "local", "desktop", "acp"])
@@ -435,7 +444,7 @@ def test_swap_references_reranks_without_repeats():
     items = McpSource(FakeHost(mcp_replies={"search_references": SEARCH})).search(build_search_args(brief))
     assert first == {r.id for r in rank_references(items, brief)}
 
-    reply = resume(host, "swap", "2")
+    reply = resume(host, "swap", "3")  # 1 is the founder's words
     p = pending(host)
     swapped = {r["id"] for r in p["refs"]}
     assert len(swapped) == 3 and not (swapped & first)
@@ -456,14 +465,14 @@ def test_change_hook_picks_among_the_same_three_and_rerenders():
     old = pending(host)
     reply = resume(host, "hook", "3")
     p = pending(host)
-    assert p["hook"] == CLEAN["hooks"][2] and p["hooks"] == old["hooks"]
+    assert p["hook"] == CLEAN["hooks"][1] and p["hooks"] == old["hooks"]
     assert len(host.llm_calls) == 1
     assert {str(m) for m in media(reply)} == {p["card"], p["preview"]}
     assert all(m.is_file() for m in media(reply))
     assert not Path(old["card"]).exists()
     resume(host, "approve")
     data = json.loads(packs(host)[0].read_text())
-    assert data["caption"].splitlines()[0] == CLEAN["hooks"][2]
+    assert data["caption"].splitlines()[0] == CLEAN["hooks"][1]
 
 
 def test_second_launch_reuses_stored_brand_silently():
@@ -772,14 +781,14 @@ def test_change_hook_rerenders_with_the_layout_the_new_hook_gets(tmp_path, monke
 
     def choose(shots, hook):
         asked.append(hook)
-        return "statement" if hook == CLEAN["hooks"][0] else "hero"
+        return "statement" if hook == FOUNDER else "hero"
 
     monkeypatch.setattr(wizard, "choose_layout", choose)
     host = make_host(PHASE1)
     host.state_set("screenshot", [_shot(tmp_path, "a.png")])
     start(host)
     resume(host, "hook", "3")
-    assert asked == [CLEAN["hooks"][0], CLEAN["hooks"][2]]
+    assert asked == [FOUNDER, CLEAN["hooks"][1]]
     assert [s["layout"] for s in seen] == ["statement", "hero"]
     assert pending(host)["layout"] == "hero"
 
@@ -909,7 +918,7 @@ def test_pack_keeps_the_unused_hooks_and_the_references_not_shown():
     shown = set(pending(host)["shown"])
     resume(host, "approve", "no")
     data = json.loads(packs(host)[0].read_text())
-    assert data["hooks"] == CLEAN["hooks"]
+    assert data["hooks"] == [FOUNDER, *CLEAN["hooks"][:2]]
     more = data["more_references"]
     assert more and all(r["id"] not in shown for r in more)
     assert all(r["shape"] for r in more)
@@ -949,3 +958,123 @@ def test_a_refused_create_logs_the_raw_reply(caplog):
     start(host)
     resume(host, "approve", "yes")
     assert "raw-marker-xyz" in caplog.text
+
+
+# ------------------------------------------------------------------ your words first, visible checks
+
+STOCK_HOOK = {**CLEAN, "hooks": [CLEAN["hooks"][0], "Check this out: pet pages match your site.", CLEAN["hooks"][2]]}
+REPEATS_DETAIL = {**CLEAN, "caption": "Pet pages can wear your colours now.\n\nPeople kept asking to match their own "
+                                      "site.\n\nPick a theme in settings and the whole page follows.\n\nhttps://pawr.link"}
+
+
+def hook_choices(host):
+    [(_, choices)] = [(q, ch) for q, ch in host.asked if any(c["value"] == "1" for c in ch)][-1:]
+    return choices
+
+
+def test_founder_words_are_hook_one_verbatim_and_marked():
+    host = make_host(PHASE1)
+    start(host)
+    choices = hook_choices(host)
+    assert choices[0]["value"] == "1"
+    assert FOUNDER in choices[0]["label"] and choices[0]["label"] != FOUNDER
+    assert all(c["label"] in pending(host)["hooks"] for c in choices[1:])  # model hooks carry no mark
+    p = pending(host)
+    assert p["hooks"][0] == FOUNDER and p["sources"] == ["founder", "model", "model"]
+    assert p["hook"] == FOUNDER
+    resume(host, "approve", "no")
+    data = pack_data(host)
+    assert data["hook_source"] == "founder" and data["hook"] == FOUNDER
+    assert data["caption"].splitlines()[0] == FOUNDER
+    assert (packs(host)[0].parent / "post-x.txt").read_text().splitlines()[0] == FOUNDER
+
+
+def test_picking_a_model_hook_records_its_source():
+    host = make_host(["feature", "x", "keep", "2"])
+    start(host)
+    assert pending(host)["hook"] == CLEAN["hooks"][0]
+    resume(host, "approve", "no")
+    assert pack_data(host)["hook_source"] == "model"
+    assert pack_data(host)["caption"].splitlines()[0] == CLEAN["hooks"][0]
+
+
+def test_without_a_detail_the_three_model_hooks_are_offered():
+    host = make_host(PHASE1)
+    start(host, args=f"{URL} custom themes for pet profile pages")
+    p = pending(host)
+    assert p["hooks"] == CLEAN["hooks"] and p["sources"] == ["model"] * 3
+    assert [c["label"] for c in hook_choices(host)] == CLEAN["hooks"]
+
+
+def test_a_hook_that_fails_with_the_body_is_never_offered():
+    host = make_host(PHASE1, llm=(STOCK_HOOK, STOCK_HOOK))
+    start(host, args=f"{URL} custom themes for pet profile pages")
+    labels = [c["label"] for c in hook_choices(host)]
+    assert STOCK_HOOK["hooks"][1] not in labels
+    assert labels == [CLEAN["hooks"][0], CLEAN["hooks"][2]]
+
+
+def test_founder_words_with_a_repeating_body_line_drop_that_line_and_pass():
+    host = make_host(PHASE1, llm=(REPEATS_DETAIL,))
+    reply = start(host)
+    p = pending(host)
+    text = wizard._Pending(p).text
+    assert text.splitlines()[0] == FOUNDER
+    assert sum(FOUNDER.rstrip(".").lower() in line.lower() for line in text.splitlines()) == 1
+    brief, brand = Brief(**p["brief"]), wizard._kit_from(p["brand"])
+    refs = wizard._Pending(p).refs
+    assert post_failures(text, brief, brand, refs) == []
+    assert text in reply and p["dropped"][0] and not any(p["dropped"][1:])
+    # the model hooks keep the founder's line in the body
+    model_post = p["posts"][1]
+    assert any(FOUNDER.rstrip(".").lower() in line.lower() for line in model_post.splitlines()[1:])
+
+
+def test_phase1_reply_and_pack_carry_the_checklist_of_the_post():
+    host = make_host(PHASE1)
+    reply = start(host)
+    pend = wizard._Pending(pending(host))
+    expected = checklist(pend.text, post_failures(pend.text, pend.brief, pend.brand, pend.refs), "x")
+    assert 0 < len(expected) <= 12
+    for line in expected:
+        assert sum(line.text in r for r in reply.splitlines()) == 1
+    resume(host, "approve", "no")
+    assert pack_data(host)["checks"] == [{"rules": list(c.rules), "ok": c.ok, "text": c.text} for c in expected]
+
+
+def test_a_private_product_link_is_flagged_without_a_redraft():
+    local = "http://127.0.0.1:8731/k3/"
+    reply_with_local = {**CLEAN, "caption": CLEAN["caption"].replace(URL, local)}
+    host = make_host(PHASE1, llm=(reply_with_local,))
+    start(host, args=f"{local} custom themes for pet profile pages -- {DETAIL}")
+    assert len(host.llm_calls) == 1
+    resume(host, "approve", "no")
+    failed = [c for c in pack_data(host)["checks"] if not c["ok"]]
+    assert [c["rules"] for c in failed] == [["private-link"]]
+    assert "127.0.0.1:8731" in failed[0]["text"]
+
+
+def test_caught_message_only_when_the_redraft_fixed_something():
+    clean = make_host(PHASE1)
+    start(clean)
+    fixed = make_host(PHASE1, llm=(STOCK_HOOK, CLEAN))
+    start(fixed)
+    unfixed = make_host(PHASE1, llm=(STOCK_HOOK, STOCK_HOOK))
+    start(unfixed)
+    assert len(fixed.llm_calls) == 2 and len(unfixed.llm_calls) == 2
+    extra = [t for t in fixed.said if t not in clean.said]
+    assert len(extra) == 1 and "check this out" in extra[0].lower()
+    assert [t for t in unfixed.said if t not in clean.said] == []
+    hook_q = questions(fixed, "1")[0]
+    assert fixed.events.index(("say", extra[0])) < fixed.events.index(("ask", hook_q))
+
+
+def test_change_hook_offers_the_same_options_with_the_founder_first():
+    host = make_host(PHASE1)
+    start(host)
+    first = hook_choices(host)
+    resume(host, "hook", "2")
+    assert hook_choices(host) == first
+    assert pending(host)["hook"] == CLEAN["hooks"][0]
+    resume(host, "approve", "no")
+    assert pack_data(host)["hook_source"] == "model"

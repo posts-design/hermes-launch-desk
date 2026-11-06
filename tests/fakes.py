@@ -22,9 +22,11 @@ class FakeHost:
         self.said: list[str] = []
         self.schedule_replies = list(schedule_replies or [])
         self.scheduled: list[dict] = []
+        self.events: list[tuple[str, str]] = []  # ("ask", question) and ("say", text), in order
 
     def choose(self, question: str, choices: list[dict]) -> str | None:
         self.asked.append((question, choices))
+        self.events.append(("ask", question))
         return self.choices.pop(0) if self.choices else None
 
     def complete_json(self, instructions: str, text: str, schema: dict) -> dict | str | None:
@@ -58,6 +60,7 @@ class FakeHost:
 
     def say(self, text: str) -> None:
         self.said.append(text)
+        self.events.append(("say", text))
 
     def media_path(self, src: Path, label: str) -> str:
         return str(src)

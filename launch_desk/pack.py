@@ -102,7 +102,10 @@ def write_pack(out_dir: Path, brief: Brief, brand: BrandKit, draft: Draft, hook:
                cards: dict[str, Path], refs: list[Reference],
                has_screenshot: bool = False, preview: Path | None = None,
                headline: str | None = None, more_refs: list[Reference] = (),
-               layout: str | None = None) -> Path:
+               layout: str | None = None, hook_source: str = "model",
+               checks: list[dict] = ()) -> Path:
+    """The pack folder. `checks` is the post's checklist ({"rules", "ok", "text"} per line);
+    `hook_source` says whose words the hook is: "founder" or "model"."""
     name = f"{date.today().isoformat()}-{_slug(brand.name, SLUG_WHAT_MAX)}-{_slug(brief.what, SLUG_WHAT_MAX)}"
     pack = _new_folder(Path(out_dir), name)
 
@@ -124,6 +127,9 @@ def write_pack(out_dir: Path, brief: Brief, brand: BrandKit, draft: Draft, hook:
     check = ["# Before you post", "", f"Open this link to post on X with the text filled in: {intent}", "",
              "Nothing was posted. You send it.", ""]
     check += [f"- [ ] {line}" for line in CHECKLIST]
+    if checks:
+        check += ["", "## Checked in code", ""]
+        check += [f"- {'✓' if c['ok'] else '✗'} {c['text']}" for c in checks]
     (pack / "checklist.md").write_text("\n".join(check) + "\n", encoding="utf-8")
 
     ref_lines = ["# References", "", "Posts that did well and shaped the draft.", ""]
@@ -138,6 +144,7 @@ def write_pack(out_dir: Path, brief: Brief, brand: BrandKit, draft: Draft, hook:
         "brand": {"name": brand.name, "url": brand.url, "bg": brand.bg, "ink": brand.ink,
                   "accent": brand.accent},
         "hook": hook,
+        "hook_source": hook_source,
         "hooks": list(draft.hooks),
         "caption": text,
         "card": card_contents(layout, has_screenshot),
@@ -146,6 +153,7 @@ def write_pack(out_dir: Path, brief: Brief, brand: BrandKit, draft: Draft, hook:
         "more_references": [{"id": r.id, "brand": r.brand, "url": r.url, "views": r.views,
                              "shape": shape_note(r.caption)} for r in more_refs],
         "intent_url": intent,
+        "checks": [dict(c) for c in checks],
         "files": files,
     }
     (pack / "pack.json").write_text(json.dumps(data, ensure_ascii=False, indent=2) + "\n", encoding="utf-8")

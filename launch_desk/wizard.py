@@ -26,15 +26,15 @@ from typing import Any, Callable
 
 from . import followup
 from .brand import NEUTRAL, PRESET_ACCENTS, fetch_brand, http_get
-from .draft import DraftError, draft_post, facts_text, unsupported_details
+from .draft import DraftError, checklist, draft_post, hook_options, post_failures
 from .hooks import pick_hook_shapes
 from .host import Host, SourceUnavailable
-from .models import BrandKit, Brief, Draft, Failure, Reference
+from .models import BrandKit, Brief, CheckLine, Draft, HookOption, Reference
 from .pack import post_text, write_pack
 from .references import (CATEGORY, McpSource, SamplePackSource, build_search_args, rank_references,
                          reference_line)
 from .render import choose_layout, render_card, render_feed_preview
-from .rules import check, relaxed_rules
+from .rules import relaxed_rules
 from .setup_check import check_setup
 
 logger = logging.getLogger(__name__)
@@ -89,6 +89,27 @@ ACCENT_NAMES = ("Blue", "Orange", "Green", "Pink", "Violet")
 CHECKIN_QUESTION = "Your launch pack is saved.\nCheck in with you tomorrow and in 3 days?"
 CHECKIN_CHOICES = [{"value": "yes", "label": "Yes"}, {"value": "no", "label": "No"}]
 CHECKIN_WHEN = ("tomorrow", "in 3 days")
+YOUR_WORDS = "(your words)"
+CHECKED = "Checked in code:"
+PASS_MARK, FAIL_MARK = "\u2713", "\u2717"
+# What the scroll test caught, as the founder reads it in "Caught in the first draft: ...".
+CAUGHT = {
+    "first-line-short": "a first line over 12 words",
+    "stock-phrase": "a stock phrase",
+    "template-opener": "the \"Your X should\" opener",
+    "em-dash": "too many em-dashes",
+    "emoji": "too many emoji",
+    "hashtags": "too many hashtags",
+    "placeholder": "a placeholder",
+    "link-first-line": "a link in the first line",
+    "private-link": "a private link",
+    "length": "a post too long for X",
+    "copied-run": "five words copied from a reference",
+    "repeats-first-line": "a line repeating the first",
+    "unsupported-detail": "details you didn't give",
+}
+_QUOTE = {"stock-phrase", "template-opener", "placeholder", "copied-run"}
+FOUND_MAX = 40
 NEXT_CHOICES = [
     {"value": "approve", "label": "Approve"},
     {"value": "hook", "label": "Change hook"},
@@ -319,21 +340,55 @@ def _refs_block(refs: list[Reference], used_pack: bool) -> str:
     return "\n".join(lines)
 
 
-def _pick_hook(host: Host, hooks: list[str], caption: str, refs: list[Reference], used_pack: bool) -> str:
+def _pick_hook(host: Host, options: list[HookOption], caption: str, refs: list[Reference],
+               used_pack: bool) -> int:
+    """Ask which hook leads; the index of the picked option. The founder's words are marked
+    as theirs (the mark is not part of the post), and a body line one option leaves out is named."""
     body = "\n".join(caption.strip().splitlines()[1:]).strip()
     question = _refs_block(refs, used_pack) + "\n\nPick the hook, the first line of your post."
     if body:
         question += "\nThe rest of the post:\n\n" + body
-    choices = [{"value": str(n), "label": h} for n, h in enumerate(hooks, 1)]
+    for n, o in enumerate(options, 1):
+        for line in o.dropped:
+            question += f"\n\nWith hook {n}, this line comes out, since it repeats those words: {line}"
+    choices = [{"value": str(n), "label": f"{o.text} {YOUR_WORDS}" if o.source == "founder" else o.text}
+               for n, o in enumerate(options, 1)]
     picked = _ask(host, question, choices)
-    return hooks[int(picked) - 1]
+    return int(picked) - 1
 
 
-def _flagged(text: str, brief: Brief, brand: BrandKit, refs: list[Reference]) -> list[Failure]:
-    """Scroll-test failures of the post as it will be sent (chosen hook in place)."""
-    found = check(text, network=brief.network, reference_captions=[r.caption for r in refs],
-                  voice_samples=brand.voice_samples)
-    return found + unsupported_details(text, facts_text(brief, brand))
+def caught_line(draft: Draft) -> str:
+    """One line naming what the redraft fixed, quoting the phrase where the rule knows it; "" when
+    there was no redraft or it fixed nothing."""
+    if not draft.redrafted:
+        return ""
+    still = {f.rule_id for f in draft.failures}
+    groups: dict[str, list[str]] = {}
+    for f in draft.first_failures:
+        base = f.rule_id.split(":", 1)[-1]
+        if f.rule_id in still or base not in CAUGHT:
+            continue
+        found = groups.setdefault(base, [])
+        if f.found:
+            shown = _cut(f.found, FOUND_MAX)
+            shown = f'"{shown}"' if base in _QUOTE else shown
+            if shown.lower() not in (x.lower() for x in found):
+                found.append(shown)
+    if not groups:
+        return ""
+    parts = [CAUGHT[b] + (f" ({', '.join(found)})" if found else "") for b, found in groups.items()]
+    joined = parts[0] if len(parts) == 1 else ", ".join(parts[:-1]) + " and " + parts[-1]
+    return f"Caught in the first draft: {joined}. Redrafted."
+
+
+def _say_caught(host: Host, draft: Draft) -> None:
+    line = caught_line(draft)
+    if line:
+        host.say(line)
+
+
+def _check_lines(checks: list[CheckLine]) -> list[str]:
+    return [CHECKED] + [f"{PASS_MARK if c.ok else FAIL_MARK} {c.text}" for c in checks]
 
 
 # ------------------------------------------------------------------ the pending draft
@@ -348,13 +403,42 @@ class _Pending:
         self.brand = _kit_from(data["brand"]) or NEUTRAL
         self.refs = [Reference(**r) for r in data["refs"]]
 
+    def options(self) -> list[HookOption]:
+        """The hooks offered, each with its post. A draft saved before hook options were kept
+        has only hooks: each is a model hook in place of the caption's first line."""
+        hooks, caption = self.data["hooks"], self.data["caption"]
+        posts = self.data.get("posts")
+        if not (isinstance(posts, list) and len(posts) == len(hooks)):
+            plain = Draft(tuple(hooks), caption, (), False)
+            return [HookOption(h, "model", post_text(plain, h)) for h in hooks]
+        sources = self.data.get("sources") or ["model"] * len(hooks)
+        dropped = self.data.get("dropped") or [[] for _ in hooks]
+        return [HookOption(h, s if s == "founder" else "model", p, tuple(d))
+                for h, s, p, d in zip(hooks, sources, posts, dropped)]
+
+    def set_options(self, options: list[HookOption], caption: str) -> None:
+        self.data.update(hooks=[o.text for o in options], sources=[o.source for o in options],
+                         posts=[o.post for o in options], dropped=[list(o.dropped) for o in options],
+                         caption=caption)
+
+    @property
+    def option(self) -> HookOption:
+        """The picked hook's option (the first, if the hook is not among them)."""
+        options = self.options()
+        return next((o for o in options if o.text == self.data["hook"]), options[0])
+
     @property
     def text(self) -> str:
-        return post_text(self.draft, self.data["hook"])
+        return self.option.post
 
     @property
     def draft(self) -> Draft:
-        return Draft(tuple(self.data["hooks"]), self.data["caption"], (), False)
+        """The draft as it will be posted: its caption is the picked option's post."""
+        return Draft(tuple(self.data["hooks"]), self.text, (), False)
+
+    def checks(self) -> list[CheckLine]:
+        text = self.text
+        return checklist(text, post_failures(text, self.brief, self.brand, self.refs), self.brief.network)
 
     def items(self) -> list[dict]:
         try:
@@ -366,9 +450,6 @@ class _Pending:
         self.refs = refs
         self.data["refs"] = [asdict(r) for r in refs]
         self.data["shown"] = sorted(set(self.data["shown"]) | {r.id for r in refs})
-
-    def set_draft(self, draft: Draft) -> None:
-        self.data["hooks"], self.data["caption"] = list(draft.hooks), draft.caption
 
     def render(self, host: Host) -> None:
         """Draw the card and the preview into a new round folder; drop the previous one."""
@@ -388,10 +469,7 @@ class _Pending:
     def reply(self, host: Host, notes: list[str]) -> str:
         lines = [*notes, ""] if notes else []
         text = self.text
-        lines += ["Your draft for X:", "", text, ""]
-        flagged = _flagged(text, self.brief, self.brand, self.refs)
-        if flagged:
-            lines.append("Still flagged: " + " ".join(f.message for f in flagged))
+        lines += ["Your draft for X:", "", text, "", *_check_lines(self.checks()), ""]
         lines += [f"MEDIA:{host.media_path(Path(self.data['preview']), 'preview')}",
                   f"MEDIA:{host.media_path(Path(self.data['card']), 'card')}", NEXT_STEP]
         return "\n".join(lines)
@@ -491,16 +569,19 @@ def _phase1(host: Host, args: Args, stored: BrandKit | None, get: Callable[[str]
     if kept:
         notes.append(f"Kept your style: your past posts use {' and '.join(kept)}, so the draft may too.")
     draft = draft_post(host, brief, brand, refs, pick_hook_shapes(brief.shipped, brief.detail))
-    hook = _pick_hook(host, list(draft.hooks), draft.caption, refs, bool(pack_note))
+    _say_caught(host, draft)
+    options = hook_options(draft, brief, brand, refs)
+    picked = _pick_hook(host, options, draft.caption, refs, bool(pack_note))
 
     (folder / "items.json").write_text(json.dumps(items, ensure_ascii=False), encoding="utf-8")
     pending = _Pending({
         "id": folder.name, "dir": str(folder), "created_at": _now(),
         "brief": asdict(brief), "brand": _kit_dict(brand), "brand_new": brand_new,
         "refs": [asdict(r) for r in refs], "shown": sorted(r.id for r in refs),
-        "used_pack": bool(pack_note), "hooks": list(draft.hooks), "hook": hook,
-        "caption": draft.caption, "screenshots": shots, "round": 0,
+        "used_pack": bool(pack_note), "hook": options[picked].text,
+        "screenshots": shots, "round": 0,
     })
+    pending.set_options(options, draft.caption)
     pending.render(host)
     host.state_set(PENDING_KEY, pending.data)
     return pending.reply(host, notes)
@@ -585,7 +666,8 @@ def _approve(host: Host, p: _Pending) -> str:
                       has_screenshot=bool(_screenshots(_used_screenshots(p.data))),
                       preview=Path(p.data["preview"]),
                       headline=card_headline(p.data["hook"], p.brief.what), more_refs=more,
-                      layout=p.data.get("layout"))
+                      layout=p.data.get("layout"), hook_source=p.option.source,
+                      checks=[asdict(c) for c in p.checks()])
     if p.data.get("brand_new"):
         _store_brand(host, p.brand)
     _drop_pending(host, p.data)
@@ -629,14 +711,17 @@ def _resume(host: Host, p: _Pending) -> str:
         if fresh:
             host.say("Drafting again with new references.")
             draft = draft_post(host, p.brief, p.brand, fresh, pick_hook_shapes(p.brief.shipped, p.brief.detail))
-            hook = _pick_hook(host, list(draft.hooks), draft.caption, fresh, p.data["used_pack"])
+            _say_caught(host, draft)
+            options = hook_options(draft, p.brief, p.brand, fresh)
+            picked = _pick_hook(host, options, draft.caption, fresh, p.data["used_pack"])
             p.set_refs(fresh)
-            p.set_draft(draft)
-            p.data["hook"] = hook
+            p.set_options(options, draft.caption)
+            p.data["hook"] = options[picked].text
         else:
             notes.append(NO_MORE_REFS)
     else:
-        p.data["hook"] = _pick_hook(host, p.data["hooks"], p.data["caption"], p.refs, p.data["used_pack"])
+        options = p.options()
+        p.data["hook"] = options[_pick_hook(host, options, p.data["caption"], p.refs, p.data["used_pack"])].text
     if not notes:
         p.render(host)
     host.state_set(PENDING_KEY, p.data)
