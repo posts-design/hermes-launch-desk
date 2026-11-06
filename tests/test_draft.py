@@ -37,7 +37,7 @@ USE = "Pick a theme and the whole page follows."
 CLEAN = {
     "use_case": USE,
     "hooks": ["Pet pages can wear your colours now.",
-              "Check this out: Biscuit's page is green.",
+              "Biscuit's page is green now.",
               "Your pet's page, your theme."],
     "caption": "Pet pages can wear your colours now.\n\nPick a theme in settings and the whole page follows.\n\nhttps://pawr.link",
 }
@@ -181,8 +181,9 @@ def test_prompt_carries_the_facts_and_references():
         assert value in whole
     for ref in REFS:
         assert ref.caption in whole
+    from launch_desk.draft import _SAME_AS_LISTED
     for phrase in STOCK_PHRASES:
-        assert phrase in whole
+        assert phrase in whole or phrase in _SAME_AS_LISTED
 
 
 def test_relaxed_rule_shortens_the_rules():
@@ -220,7 +221,7 @@ def test_plain_text_is_not_flagged(text):
 
 def test_unsupported_detail_triggers_redraft():
     invented = {**CLEAN, "caption": "Pet pages can wear your colours now.\n\nPick a theme and the whole page follows. Took a minute.\n\nhttps://pawr.link",
-                "hooks": [CLEAN["hooks"][0], "Check this out: one tap and Biscuit's page is green.",
+                "hooks": [CLEAN["hooks"][0], "One tap and Biscuit's page is green.",
                           CLEAN["hooks"][2]]}
     host, d = draft([invented, CLEAN])
     assert len(host.llm_calls) == 2
@@ -320,7 +321,7 @@ def test_prompt_asks_each_line_to_say_something_new():
 
 
 def test_restating_caption_triggers_redraft_naming_the_rule():
-    bad = {**CLEAN, "caption": "Check this out: your pet's page can now match your site.\n"
+    bad = {**CLEAN, "caption": "Your pet's page can now match your site.\n"
                               "Now your pet's page can match your own site.\n\n" + USE + "\n\nhttps://pawr.link"}
     host, d = draft([bad, CLEAN])
     assert len(host.llm_calls) == 2
@@ -379,7 +380,7 @@ def test_use_case_from_the_founder_detail_passes():
     brief = Brief("feature", "x", "custom themes for pet profile pages", "https://pawr.link",
                   detail="people kept asking to match their pet's page to their own site")
     reply = {"use_case": "Match your pet's page to your own site.",
-             "hooks": ["Pet pages take custom themes now.", "Check this out: pet pages take themes.",
+             "hooks": ["Pet pages take custom themes now.", "Pet pages take themes, finally.",
                        "People kept asking for this one."],
              "caption": "Pet pages take custom themes now.\n\nPeople kept asking to match their pet's page "
                         "to their own site. Now you can.\n\nhttps://pawr.link"}
@@ -435,16 +436,180 @@ def test_use_case_is_carried_at_forty_percent_of_its_words():
     assert use_case_carried("", "anything")
 
 
-@pytest.mark.parametrize("detail,shape_id", [("", "check-this-out"),
+@pytest.mark.parametrize("detail,shape_id", [("", "audience-call-out"),
                                              ("people kept asking to match their own site", "you-asked")])
 def test_prompt_carries_the_picked_hook_shapes(detail, shape_id):
     from launch_desk.hooks import HOOK_SHAPES
     brief = Brief("feature", "x", "custom themes for pet profile pages", "https://pawr.link", detail=detail)
     _, text = build_brief_prompt(brief, BRAND, REFS, pick_hook_shapes("feature", detail), set())
-    assert HOOK_SHAPES["reader-thought"].shape in text and HOOK_SHAPES[shape_id].shape in text
+    assert HOOK_SHAPES["bold-contrast"].shape in text and HOOK_SHAPES[shape_id].shape in text
 
 
 def test_redraft_prompt_shows_the_last_use_case():
     _, text = build_redraft_prompt(BRIEF, BRAND, REFS, SHAPES, set(), CLEAN["hooks"], CLEAN["caption"],
                                    [Failure("em-dash", "m", "f")], use_case=USE)
     assert USE in text
+
+
+# ------------------------------------------------------------------ hook 1 is the founder's words
+
+from launch_desk.draft import checklist, founder_hook, hook_options, post_failures  # noqa: E402
+from launch_desk.models import Draft  # noqa: E402
+
+LEAVES = "most of our support emails were blurry photos of sad leaves"
+LEAF_BRIEF = Brief("feature", "x", "photo diagnosis", "https://fernlight.app", detail=LEAVES)
+LEAF_BRAND = BrandKit("Fernlight", "https://fernlight.app", "Plant care for iPhone", "#fff", "#111", "#17a34a",
+                      None, None)
+LEAF_HOOKS = ("Snap the leaf and get the likely cause.", "Plant care that looks at the leaf.",
+              "Fernlight reads the leaf for you.")
+LEAF_CAPTION = ("Snap the leaf and get the likely cause.\n\nMost of our support emails were blurry photos of "
+                "sad leaves.\n\nNow the photo itself gets you an answer.\n\nhttps://fernlight.app")
+
+
+def leaf_draft(hooks=LEAF_HOOKS, caption=LEAF_CAPTION):
+    return Draft(tuple(hooks), caption, (), False, "Snap the leaf and get the likely cause.")
+
+
+def ids_of(text, brief=LEAF_BRIEF, brand=LEAF_BRAND, refs=REFS):
+    return {f.rule_id for f in post_failures(text, brief, brand, refs)}
+
+
+@pytest.mark.parametrize("detail,hook", [
+    (LEAVES, "Most of our support emails were blurry photos of sad leaves."),
+    ("  people kept asking for it!  ", "People kept asking for it!"),
+    ("is it finally here?", "Is it finally here?"),
+    ('we said "finally."', 'We said "finally."'),
+    ("We built it in a weekend", "We built it in a weekend."),
+])
+def test_founder_hook_is_the_detail_verbatim(detail, hook):
+    assert founder_hook(detail) == hook
+
+
+@pytest.mark.parametrize("detail", ["", "   "])
+def test_no_detail_no_founder_hook(detail):
+    assert founder_hook(detail) == ""
+
+
+def test_founder_words_are_option_one_and_model_hooks_fill_two_and_three():
+    opts = hook_options(leaf_draft(), LEAF_BRIEF, LEAF_BRAND, REFS)
+    assert [o.source for o in opts] == ["founder", "model", "model"]
+    assert opts[0].text == founder_hook(LEAVES)
+    assert [o.text for o in opts[1:]] == list(LEAF_HOOKS[:2])
+    for o in opts:
+        assert o.post.splitlines()[0] == o.text
+        assert ids_of(o.post) == set()
+
+
+def test_without_a_detail_the_three_model_hooks_stay():
+    brief = Brief("feature", "x", "photo diagnosis", "https://fernlight.app")
+    caption = LEAF_CAPTION.replace("Most of our support emails were blurry photos of sad leaves.\n\n", "")
+    opts = hook_options(leaf_draft(caption=caption), brief, LEAF_BRAND, REFS)
+    assert [o.source for o in opts] == ["model"] * 3 and [o.text for o in opts] == list(LEAF_HOOKS)
+
+
+@pytest.mark.parametrize("bad", ["Check this out: the leaf tells you why.",
+                                 "Your plant care should look at the leaf.",
+                                 "The likely cause, from a snap of the leaf, is what you get now.",  # repeats a body line
+                                 "Snap a leaf and get a fix in 3 seconds."])
+def test_a_model_hook_that_fails_with_the_body_is_not_offered(bad):
+    brief = Brief("feature", "x", "photo diagnosis", "https://fernlight.app")
+    caption = ("Fernlight reads the leaf for you.\n\nSnap the leaf and get the likely cause.\n\n"
+               "https://fernlight.app")
+    hooks = (bad, "Plant care that looks at the leaf.", "Fernlight reads the leaf for you.")
+    opts = hook_options(leaf_draft(hooks, caption), brief, LEAF_BRAND, REFS)
+    assert bad not in [o.text for o in opts]
+    assert [o.text for o in opts] == list(hooks[1:])
+    assert all(ids_of(o.post, brief) == set() for o in opts)
+
+
+def test_body_failures_do_not_filter_every_hook():
+    brief = Brief("feature", "x", "photo diagnosis", "http://127.0.0.1:8731/k3/")
+    caption = "Fernlight reads the leaf for you.\n\nNow the photo itself gets you an answer.\n\nhttp://127.0.0.1:8731/k3/"
+    opts = hook_options(leaf_draft(caption=caption), brief, LEAF_BRAND, REFS)
+    assert len(opts) == 3
+    assert all("private-link" in ids_of(o.post, brief) for o in opts)
+
+
+def test_founder_hook_with_a_repeating_body_line_drops_that_line_and_passes():
+    plain = Brief("feature", "x", "photo diagnosis", "https://fernlight.app", detail=LEAVES)
+    caption_hook_post = LEAF_CAPTION.replace(LEAF_CAPTION.splitlines()[0], founder_hook(LEAVES))
+    assert "repeats-first-line" in ids_of(caption_hook_post, plain)  # what the founder would have got
+    [founder, *models] = hook_options(leaf_draft(), plain, LEAF_BRAND, REFS)
+    assert ids_of(founder.post, plain) == set()
+    assert "sad leaves" not in "\n".join(founder.post.splitlines()[1:])
+    assert founder.dropped and "sad leaves" in founder.dropped[0]
+    assert "Now the photo itself gets you an answer." in founder.post and "https://fernlight.app" in founder.post
+    assert all("sad leaves" in m.post and not m.dropped for m in models)
+
+
+def test_a_dropped_line_keeps_its_link():
+    caption = ("Snap the leaf and get the likely cause.\n\nMost of our support emails were blurry photos of "
+               "sad leaves: https://fernlight.app")
+    [founder, *_] = hook_options(leaf_draft(caption=caption), LEAF_BRIEF, LEAF_BRAND, REFS)
+    assert founder.post.splitlines()[-1] == "https://fernlight.app"
+    assert ids_of(founder.post) == set()
+
+
+def test_founder_hook_is_offered_even_when_it_fails_a_rule():
+    long = "we answered every single one of those blurry leaf photos by hand for two whole years"
+    brief = Brief("feature", "x", "photo diagnosis", "https://fernlight.app", detail=long)
+    opts = hook_options(leaf_draft(), brief, LEAF_BRAND, REFS)
+    assert opts[0].source == "founder" and opts[0].text == founder_hook(long)
+    assert "first-line-short" in ids_of(opts[0].post, brief)
+
+
+def test_a_model_hook_equal_to_the_founder_words_is_not_repeated():
+    hooks = ("Most of our support emails were blurry photos of sad leaves", *LEAF_HOOKS[:2])
+    opts = hook_options(leaf_draft(hooks=hooks), LEAF_BRIEF, LEAF_BRAND, REFS)
+    assert [o.source for o in opts] == ["founder", "model", "model"]
+    assert [o.text for o in opts[1:]] == list(LEAF_HOOKS[:2])
+
+
+def test_when_no_model_hook_passes_and_no_detail_the_least_bad_is_offered():
+    brief = Brief("feature", "x", "photo diagnosis", "https://fernlight.app")
+    hooks = ("Your plant should check this out.", "Check this out: the leaf.", "Your leaf should say hello to you.")
+    opts = hook_options(leaf_draft(hooks, "Snap a leaf.\n\nhttps://fernlight.app"), brief, LEAF_BRAND, REFS)
+    assert [o.text for o in opts] == ["Check this out: the leaf."]
+
+
+def test_draft_keeps_the_first_drafts_failures_when_it_redrafts():
+    _, clean = draft([CLEAN])
+    assert clean.first_failures == ()
+    _, redone = draft([BAD, CLEAN])
+    assert redone.redrafted and {"em-dash", "hook1:stock-phrase"} <= {f.rule_id for f in redone.first_failures}
+    assert redone.failures == ()
+
+
+def test_a_private_product_link_is_not_sent_back_to_the_model():
+    brief = Brief("feature", "x", "custom themes for pet profile pages", "http://127.0.0.1:8731/k2/")
+    reply = {**CLEAN, "caption": CLEAN["caption"].replace("https://pawr.link", "http://127.0.0.1:8731/k2/")}
+    host = FakeHost(llm_replies=[reply])
+    d = draft_post(host, brief, BRAND, REFS, SHAPES)
+    assert len(host.llm_calls) == 1 and d.failures == ()
+    assert "private-link" in {f.rule_id for f in post_failures(d.caption, brief, BRAND, REFS)}
+
+
+# ------------------------------------------------------------------ the visible checklist
+
+@pytest.mark.parametrize("text", [
+    LEAF_CAPTION,
+    "Check this out: Your plant should — really — 🌿🌿 #a #b #c [link]\nhttps://fernlight.app",
+    "Your agent should pull launch posts.\n\nYour agent should pull launch posts, now.\n\nhttp://localhost:3000/",
+    "Leaves. " * 60 + "\nhttps://fernlight.app took 3 minutes",
+])
+def test_checklist_data_matches_the_checks(text):
+    failures = post_failures(text, LEAF_BRIEF, LEAF_BRAND, REFS)
+    lines = checklist(text, failures, "x")
+    assert len(lines) <= 12 and all(line.text for line in lines)
+    covered = [r for line in lines for r in line.rules]
+    assert sorted(covered) == sorted({r.id for r in RULES} | {"unsupported-detail"})
+    assert {r for line in lines if not line.ok for r in line.rules} >= {f.rule_id for f in failures}
+    for line in lines:
+        assert line.ok == (not set(line.rules) & {f.rule_id for f in failures})
+
+
+def test_checklist_quotes_what_it_caught():
+    text = "Check this out: leaves.\n\nhttp://127.0.0.1:8731/k3/"
+    failures = post_failures(text, LEAF_BRIEF, LEAF_BRAND, REFS)
+    bad = " ".join(line.text for line in checklist(text, failures, "x") if not line.ok)
+    assert "Check this out" in bad and "127.0.0.1:8731" in bad

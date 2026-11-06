@@ -50,6 +50,7 @@ class Failure:
     rule_id: str
     message: str
     fix: str
+    found: str = ""  # the offending text, where the rule knows it (a stock phrase, a private link)
 
 
 @dataclass(frozen=True)
@@ -59,3 +60,21 @@ class Draft:
     failures: tuple[Failure, ...]
     redrafted: bool
     use_case: str = ""  # one concrete use of what shipped, from the facts; the caption carries it
+    first_failures: tuple[Failure, ...] = ()  # the first draft's failures, when a redraft was asked for
+
+
+@dataclass(frozen=True)
+class HookOption:
+    """One hook offered to the founder, with the whole post it makes."""
+    text: str
+    source: Literal["founder", "model"]
+    post: str
+    dropped: tuple[str, ...] = ()  # body lines left out because they repeat this hook
+
+
+@dataclass(frozen=True)
+class CheckLine:
+    """One line of the visible checklist: the rules it covers, pass or fail, and the line."""
+    rules: tuple[str, ...]
+    ok: bool
+    text: str

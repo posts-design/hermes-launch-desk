@@ -155,17 +155,13 @@ def _cut(text: str, limit: int) -> str:
     return cut.rstrip(" ,;:-–—")
 
 
-_CARD_PREFIX = re.compile(r"^check this out:\s*", re.IGNORECASE)
-
-
 def _cap(text: str) -> str:
     return text[:1].upper() + text[1:]
 
 
 def card_headline(hook: str, what: str) -> str:
-    """The hook when it fits on the card (70 characters), else what shipped, cut at a word.
-    A leading "Check this out:" is for the feed, so the card leaves it out."""
-    hook = _CARD_PREFIX.sub("", " ".join(hook.split()))
+    """The hook when it fits on the card (70 characters), else what shipped, cut at a word."""
+    hook = " ".join(hook.split())
     return _cap(hook if hook and len(hook) <= HEADLINE_MAX else _cut(what, HEADLINE_MAX))
 
 

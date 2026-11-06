@@ -28,15 +28,15 @@ EM_DASH_MESSAGE = next(r.message for r in RULES if r.id == "em-dash")
 CLEAN = {
     "use_case": "Pick a theme and the whole page follows.",
     "hooks": ["Pet pages can wear your colours now.",
-              "Check this out: your pet's page in your colours.",
-              "Your pet's page, your theme."],
+              "Every link page looks alike. Yours can match your site.",
+              "Biscuit's page is green today."],
     "caption": "Pet pages can wear your colours now.\n\nPick a theme in settings and the whole page follows."
                "\n\nhttps://pawr.link",
 }
 OTHER = {
     "use_case": "Match the page to your own site.",
-    "hooks": ["Themes for pet pages are live.", "Check this out: pet pages match your site.",
-              "Match your pet's page to your site."],
+    "hooks": ["Themes for pet pages are live.", "Pet pages now wear your colours.",
+              "Biscuit's page is green today."],
     "caption": "Themes for pet pages are live.\n\nMatch the page to your own site.\n\nhttps://pawr.link",
 }
 PNG = io.BytesIO()
@@ -329,27 +329,8 @@ def test_long_hook_falls_back_to_what_for_card_headline(monkeypatch):
     assert seen == ["Custom themes for pet profile pages"]
 
 
-def test_card_drops_check_this_out_but_the_post_keeps_it(monkeypatch):
-    seen = []
-    real = wizard.render_card
-
-    def spy(brand, screenshot, headline, size, out, **kw):
-        seen.append(headline)
-        return real(brand, screenshot, headline, size, out, **kw)
-
-    monkeypatch.setattr(wizard, "render_card", spy)
-    host = make_host(["feature", "x", "keep", "2"])
-    start(host)
-    hook = CLEAN["hooks"][1]
-    assert seen == ["Your pet's page in your colours."]
-    assert pending(host)["hook"] == hook
-    resume(host, "approve")
-    assert json.loads(packs(host)[0].read_text())["caption"].splitlines()[0] == hook
-
-
 def test_card_headline_capitalises_the_fallback():
     assert wizard.card_headline("", "dark mode for pet pages") == "Dark mode for pet pages"
-    assert wizard.card_headline("check this out: dark mode.", "x") == "Dark mode."
 
 
 def test_unreadable_site_offers_the_five_presets_and_continues():

@@ -1,7 +1,9 @@
 """The scroll test: deterministic checks that reject AI-sounding launch copy."""
 from __future__ import annotations
 
+import ipaddress
 import re
+import urllib.parse
 from dataclasses import dataclass
 from typing import Callable, Sequence
 
@@ -22,6 +24,8 @@ RULES: tuple[Rule, ...] = (
          "Cut the first line to 12 words or fewer.", False),
     Rule("stock-phrase", "The post uses a stock launch phrase.",
          "Replace the stock phrase with a plain statement of what changed.", False),
+    Rule("template-opener", "The first line follows the \"Your X should\" template.",
+         "Open another way than \"Your X should\".", False),
     Rule("em-dash", "The post uses more than one em-dash.",
          "Use at most one em-dash; prefer a full stop or a comma.", True),
     Rule("emoji", "The post uses more than one emoji.",
@@ -32,6 +36,8 @@ RULES: tuple[Rule, ...] = (
          "Replace every placeholder with the real text, or remove it.", False),
     Rule("link-first-line", "The first line contains a link.",
          "Move the link out of the first line.", False),
+    Rule("private-link", "The post links to an address only you can open.",
+         "Use the public link people can open.", False),
     Rule("length", "The post is longer than 280 characters on X.",
          "Shorten the post to 280 characters or fewer, counting each link as 23.", False),
     Rule("copied-run", "The post copies a run of five words from a reference caption.",
@@ -45,6 +51,7 @@ STOCK_PHRASES: tuple[str, ...] = (
     "excited to announce", "thrilled to", "game-changer", "game changer",
     "seamless", "seamlessly", "revolutionize", "unlock", "supercharge",
     "in today's fast-paced", "glow-up", "level up", "elevate your",
+    "check this out", "say hello to", "meet the new",
 )
 
 _STOCK_RE = re.compile(
@@ -52,6 +59,13 @@ _STOCK_RE = re.compile(
     re.IGNORECASE,
 )
 _URL_RE = re.compile(r"https?://\S+", re.IGNORECASE)
+_TEMPLATE_RE = re.compile(r"^your \w+(?: \w+)? should\b", re.IGNORECASE)
+# A link written without its scheme: localhost, an IPv4 address or a .local name, then a port or a path.
+_BARE_HOST_RE = re.compile(
+    r"(?<![\w.@/:-])((?:localhost|[\w-]+(?:\.[\w-]+)*\.(?:localhost|local)|\d{1,3}(?:\.\d{1,3}){3})"
+    r"(?::\d+)?)(?=[/:\s]|$)(?:/\S*)?",
+    re.IGNORECASE,
+)
 _HASHTAG_RE = re.compile(r"(?<!\w)#\w+")
 _PLACEHOLDER_RE = re.compile(r"\[[^\]\n]*\]|\{[^}\n]*\}|\bTODO\b")
 _WORD_RE = re.compile(r"\w+(?:['’]\w+)*")
@@ -106,6 +120,19 @@ def _count_emoji(text: str) -> int:
     return len(_EMOJI_RE.findall(text))
 
 
+def first_line_words(text: str) -> int:
+    return _word_count(_first_line(text))
+
+
+def style_counts(text: str) -> tuple[int, int, int]:
+    """(em-dashes, emoji, hashtags) in the text."""
+    return text.count("—"), _count_emoji(text), len(_HASHTAG_RE.findall(text))
+
+
+def has_link(text: str) -> bool:
+    return bool(_URL_RE.search(text))
+
+
 def _bare_introducing(line: str) -> bool:
     if not re.match(r"introducing\b", line, re.IGNORECASE):
         return False
@@ -119,9 +146,54 @@ def _first_line_short(text: str) -> bool:
     return _word_count(_first_line(text)) > 12
 
 
-def _stock(text: str) -> bool:
+def _find_stock(text: str) -> str:
     text = text.replace("\u2019", "'")
-    return bool(_STOCK_RE.search(text)) or _bare_introducing(_first_line(text))
+    m = _STOCK_RE.search(text)
+    if m:
+        return " ".join(m.group(0).split())
+    first = _first_line(text)
+    return first if _bare_introducing(first) else ""
+
+
+def _stock(text: str) -> bool:
+    return bool(_find_stock(text))
+
+
+def _find_template(text: str) -> str:
+    m = _TEMPLATE_RE.match(_first_line(text))
+    return m.group(0) if m else ""
+
+
+def _private_host(host: str) -> bool:
+    """localhost, a loopback, private, link-local or unspecified address, or a .local name."""
+    host = host.lower().rstrip(".")
+    if host == "localhost" or host.endswith((".localhost", ".local")):
+        return True
+    try:
+        addr = ipaddress.ip_address(host.split("%", 1)[0])
+    except ValueError:
+        return False
+    return addr.is_loopback or addr.is_private or addr.is_link_local or addr.is_unspecified
+
+
+def _find_private_link(text: str) -> str:
+    """The first link (host and port, as written) that only the founder's machine or network can open."""
+    for m in _URL_RE.finditer(text):
+        try:
+            parts = urllib.parse.urlsplit(m.group(0).rstrip(".,;:!?)]}'\""))
+            host = parts.hostname or ""
+        except ValueError:
+            continue
+        if host and _private_host(host):
+            return parts.netloc
+    for m in _BARE_HOST_RE.finditer(_URL_RE.sub(" ", text)):
+        if _private_host(m.group(1).rsplit(":", 1)[0]):
+            return m.group(1)
+    return ""
+
+
+def is_private_link(url: str) -> bool:
+    return bool(_find_private_link(url or ""))
 
 
 def _em_dash(text: str) -> bool:
@@ -153,27 +225,36 @@ def _content_words(line: str) -> set[str]:
     return out
 
 
-def _repeats_first(text: str) -> bool:
+def repeating_lines(text: str) -> list[int]:
+    """Indexes of the lines after the first that repeat most of the first line (60% of its
+    content words); none when the first line has fewer than three."""
     lines = [ln.strip() for ln in text.split("\n")]
     first = _content_words(lines[0]) if lines else set()
     if len(first) < 3:
-        return False
-    for ln in lines[1:]:
+        return []
+    found = []
+    for i, ln in enumerate(lines[1:], 1):
         if not ln or _URL_RE.fullmatch(ln):
             continue
         if len(first & _content_words(_URL_RE.sub(" ", ln))) >= 0.6 * len(first):
-            return True
-    return False
+            found.append(i)
+    return found
+
+
+def _repeats_first(text: str) -> bool:
+    return bool(repeating_lines(text))
 
 
 _PREDICATES: dict[str, Callable[[str], bool]] = {
     "first-line-short": _first_line_short,
     "stock-phrase": _stock,
+    "template-opener": lambda t: bool(_find_template(t)),
     "em-dash": _em_dash,
     "emoji": _emoji,
     "hashtags": _hashtags,
     "placeholder": _placeholder,
     "link-first-line": _link_first,
+    "private-link": lambda t: bool(_find_private_link(t)),
     "repeats-first-line": _repeats_first,
 }
 
@@ -190,32 +271,55 @@ def relaxed_rules(voice_samples: Sequence[str]) -> set[str]:
     return relaxed
 
 
-def _copied_run(text: str, references: Sequence[str]) -> bool:
+def _find_placeholder(text: str) -> str:
+    m = _PLACEHOLDER_RE.search(text)
+    return m.group(0) if m else ""
+
+
+def _find_copied_run(text: str, references: Sequence[str]) -> str:
+    """The first five-word run the text shares with a reference caption, lowercased; "" if none."""
     words = _words(text)
     if len(words) < 5:
-        return False
+        return ""
     runs = {tuple(words[i:i + 5]) for i in range(len(words) - 4)}
     for ref in references:
         rw = _words(ref)
         for i in range(len(rw) - 4):
             if tuple(rw[i:i + 5]) in runs:
-                return True
-    return False
+                return " ".join(rw[i:i + 5])
+    return ""
+
+
+def _copied_run(text: str, references: Sequence[str]) -> bool:
+    return bool(_find_copied_run(text, references))
+
+
+# Rules that can name what they caught; the text goes in Failure.found.
+_FINDERS: dict[str, Callable[[str], str]] = {
+    "stock-phrase": _find_stock,
+    "template-opener": _find_template,
+    "private-link": _find_private_link,
+    "placeholder": _find_placeholder,
+}
 
 
 def check(text: str, *, network: str, reference_captions: Sequence[str] = (),
           voice_samples: Sequence[str] = ()) -> list[Failure]:
     relaxed = relaxed_rules(voice_samples)
-    failed: list[str] = []
+    failed: list[Failure] = []
     for rule in RULES:
         if rule.id in relaxed:
             continue
+        found = ""
         if rule.id == "length":
             hit = network == "x" and x_length(text) > 280
         elif rule.id == "copied-run":
-            hit = _copied_run(text, reference_captions)
+            found = _find_copied_run(text, reference_captions)
+            hit = bool(found)
         else:
             hit = _PREDICATES[rule.id](text)
+            if hit and rule.id in _FINDERS:
+                found = _FINDERS[rule.id](text)
         if hit:
-            failed.append(rule.id)
-    return [Failure(i, _RULE_BY_ID[i].message, _RULE_BY_ID[i].fix) for i in failed]
+            failed.append(Failure(rule.id, rule.message, rule.fix, found))
+    return failed

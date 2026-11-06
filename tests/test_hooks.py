@@ -9,17 +9,30 @@ KINDS = ("feature", "product", "rebrand", "partnership")
 ASKED = "people kept asking to match their pet's page to their own site"
 
 
-def test_eight_shapes_with_matching_ids_and_no_extra_fields():
-    assert len(HOOK_SHAPES) == 8
+def test_six_shapes_with_matching_ids_and_no_extra_fields():
+    assert len(HOOK_SHAPES) == 6
     assert all(k == s.id for k, s in HOOK_SHAPES.items())
     assert [f.name for f in fields(HookShape)] == ["id", "title", "when", "shape"]
     assert all(s.title and s.when and s.shape for s in HOOK_SHAPES.values())
-    assert {"reader-thought", "you-asked"} <= set(HOOK_SHAPES)
+    assert "you-asked" in HOOK_SHAPES
 
 
-def test_new_shapes_are_fill_in_shapes():
-    for key in ("reader-thought", "you-asked"):
-        assert "[" in HOOK_SHAPES[key].shape and "]" in HOOK_SHAPES[key].shape
+def test_the_template_shapes_are_gone():
+    assert not {"reader-thought", "check-this-out"} & set(HOOK_SHAPES)
+    for kind in KINDS:
+        for detail in ("", ASKED):
+            assert not {"reader-thought", "check-this-out"} & {s.id for s in pick_hook_shapes(kind, detail)}
+
+
+def test_no_shape_is_a_template_or_stock_opener():
+    from launch_desk.rules import check
+    for s in HOOK_SHAPES.values():
+        ids = {f.rule_id for f in check(s.shape, network="x")}
+        assert not {"template-opener", "stock-phrase"} & ids
+
+
+def test_you_asked_is_a_fill_in_shape():
+    assert "[" in HOOK_SHAPES["you-asked"].shape and "]" in HOOK_SHAPES["you-asked"].shape
 
 
 @pytest.mark.parametrize("detail", ["", ASKED])
@@ -35,19 +48,19 @@ def test_unknown_kind_falls_back_to_feature(detail):
     assert pick_hook_shapes("nonsense", detail) == pick_hook_shapes("feature", detail)
 
 
-def test_feature_without_detail_uses_reader_thought_and_check_this_out():
-    assert [s.id for s in pick_hook_shapes("feature")] == ["reader-thought", "check-this-out"]
+def test_feature_without_detail_uses_bold_contrast_and_audience_call_out():
+    assert [s.id for s in pick_hook_shapes("feature")] == ["bold-contrast", "audience-call-out"]
 
 
 @pytest.mark.parametrize("detail", [ASKED, "Users ASKED for it", "you can ask now", "a top request",
                                     "it was requested twice", "everyone Wanted this"])
 def test_feature_with_an_asking_detail_uses_you_asked(detail):
-    assert [s.id for s in pick_hook_shapes("feature", detail)] == ["reader-thought", "you-asked"]
+    assert [s.id for s in pick_hook_shapes("feature", detail)] == ["bold-contrast", "you-asked"]
 
 
 @pytest.mark.parametrize("detail", ["built it over a weekend", "a task runner", "unrequested polish", "I want it"])
-def test_feature_with_another_detail_keeps_check_this_out(detail):
-    assert [s.id for s in pick_hook_shapes("feature", detail)] == ["reader-thought", "check-this-out"]
+def test_feature_with_another_detail_keeps_audience_call_out(detail):
+    assert [s.id for s in pick_hook_shapes("feature", detail)] == ["bold-contrast", "audience-call-out"]
 
 
 @pytest.mark.parametrize("kind,ids", [("product", ["identity-news", "bold-contrast"]),

@@ -1,4 +1,4 @@
-"""The eight hook shapes and which two to use for each kind of launch."""
+"""The six hook shapes and which two to use for each kind of launch."""
 from __future__ import annotations
 
 import re
@@ -20,15 +20,9 @@ HOOK_SHAPES: dict[str, HookShape] = {
         HookShape("demo-promise", "A constraint stated up front",
                   "The product acts live and the constraint is surprising.",
                   "Watch me [do the task] with [the constraint: no hands, one prompt, no cuts]."),
-        HookShape("check-this-out", "The raw discovery",
-                  "A real 'look at this' moment between teammates, recorded as it happens or staged to feel that way.",
-                  "Check this out: [the surprising thing it just did]."),
         HookShape("bold-contrast", "A claim against the usual way",
                   "A crowded category where your difference is clear.",
                   "Every [category] does [the usual way]. We built [the different way], so [the benefit]."),
-        HookShape("reader-thought", "What the reader gets",
-                  "A feature someone can picture using; keep the founder's detail for the body.",
-                  "Your [thing] should [the benefit of what shipped]."),
         HookShape("you-asked", "You asked, it's here",
                   "Only when the founder's detail says people asked for it or requested it.",
                   "You asked for [the thing]. It's here."),
@@ -36,7 +30,7 @@ HOOK_SHAPES: dict[str, HookShape] = {
 }
 
 _BY_KIND: dict[str, tuple[str, str]] = {
-    "feature": ("reader-thought", "check-this-out"),
+    "feature": ("bold-contrast", "audience-call-out"),
     "product": ("identity-news", "bold-contrast"),
     "rebrand": ("time-jump", "bold-contrast"),
     "partnership": ("identity-news", "audience-call-out"),
@@ -49,7 +43,7 @@ _ASKED_RE = re.compile(r"\b(?:ask(?:s|ed|ing)?|request(?:s|ed)?|wanted)\b", re.I
 
 def pick_hook_shapes(shipped: str, detail: str = "") -> list[HookShape]:
     """Two hook shapes for a kind of launch; unknown kinds use the feature pair. A feature
-    whose detail says people asked for it gets you-asked in place of check-this-out."""
+    whose detail says people asked for it gets you-asked in place of audience-call-out."""
     kind = shipped if shipped in _BY_KIND else "feature"
     first, second = _BY_KIND[kind]
     if kind == "feature" and _ASKED_RE.search(detail or ""):

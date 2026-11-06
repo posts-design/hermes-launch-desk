@@ -125,3 +125,70 @@ def test_short_first_line_never_repeats():
 
 def test_repeats_first_line_is_not_relaxable():
     assert "repeats-first-line" in ids(REPEAT, voice_samples=[REPEAT])
+
+
+# ------------------------------------------------------------------ template opener
+
+import pytest  # noqa: E402
+
+from launch_desk.rules import RULES, STOCK_PHRASES, repeating_lines  # noqa: E402
+
+
+@pytest.mark.parametrize("first", ["Your agent should pull real launch posts.",
+                                   "your focus sessions should sit next to meetings.",
+                                   "YOUR sad leaf SHOULD get a straight answer."])
+def test_your_x_should_opener_fails(first):
+    assert "template-opener" in ids(first + "\nMore here.")
+
+
+@pytest.mark.parametrize("text", ["Your agent can now pull real launch posts.",
+                                  "Pet pages take themes now.\nYour page should match your site.",
+                                  "Your very own big page should load."])
+def test_other_openers_pass_the_template_rule(text):
+    assert "template-opener" not in ids(text)
+
+
+@pytest.mark.parametrize("phrase", ["Check this out: themes.", "Say hello to themes.", "Meet the new pet page."])
+def test_new_stock_phrases_fail(phrase):
+    assert "stock-phrase" in ids(phrase)
+
+
+def test_stock_phrase_failure_quotes_the_phrase():
+    [f] = [f for f in check("Pet pages, check this OUT: themes.", network="x") if f.rule_id == "stock-phrase"]
+    assert f.found.lower() == "check this out"
+
+
+# ------------------------------------------------------------------ private links
+
+@pytest.mark.parametrize("link", [
+    "http://127.0.0.1:8731/k3/", "http://localhost:3000/", "https://app.localhost/x",
+    "http://10.1.2.3/", "http://172.16.0.1/", "http://172.31.255.1/a", "http://192.168.1.5:8080",
+    "http://169.254.10.20/", "http://[::1]:8080/", "http://[fe80::1]/", "https://printer.local/status",
+    "http://0.0.0.0:8000/",
+])
+def test_private_links_fail(link):
+    failures = [f for f in check(f"Themes are live.\nTry it: {link}", network="x") if f.rule_id == "private-link"]
+    assert len(failures) == 1 and failures[0].found and failures[0].found in link
+
+
+def test_bare_loopback_address_fails():
+    assert "private-link" in ids("Themes are live.\nTry it: 127.0.0.1:8731/k3/")
+
+
+@pytest.mark.parametrize("link", ["https://posts.design/mcp", "http://8.8.8.8/", "http://172.32.0.1/",
+                                  "https://localhost.example.com/", "https://notlocal.dev/",
+                                  "https://local.example/"])
+def test_public_links_pass(link):
+    assert "private-link" not in ids(f"Themes are live.\n{link}")
+
+
+def test_new_rules_are_strict():
+    by_id = {r.id: r for r in RULES}
+    assert not by_id["template-opener"].relaxable and not by_id["private-link"].relaxable
+    assert {"check this out", "say hello to", "meet the new"} <= set(STOCK_PHRASES)
+
+
+def test_repeating_lines_names_the_lines_that_restate_the_first():
+    text = "Most support emails were blurry leaf photos.\n\nNow snap a leaf.\nOur support emails were blurry leaf photos."
+    assert repeating_lines(text) == [3]
+    assert repeating_lines("Short.\nShort.") == []
