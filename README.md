@@ -71,7 +71,7 @@ Sent to posts.design, through your own account:
 - A short keyword phrase from it, a fixed phrase for the kind of launch, and a category.
 - An access check (`get_my_access`) on each run.
 
-Not sent to posts.design: the detail after ` -- `, your site link, the draft, your brand kit and your screenshot.
+Not sent to posts.design: the detail after ` -- `, your site link, the draft, your brand kit and your screenshots.
 
 Sent to the model Hermes is configured with, which may be a hosted provider: the brief (what you shipped and your detail), your product name, tagline and link, the reference captions, and your voice samples if any. A check-in also sends it the pack it reads: the post, its X link, the unused hooks, your detail, the brand, link and shape of references you did not see, and any sign-ups you recorded.
 
@@ -85,9 +85,9 @@ Stored on your machine, in the plugin's data folder and Hermes plugin state:
 - Copies of the card and preview in Hermes' image cache, so chat apps can show them. Hermes clears them after about a day.
 - The paths of up to two attached screenshots, until you approve or discard the draft that used them. The files are not copied; the screenshot tool reads each image where it is and leaves it there.
 
-Scheduled, only if you say Yes after approving: two check-ins on Hermes' own scheduler, a day and three days later. They run as ordinary Hermes cron jobs, post to the same chat, and are listed by `hermes cron list`. Nothing else is scheduled.
+Scheduled, only if you say Yes after approving: two check-ins on Hermes' own scheduler, a day and three days later. They run as ordinary Hermes cron jobs with the plugin's own tools and no MCP server, post to the same chat, and are listed by `hermes cron list`. Nothing else is scheduled.
 
-Nothing is posted or sent to any social network.
+Nothing is posted or sent to any social network. No credentials are read, no shell commands are run, no telemetry.
 
 ## Credits
 
