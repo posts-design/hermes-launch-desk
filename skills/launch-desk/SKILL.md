@@ -18,7 +18,8 @@ Tell them to send:
 For example: `/launch https://yoursite.com dark mode for the editor -- people kept asking for it`
 
 - Add the site link the first time. It is remembered after that.
-- The part after ` -- ` is one true detail, like who asked for it or what it replaced. The draft treats it as a fact and uses nothing it cannot find. Ask for one if they have none; a real detail is the best thing a launch post can have.
+- The part after ` -- ` is one true detail, like who asked for it or what it replaced. The draft treats it as a fact and uses nothing it cannot find. Ask for one in the founder's own words if they have none; a real detail is the best thing a launch post can have.
+- Hook 1 is always that detail, word for word, marked "(your words)". The model's hooks come after it, and only ones that pass the checks with the rest of the post are offered. Encourage the founder to lead with their own line.
 - `/launch` always takes two steps. The first run ends with the draft, the card and a feed preview. Sending `/launch` again lets them approve, change the hook, swap references or discard.
 - `/launch brand <url>` reads the site's colours and logo again. `/launch help` shows the usage.
 - `/launch voice: <a past post>` keeps one of the founder's own posts as a voice sample (the last three are kept); drafts follow its style. `/launch voice: clear` forgets them. The colon is required; `/launch voice mode ...` is a normal launch. It needs a saved brand first: `/launch brand <url>`, or one approved launch.
@@ -54,13 +55,15 @@ To cancel a check-in: in the terminal chat, `/cron remove <job id>`. In a chat a
 Use this to steer the founder even when they are not running `/launch`.
 
 1. Pick one viewer: the person who has the problem this solves. Write for them, not for everyone.
-2. Hook first. The first line says what changed, plainly, in at most 12 words. No link in it.
-3. No hype words: no "excited to announce", "game-changer", "seamless", "unlock", "supercharge". Say what it does.
+2. Hook first, in the founder's own words when they have a line. The first line says what changed, plainly, in at most 12 words. No link in it, and no "Your X should" template.
+3. No hype words: no "excited to announce", "check this out", "game-changer", "seamless", "unlock", "supercharge". Say what it does.
 4. Every detail must be true. No invented numbers, times or effort ("took a minute", "in seconds") unless the founder said so. Read the draft once and cut anything untrue.
 5. The image comes from a real screenshot of the product, in the product's own colours. The card should carry the hook even with the caption covered.
 6. Judge the launch by sign-ups or downloads per channel, using a tracked link, and by who comes back. Not by views.
 
-The scroll test checks a draft for: a first line over 12 words, stock phrases, more than one em-dash, more than one emoji, more than two hashtags, placeholders like [link], a link in the first line, X length over 280 (each link counts as 23), a copied run of five words from a reference, and details that are not in the facts.
+The scroll test checks a draft for: a first line over 12 words, stock phrases, a "Your X should" opener, more than one em-dash, more than one emoji, more than two hashtags, placeholders like [link], a link in the first line, a link only the founder's machine can open (localhost, a private address, a .local name), X length over 280 (each link counts as 23), a copied run of five words from a reference, a line that repeats the first, and details that are not in the facts.
+
+The checks are shown, not hidden. When the first draft fails and is redrafted, one line says what was caught ("Caught in the first draft: ..."). The draft comes with a checklist of the post as it will be posted, one line per check with a pass or fail mark, and the pack keeps it. If the founder asks why a line was flagged, point to that checklist; do not argue with it or rewrite the post in chat.
 
 ## If posts.design is not set up
 

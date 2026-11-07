@@ -3,7 +3,7 @@ title: Launch Desk
 repo: https://github.com/posts-design/hermes-launch-desk
 sha: REPLACE_WITH_SHA
 subdir: ""
-description: "Tell it what you just shipped and /launch drafts a post for X from three real launch posts that worked, checks it in code, and composes a share card from your own screenshots, colours and logo. You approve a preview first, then get the text, the card and a link that opens X with the post filled in. Disclosure — one posts.design search per run through your own posts MCP server, a fetch of your product site, brand kit and packs stored locally, two check-ins scheduled only if you say Yes, and nothing is ever posted; see the README for the full list."
+description: "Tell it what you just shipped and /launch drafts a post for X from three real launch posts that worked, checks it in code, and composes a share card from your own screenshots, colours and logo. You approve a preview first, then get the text, the card and a link that opens X with the post filled in. Disclosure: one posts.design search per run through your own posts MCP server, a fetch of your product site, brand kit and packs stored locally, two check-ins scheduled only if you say Yes, and nothing is ever posted; see the README for the full list."
 maintainer: posts-design
 tier: community
 category: tools
