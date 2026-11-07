@@ -29,14 +29,14 @@ CLEAN = {
     "use_case": "Pick a theme and the whole page follows.",
     "hooks": ["Pet pages can wear your colours now.",
               "Every link page looks alike. Yours can match your site.",
-              "Biscuit's page is green today."],
+              "Biscuit's page is green now."],
     "caption": "Pet pages can wear your colours now.\n\nPick a theme in settings and the whole page follows."
                "\n\nhttps://pawr.link",
 }
 OTHER = {
     "use_case": "Match the page to your own site.",
     "hooks": ["Themes for pet pages are live.", "Pet pages now wear your colours.",
-              "Biscuit's page is green today."],
+              "Biscuit's page is green now."],
     "caption": "Themes for pet pages are live.\n\nMatch the page to your own site.\n\nhttps://pawr.link",
 }
 PNG = io.BytesIO()
@@ -1245,7 +1245,7 @@ def test_caught_line_quotes_each_invented_detail_whole():
 
 def test_founder_words_replacing_the_only_line_that_says_what_shipped_fail_says_what_shipped():
     first_only = {"use_case": "Custom themes for pet pages.",
-                  "hooks": ["Custom themes for pet pages are live.", "Every pet page looked alike until today.",
+                  "hooks": ["Custom themes for pet pages are live.", "Every pet page looked alike until now.",
                             "Are you a pet owner? Stop settling."],
                   "caption": "Custom themes for pet pages are live.\n\nA small thing, but it makes the page feel "
                              "like yours.\n\nhttps://pawr.link"}

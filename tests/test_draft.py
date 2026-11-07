@@ -213,7 +213,7 @@ def test_number_in_facts_is_allowed():
     assert unsupported_details("Now 1,300 posts.", facts) != []
 
 
-@pytest.mark.parametrize("text", ["Small one: themes are here.", "Pick one.", "Live today at https://pawr.link/p/2024",
+@pytest.mark.parametrize("text", ["Small one: themes are here.", "Pick one.", "Live at https://pawr.link/p/2024",
                                   "Your pet's page, your colours."])
 def test_plain_text_is_not_flagged(text):
     assert unsupported_details(text, FACTS) == []
@@ -455,7 +455,7 @@ def test_redraft_prompt_shows_the_last_use_case():
 
 # ------------------------------------------------------------------ hook 1 is the founder's words
 
-from launch_desk.draft import checklist, founder_hook, hook_options, post_failures  # noqa: E402
+from launch_desk.draft import checklist, founder_hook, hook_options, post_failures, site_details  # noqa: E402
 from launch_desk.models import Draft  # noqa: E402
 
 LEAVES = "most of our support emails were blurry photos of sad leaves"
@@ -693,3 +693,50 @@ def test_we_built_covers_i_curly_apostrophes_and_launching(hook):
     from launch_desk.draft import hook_shape
     assert hook_shape(hook) == "we-built"
     assert hook_shape("Pet pages built for you.") == ""
+
+
+# ------------------------------------------------------------------ counted claims (Task 22)
+
+K3_BRIEF = Brief("feature", "x", "photo diagnosis: snap a leaf, get what is wrong and what to do",
+                 "https://fernlight.app", detail="most of our support emails were blurry photos of sad leaves")
+K3_BRAND = BrandKit("Fernlight", "https://fernlight.app",
+                    "Fernlight is the friendly plant-care app for iPhone.", "#fff", "#111", "#17a34a", None, None)
+THREE_TODAY = "You get three things to do today."
+
+
+def test_three_things_to_do_today_fails_when_the_facts_do_not_say_it():
+    [f] = unsupported_details(THREE_TODAY, facts_text(K3_BRIEF, K3_BRAND))
+    assert set(f.found.split(", ")) == {"three", "today"}
+
+
+@pytest.mark.parametrize("where", ["detail", "tagline", "digits"])
+def test_three_things_to_do_today_passes_when_the_facts_say_it(where):
+    from dataclasses import replace
+    brief, brand = K3_BRIEF, K3_BRAND
+    if where == "detail":
+        brief = replace(brief, detail="you get three things to do today")
+    elif where == "tagline":
+        brand = replace(brand, tagline="Photo diagnosis: the likely cause and three things to do today.")
+    else:
+        brief = replace(brief, detail="3 things to do, today")
+    assert unsupported_details(THREE_TODAY, facts_text(brief, brand)) == []
+
+
+@pytest.mark.parametrize("text", ["Live today.", "Ready tonight.", "Shipping this week.", "Check it every day.",
+                                  "Half the steps are gone.", "Done in minutes.", "Hundreds of themes."])
+def test_time_and_count_claims_are_details(text):
+    assert [f.rule_id for f in unsupported_details(text, FACTS)] == ["unsupported-detail"]
+
+
+def test_checklist_says_which_details_came_from_the_site():
+    from dataclasses import replace
+    brand = replace(K3_BRAND, tagline="Photo diagnosis: the likely cause and three things to do today.")
+    text = "Most of our support emails were blurry photos of sad leaves.\n\n" + THREE_TODAY + "\n\nhttps://fernlight.app"
+    fails = post_failures(text, K3_BRIEF, brand, REFS)
+    assert "unsupported-detail" not in {f.rule_id for f in fails}
+    [line] = [c for c in checklist(text, fails, "x", from_site=site_details(text, K3_BRIEF, brand))
+              if "unsupported-detail" in c.rules]
+    assert line.ok and "three" in line.text and "today" in line.text
+    [plain] = [c for c in checklist(text, fails, "x") if "unsupported-detail" in c.rules]
+    assert "three" not in plain.text
+    assert site_details(text, replace(K3_BRIEF, detail="three things today"), brand) == []

@@ -26,7 +26,8 @@ from typing import Any, Callable
 
 from . import followup
 from .brand import NEUTRAL, PRESET_ACCENTS, fetch_brand, font_face, http_get
-from .draft import UNSUPPORTED, DraftError, checklist, draft_post, hook_options, post_failures, quote_phrases
+from .draft import (UNSUPPORTED, DraftError, checklist, draft_post, hook_options, post_failures, quote_phrases,
+                    site_details)
 from .hooks import pick_hook_shapes
 from .host import Host, SourceUnavailable
 from .models import BrandKit, Brief, CheckLine, Draft, HookOption, Reference
@@ -493,7 +494,8 @@ class _Pending:
     def checks(self) -> list[CheckLine]:
         text = self.text
         return checklist(text, post_failures(text, self.brief, self.brand, self.refs), self.brief.network,
-                         use_case=str(self.data.get("use_case") or "") if self.option.source == "founder" else "")
+                         use_case=str(self.data.get("use_case") or "") if self.option.source == "founder" else "",
+                         from_site=site_details(text, self.brief, self.brand))
 
     def items(self) -> list[dict]:
         try:

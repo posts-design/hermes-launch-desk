@@ -75,19 +75,25 @@ USE_CASE_MISSING = "use-case-missing"
 USE_CASE_CHARS = 140
 _CARRIED = 0.4  # share of the use case's words the caption must contain
 
-# Longest first so "one tap" wins over "one". A bare "one" counts only when a word
-# follows it ("one link"), so "Small one:" or "pick one." pass.
+# Longest first so "one tap" wins over "one". A bare "one" or "half" counts only when a word
+# follows it ("one link", "half the steps"), so "Small one:" or "pick one." pass.
 _DETAIL_RE = re.compile(
     r"(?<!\w)(?:"
-    r"one tap|one click|in seconds|no hands|instantly"
+    r"one tap|one click|in seconds|in minutes|no hands|instantly"
+    r"|today|tonight|this week|every day"
     r"|(?:minute|second|hour|day|week|month|year)s?"
     r"|a dozen|dozens?|hundreds?|thousands?|millions?|billions?"
     r"|two|three|four|five|six|seven|eight|nine|ten|eleven|twelve"
-    r"|one(?=\s+[a-z])"
+    r"|(?:one|half)(?=\s+[a-z])"
     r"|\d+(?:[.,:]\d+)*"
     r")(?!\w)",
     re.IGNORECASE,
 )
+_NUMBER_WORDS = ("one", "two", "three", "four", "five", "six", "seven", "eight", "nine", "ten",
+                 "eleven", "twelve")
+# A number in the facts counts in either form: "three" or "3".
+_SAME_NUMBER = {**{w: str(n) for n, w in enumerate(_NUMBER_WORDS, 1)},
+                **{str(n): w for n, w in enumerate(_NUMBER_WORDS, 1)}}
 _URL_RE = re.compile(r"https?://\S+", re.IGNORECASE)
 
 
@@ -101,7 +107,18 @@ class DraftError(Exception):
 
 def _in_facts(phrase: str, facts: str) -> bool:
     forms = {phrase, phrase[:-1]} if phrase.endswith("s") and len(phrase) > 2 else {phrase}
+    if phrase in _SAME_NUMBER:
+        forms.add(_SAME_NUMBER[phrase])
     return any(re.search(r"(?<!\w)" + re.escape(f) + r"(?!\w)", facts) for f in forms)
+
+
+def _details(text: str) -> list[str]:
+    """The number, time and effort phrases in the text, lowercased, in order, once each; links ignored."""
+    found: list[str] = []
+    for m in _DETAIL_RE.finditer(_URL_RE.sub(" ", text or "")):
+        if m.group(0).lower() not in found:
+            found.append(m.group(0).lower())
+    return found
 
 
 def unsupported_details(text: str, facts: str) -> list[Failure]:
@@ -110,11 +127,7 @@ def unsupported_details(text: str, facts: str) -> list[Failure]:
     (case-insensitive); [] otherwise. Links are ignored. The message and the fix
     list the phrases (at most five)."""
     facts_l = (facts or "").lower()
-    found: list[str] = []
-    for m in _DETAIL_RE.finditer(_URL_RE.sub(" ", text or "")):
-        phrase = m.group(0).lower()
-        if phrase not in found and not _in_facts(phrase, facts_l):
-            found.append(phrase)
+    found = [p for p in _details(text) if not _in_facts(p, facts_l)]
     if not found:
         return []
     listed = ", ".join(f'"{p[:20]}"' for p in found[:_UNSUPPORTED_MAX])
@@ -138,6 +151,14 @@ def use_case_carried(use_case: str, caption: str) -> bool:
     a faithful paraphrase can miss, and text in other scripts has no words and passes."""
     words = _stems(use_case)
     return not words or len(words & _stems(caption)) >= _CARRIED * len(words)
+
+
+def site_details(text: str, brief: Brief, brand: BrandKit) -> list[str]:
+    """The detail phrases in the text that only the site's own description supplies (not the
+    founder's brief), so the checklist can say where they came from."""
+    tagline = (brand.tagline or "").lower()
+    given = " ".join((brand.name or "", brief.what or "", brief.detail or "", brief.product_url or "")).lower()
+    return [p for p in _details(text) if _in_facts(p, tagline) and not _in_facts(p, given)]
 
 
 def facts_text(brief: Brief, brand: BrandKit) -> str:
@@ -557,7 +578,7 @@ def quote_phrases(f: Failure) -> str:
 
 
 def checklist(text: str, failures: Sequence[Failure], network: str,
-              use_case: str = "") -> list[CheckLine]:
+              use_case: str = "", from_site: Sequence[str] = ()) -> list[CheckLine]:
     """The post's checks as lines for the founder, one per rule (the three style rules share
     one), pass or fail, from the failures post_failures() found. Given the draft's use case (the
     wizard passes it when the founder's words lead, since they replace the caption's first line), a post whose lines after the
@@ -589,7 +610,8 @@ def checklist(text: str, failures: Sequence[Failure], network: str,
         line(("copied-run",), "No five words copied from the references",
              lambda f: f"Copies five words from a reference: {_quoted(f)}".rstrip(": ")),
         line(("repeats-first-line",), "Each line says something new", lambda f: "A later line repeats the first"),
-        line((UNSUPPORTED,), "Only details you gave",
+        line((UNSUPPORTED,), "Only details you gave" + (
+            " or your site says (" + ", ".join(f'"{p}"' for p in from_site) + ")" if from_site else ""),
              lambda f: f"Details you didn't give: {quote_phrases(f)}".rstrip(": ")),
     ]
     if use_case and not use_case_carried(use_case, "\n".join(text.split("\n")[1:])):
