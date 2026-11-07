@@ -276,17 +276,25 @@ def _find_placeholder(text: str) -> str:
     return m.group(0) if m else ""
 
 
+def _runs(text: str) -> list[tuple[str, ...]]:
+    """Five-word runs in order. A link is not wording: runs stop at it and never include it,
+    so two posts that end on the same product link share no run through it."""
+    out = []
+    for part in _URL_RE.split(text):
+        words = _words(part)
+        out += [tuple(words[i:i + 5]) for i in range(len(words) - 4)]
+    return out
+
+
 def _find_copied_run(text: str, references: Sequence[str]) -> str:
     """The first five-word run the text shares with a reference caption, lowercased; "" if none."""
-    words = _words(text)
-    if len(words) < 5:
+    runs = set(_runs(text))
+    if not runs:
         return ""
-    runs = {tuple(words[i:i + 5]) for i in range(len(words) - 4)}
     for ref in references:
-        rw = _words(ref)
-        for i in range(len(rw) - 4):
-            if tuple(rw[i:i + 5]) in runs:
-                return " ".join(rw[i:i + 5])
+        for run in _runs(ref):
+            if run in runs:
+                return " ".join(run)
     return ""
 
 

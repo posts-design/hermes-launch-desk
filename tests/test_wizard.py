@@ -1094,3 +1094,121 @@ def test_change_hook_offers_the_same_options_with_the_founder_first():
     assert pending(host)["hook"] == CLEAN["hooks"][0]
     resume(host, "approve", "no")
     assert pack_data(host)["hook_source"] == "model"
+
+
+# ------------------------------------------------------------------ brand face and the closed loop (Task 20)
+
+PAST = "Biscuit got a theme today.\n\nPick one in settings and the page follows.\n\nhttps://pawr.link"
+PAST_FIRST = "Biscuit got a theme today."
+
+
+def past_pack(host, name="2026-11-01-pawr-link-themes", caption=PAST, results=(("X", 12),),
+              created_at="2026-11-01T10:00:00+00:00", raw_results=None):
+    folder = host.data_dir() / "packs" / name
+    folder.mkdir(parents=True)
+    data = {"brief": {"shipped": "feature", "network": "x", "what": "themes", "detail": "",
+                      "product_url": URL},
+            "hook": caption.splitlines()[0], "caption": caption, "created_at": created_at,
+            "results": raw_results if raw_results is not None else
+            [{"channel": c, "signups": n, "recorded_at": "2026-11-02T10:00:00+00:00"} for c, n in results]}
+    (folder / "pack.json").write_text(json.dumps(data), encoding="utf-8")
+    return name
+
+
+def extra_lines(reply, baseline):
+    return [line for line in plain(reply) if line and line not in plain(baseline)]
+
+
+def test_stored_brand_keeps_its_face():
+    host = make_host(PHASE1)
+    start(host)
+    resume(host, "approve", "no")
+    stored = host.state_get("brand")
+    assert stored["font_face"] in ("serif", "rounded", "sans")
+    assert wizard._kit_from(stored).font_face == stored["font_face"]
+    older = {k: v for k, v in stored.items() if k != "font_face"}
+    assert wizard._kit_from(older).font_face == ""
+
+
+def test_packs_without_results_change_nothing():
+    baseline_host = make_host(PHASE1)
+    baseline = start(baseline_host)
+    host = make_host(PHASE1)
+    past_pack(host, results=())
+    past_pack(host, name="2026-11-02-pawr-link-zero", results=(("X", 0),))
+    reply = start(host)
+    assert extra_lines(reply, baseline) == []
+    assert questions(host, "1")[0] == questions(baseline_host, "1")[0]
+    assert [r["id"] for r in pending(host)["refs"]] == [r["id"] for r in pending(baseline_host)["refs"]]
+    assert host.llm_calls[0][1] == baseline_host.llm_calls[0][1]
+
+
+@pytest.mark.parametrize("surface", ["cli", "telegram"])
+def test_results_add_one_line_and_your_launch_as_reference_one(surface):
+    baseline = start(make_host(PHASE1, surface=surface))
+    host = make_host(PHASE1, surface=surface)
+    name = past_pack(host)
+    reply = start(host)
+    refs = pending(host)["refs"]
+    assert len(refs) == 3
+    assert refs[0]["caption"] == PAST and refs[0]["signups"] == 12 and refs[0]["url"] == name
+    hook_q = questions(host, "1")[0]
+    assert name in hook_q and hook_q.index(name) < hook_q.index(refs[1]["url"])
+    prompt = host.llm_calls[0][1]
+    assert PAST_FIRST in prompt and prompt.index(PAST_FIRST) < prompt.index(refs[1]["brand"][:12])
+    if surface == "cli":  # a terminal shows no progress messages: the line opens the question and the reply
+        [line] = extra_lines(reply, baseline)
+        assert hook_q.startswith(line)
+    else:
+        [line] = [s for s in host.said if PAST_FIRST in s]
+        assert host.events.index(("say", line)) < host.events.index(("ask", hook_q))
+    assert "12" in line and PAST_FIRST in line
+
+
+def test_the_line_and_reference_come_after_the_setup_check():
+    host = make_host(PHASE1, surface="telegram")
+    past_pack(host)
+    start(host)
+    said = [s for s in host.said if PAST_FIRST in s]
+    assert said and tool_names(host)[0] == "get_my_access"
+
+
+def test_a_tie_uses_the_most_recent_launch():
+    host = make_host(PHASE1)
+    past_pack(host, name="2026-11-01-a", caption="Older post line.\n\nBody.", created_at="2026-11-01T09:00:00+00:00")
+    past_pack(host, name="2026-11-01-b", caption="Newer post line.\n\nBody.", created_at="2026-11-01T18:00:00+00:00")
+    start(host)
+    assert pending(host)["refs"][0]["url"] == "2026-11-01-b"
+
+
+def test_malformed_results_are_ignored():
+    baseline = start(make_host(PHASE1))
+    host = make_host(PHASE1)
+    past_pack(host, raw_results=[{"channel": "X", "signups": "lots"}, {"signups": 5}, "X 12"])
+    past_pack(host, name="2026-11-02-x", raw_results="12 on X")
+    reply = start(host)
+    assert extra_lines(reply, baseline) == []
+    assert not any(r.get("signups") for r in pending(host)["refs"])
+
+
+def test_swap_keeps_your_own_launch_first_and_changes_the_rest():
+    host = make_host(PHASE1, llm=(CLEAN, OTHER))
+    name = past_pack(host)
+    start(host)
+    first = [r["id"] for r in pending(host)["refs"]]
+    resume(host, "swap", "3")
+    swapped = [r["id"] for r in pending(host)["refs"]]
+    assert swapped[0] == first[0] and pending(host)["refs"][0]["url"] == name
+    assert len(swapped) == 3 and not (set(swapped[1:]) & set(first[1:]))
+
+
+def test_approved_pack_lists_your_own_launch_and_records_when_it_was_made():
+    host = make_host(PHASE1)
+    name = past_pack(host)
+    start(host)
+    resume(host, "approve", "no")
+    [new] = [p for p in packs(host) if p.parent.name != name]
+    data = json.loads(new.read_text())
+    assert data["references"][0]["signups"] == 12 and data["references"][0]["url"] == name
+    assert data["created_at"]
+    assert name in (new.parent / "references.md").read_text()

@@ -192,3 +192,12 @@ def test_repeating_lines_names_the_lines_that_restate_the_first():
     text = "Most support emails were blurry leaf photos.\n\nNow snap a leaf.\nOur support emails were blurry leaf photos."
     assert repeating_lines(text) == [3]
     assert repeating_lines("Short.\nShort.") == []
+
+
+def test_a_shared_link_is_not_a_copied_run():
+    # the founder's own past post ends on the same product link; links are not wording
+    ref = ["Pick one and the page follows.\n\nhttps://pawr.link"]
+    text = "Dark mode is here.\n\nPick a theme and the whole page follows.\n\nhttps://pawr.link"
+    assert "copied-run" not in ids(text, reference_captions=ref)
+    assert "copied-run" in ids("We said pick one and the page follows today. https://pawr.link",
+                               reference_captions=ref)

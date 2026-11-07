@@ -31,8 +31,8 @@ from .hooks import pick_hook_shapes
 from .host import Host, SourceUnavailable
 from .models import BrandKit, Brief, CheckLine, Draft, HookOption, Reference
 from .pack import post_text, write_pack
-from .references import (CATEGORY, McpSource, SamplePackSource, build_search_args, rank_references,
-                         reference_line)
+from .references import (CATEGORY, McpSource, SamplePackSource, build_search_args, is_own,
+                         rank_references, reference_line, reference_where, with_own)
 from .render import choose_layout, render_card, render_feed_preview
 from .rules import relaxed_rules
 from .setup_check import check_setup
@@ -257,6 +257,7 @@ def _kit_from(data: Any) -> BrandKit | None:
             bg=str(data["bg"]), ink=str(data["ink"]), accent=str(data["accent"]),
             font_family=data.get("font_family"), logo_path=data.get("logo_path"),
             voice_samples=tuple(str(s) for s in data.get("voice_samples") or ()),
+            font_face=str(data.get("font_face") or ""),
         )
     except (KeyError, TypeError, ValueError):
         return None
@@ -334,7 +335,7 @@ def _refs_block(refs: list[Reference], used_pack: bool) -> str:
     head = "Three launch posts that worked" + (" (from the sample pack)" if used_pack else "") + ":"
     lines = [head]
     for n, r in enumerate(refs, 1):
-        lines.append(f"{n}. {reference_line(r)} {r.url}")
+        lines.append(f"{n}. {reference_line(r)} {reference_where(r)}")
     if refs:
         lines.append("The draft borrows the shape of 1, not its words.")
     return "\n".join(lines)
@@ -557,6 +558,10 @@ def _phase1(host: Host, args: Args, stored: BrandKit | None, get: Callable[[str]
     issues = [i for i in check_setup(lambda: host.mcp("get_my_access", {})) if i.code != "unreachable"]
     if issues:
         _tell(host, notes, f"{issues[0].message}\n{issues[0].command}")
+    best = _best_launch(host)
+    loop_line = followup.best_launch_line(best) if best else ""
+    if loop_line:
+        _tell(host, notes, loop_line)
 
     shots = _screenshots(host.state_get("screenshot"))
     line = f"Finding launch posts like yours for {brand.name or _hostname(brand.url)}."
@@ -572,7 +577,7 @@ def _phase1(host: Host, args: Args, stored: BrandKit | None, get: Callable[[str]
         host.say(pack_note)
         if not any(i.get("category") == CATEGORY[brief.shipped] for i in items):
             notes.append(f"There are no {brief.shipped} posts in the sample pack, so these are other launch posts.")
-    refs = rank_references(items, brief)
+    refs = with_own(best, rank_references(items, brief))
 
     host.say("Drafting the post.")
     kept = [STYLE_WORDS[r] for r in sorted(relaxed_rules(brand.voice_samples)) if r in STYLE_WORDS]
@@ -580,6 +585,8 @@ def _phase1(host: Host, args: Args, stored: BrandKit | None, get: Callable[[str]
         notes.append(f"Kept your style: your past posts use {' and '.join(kept)}, so the draft may too.")
     draft = draft_post(host, brief, brand, refs, pick_hook_shapes(brief.shipped, brief.detail))
     lead = _caught(host, draft, notes)
+    if loop_line and _local(host):  # a terminal shows no progress messages: open the question with it
+        lead = "\n".join(x for x in (loop_line, lead) if x)
     options = hook_options(draft, brief, brand, refs)
     picked = _pick_hook(host, options, draft.caption, refs, bool(pack_note), lead)
 
@@ -595,6 +602,15 @@ def _phase1(host: Host, args: Args, stored: BrandKit | None, get: Callable[[str]
     pending.render(host)
     host.state_set(PENDING_KEY, pending.data)
     return pending.reply(host, notes)
+
+
+def _best_launch(host: Host):
+    """The founder's best past launch with recorded sign-ups, if any. Never raises."""
+    try:
+        return followup.best_launch(host.data_dir() / "packs")
+    except Exception:
+        logger.warning("launch-desk: past results skipped", exc_info=True)
+        return None
 
 
 def _start(host: Host, args: Args, stored: BrandKit | None, get: Callable[[str], bytes]) -> str:
@@ -719,6 +735,9 @@ def _resume(host: Host, p: _Pending) -> str:
     caught: list[str] = []
     if picked == "swap":
         fresh = rank_references(p.items(), p.brief, exclude=set(p.data["shown"]))
+        own = next((r for r in p.refs if is_own(r)), None)
+        if fresh and own is not None:  # the founder's own launch stays reference 1
+            fresh = [own] + fresh[:2]
         if fresh:
             host.say("Drafting again with new references.")
             draft = draft_post(host, p.brief, p.brand, fresh, pick_hook_shapes(p.brief.shipped, p.brief.detail))

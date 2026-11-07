@@ -7,7 +7,7 @@ import re
 from pathlib import Path
 
 from .host import Host
-from .models import Brief, Reference
+from .models import Brief, PastLaunch, Reference
 
 PACK_PATH = Path(__file__).parent / "sample_pack.json"
 
@@ -269,9 +269,46 @@ def short_brand(brand: str) -> str:
     return cut.rstrip(" ,.;:") + "…"
 
 
+OWN_BRAND = "Your own launch"
+
+
+def _signups_text(n: int) -> str:
+    return f"{n:,} sign-up" + ("" if n == 1 else "s")
+
+
+def own_reference(launch: PastLaunch) -> Reference:
+    """The founder's best past launch as a reference: its post, its sign-ups, and the pack's
+    name where a post would have its link."""
+    return Reference(id=f"own:{launch.pack}", brand=OWN_BRAND, url=launch.pack, caption=launch.caption,
+                     views=None, category=CATEGORY.get(launch.shipped), signups=launch.signups,
+                     why=f"{OWN_BRAND}, {_signups_text(launch.signups)}")
+
+
+def with_own(launch: PastLaunch | None, refs: list[Reference], k: int = 3) -> list[Reference]:
+    """The references with the founder's own launch first (reference 1, whose shape the draft
+    borrows), still k in all. Without a past launch, refs unchanged."""
+    if launch is None:
+        return refs
+    own = own_reference(launch)
+    return [own] + [r for r in refs if r.id != own.id][: k - 1]
+
+
+def is_own(ref: Reference) -> bool:
+    return ref.signups is not None
+
+
+def reference_where(ref: Reference) -> str:
+    """Where a reference can be found: its link, or for the founder's own launch its pack."""
+    return f"(pack {ref.url})" if is_own(ref) else ref.url
+
+
 def reference_line(ref: Reference) -> str:
     """'<brand>: <shape note>, <views> views. <fit>.' for the reference list. A reference
-    without a caption has no shape note."""
+    without a caption has no shape note. The founder's own launch reads
+    'Your own launch, 12 sign-ups: <shape note>.'"""
+    if is_own(ref):
+        note = shape_note(ref.caption) if (ref.caption or "").strip() else ""
+        return f"{OWN_BRAND}, {_signups_text(ref.signups)}" + (f": {note}." if note else ".")
     parts = [shape_note(ref.caption)] if (ref.caption or "").strip() else []
     if ref.views:
         parts.append(f"{_short(ref.views)} views")

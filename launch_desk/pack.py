@@ -6,7 +6,7 @@ import re
 import shutil
 import unicodedata
 import urllib.parse
-from datetime import date
+from datetime import date, datetime, timezone
 from pathlib import Path
 
 from .models import BrandKit, Brief, Draft, Reference
@@ -134,7 +134,10 @@ def write_pack(out_dir: Path, brief: Brief, brand: BrandKit, draft: Draft, hook:
 
     ref_lines = ["# References", "", "Posts that did well and shaped the draft.", ""]
     for r in refs:
-        ref_lines.append(f"- {r.brand}, {_fmt_views(r.views)}: {r.url}")
+        if r.signups is not None:  # the founder's own launch: its pack, not a link
+            ref_lines.append(f"- {r.why}: pack {r.url}")
+        else:
+            ref_lines.append(f"- {r.brand}, {_fmt_views(r.views)}: {r.url}")
     (pack / "references.md").write_text("\n".join(ref_lines) + "\n", encoding="utf-8")
 
     files["pack"] = "pack.json"
@@ -148,13 +151,15 @@ def write_pack(out_dir: Path, brief: Brief, brand: BrandKit, draft: Draft, hook:
         "hooks": list(draft.hooks),
         "caption": text,
         "card": card_contents(layout, has_screenshot),
-        "references": [{"id": r.id, "brand": r.brand, "url": r.url, "views": r.views} for r in refs],
+        "references": [{"id": r.id, "brand": r.brand, "url": r.url, "views": r.views,
+                        **({"signups": r.signups} if r.signups is not None else {})} for r in refs],
         # References the founder was not shown, as their shape (not their words), for check-ins.
         "more_references": [{"id": r.id, "brand": r.brand, "url": r.url, "views": r.views,
                              "shape": shape_note(r.caption)} for r in more_refs],
         "intent_url": intent,
         "checks": [dict(c) for c in checks],
         "files": files,
+        "created_at": datetime.now(timezone.utc).isoformat(timespec="seconds"),
     }
     (pack / "pack.json").write_text(json.dumps(data, ensure_ascii=False, indent=2) + "\n", encoding="utf-8")
     return pack

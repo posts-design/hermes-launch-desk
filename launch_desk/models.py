@@ -38,6 +38,19 @@ class Reference:
     views: int | None
     category: str | None
     why: str
+    signups: int | None = None  # set on the founder's own past launch; its url is the pack name
+
+
+@dataclass(frozen=True)
+class PastLaunch:
+    """One of the founder's approved packs with recorded sign-ups (see followup.best_launch)."""
+    pack: str  # the pack folder's name
+    caption: str  # the post as approved
+    first_line: str  # its first line, cut for one line of chat
+    signups: int  # the total over channels
+    channels: tuple[tuple[str, int], ...]  # (channel, sign-ups), most first
+    shipped: str = ""
+    latest: bool = False  # True when no pack with results is more recent
 
 
 @dataclass(frozen=True)

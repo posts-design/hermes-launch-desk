@@ -271,3 +271,47 @@ def test_reference_line_caps_the_brand_at_24_characters():
 def test_full_width_and_spanish_question_marks_count(caption):
     assert caption_shape(caption)["opening"] == "question"
 
+
+
+# --- the founder's own launch as a reference (Task 20) -----------------------
+
+from launch_desk.draft import post_failures  # noqa: E402
+from launch_desk.models import BrandKit, PastLaunch, Reference  # noqa: E402
+from launch_desk.references import own_reference, reference_line, with_own  # noqa: E402
+
+OWN = PastLaunch(pack="2026-11-02-pawr-link-themes", caption="Biscuit got a theme today.\n\nPick one in settings.",
+                 first_line="Biscuit got a theme today.", signups=12, channels=(("X", 12),),
+                 shipped="feature", latest=True)
+
+
+def _ref(i: str, brand: str) -> Reference:
+    return Reference(id=i, brand=brand, url=f"https://posts.design/p/{i}", caption=f"{brand} shipped a thing.",
+                     views=1000, category="feature-update", why="Same kind of launch")
+
+
+def test_own_reference_carries_the_post_sign_ups_and_pack_name():
+    ref = own_reference(OWN)
+    assert ref.caption == OWN.caption and ref.signups == 12
+    assert ref.url == OWN.pack and ref.views is None
+    assert "12" in reference_line(ref) and "views" not in reference_line(ref)
+
+
+def test_with_own_puts_it_first_and_keeps_three():
+    refs = [_ref("a", "Acme"), _ref("b", "Bolt"), _ref("c", "Cove")]
+    out = with_own(OWN, refs)
+    assert [r.id for r in out] == [own_reference(OWN).id, "a", "b"]
+    assert with_own(None, refs) == refs
+
+
+def test_with_own_never_lists_it_twice():
+    own = own_reference(OWN)
+    out = with_own(OWN, [own, _ref("a", "Acme"), _ref("b", "Bolt"), _ref("c", "Cove")])
+    assert [r.id for r in out] == [own.id, "a", "b"]
+
+
+def test_copying_five_words_from_your_own_launch_still_fails():
+    brief = Brief("feature", "x", "dark mode", "https://pawr.link")
+    brand = BrandKit("pawr.link", "https://pawr.link", "", "#FAFAFA", "#111111", "#6A3CFF", None, None)
+    refs = with_own(OWN, [_ref("a", "Acme")])
+    text = "Dark mode is here.\n\nBiscuit got a theme today, and a dark one.\n\nhttps://pawr.link"
+    assert "copied-run" in {f.rule_id for f in post_failures(text, brief, brand, refs)}

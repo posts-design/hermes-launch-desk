@@ -7,6 +7,9 @@ The message itself is composed here, from the pack's own fields, and kept inside
 checks; the agent only relays it. When the founder answers with numbers, the agent calls
 launch_desk_record_results, which appends them to the pack's pack.json. Nothing here posts or
 asks anything.
+
+best_launch() closes the loop: the next /launch reads those results back, names the
+founder's best launch so far and offers its post as reference 1.
 """
 from __future__ import annotations
 
@@ -18,6 +21,7 @@ from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any
 
+from .models import PastLaunch
 from .pack import JUDGE_BY_CONVERSION
 from .references import short_brand
 from .rules import _EMOJI_RE, check
@@ -239,3 +243,91 @@ def record_results(root: Path, pack: Any, channel: Any, signups: Any) -> dict:
     except OSError:
         return {"ok": False, "error": "The pack could not be saved."}
     return {"ok": True, "pack": pack, "results": data["results"]}
+
+
+# ------------------------------------------------------------------ past launches
+
+FIRST_LINE_MAX = 90
+_DATE_RE = re.compile(r"\d{4}-\d{2}-\d{2}")
+
+
+def channel_totals(results: Any) -> list[tuple[str, int]]:
+    """(channel, sign-ups) from a pack's results, most first. A later answer for a channel
+    (any case) replaces the earlier one, since each check-in asks for the count so far.
+    Entries that record_results would not have written are skipped."""
+    latest: dict[str, tuple[str, int]] = {}
+    for entry in results if isinstance(results, list) else []:
+        if not isinstance(entry, dict):
+            continue
+        channel, signups = entry.get("channel"), entry.get("signups")
+        if not (isinstance(channel, str) and channel.strip() and len(channel) <= CHANNEL_MAX):
+            continue
+        if isinstance(signups, bool) or not isinstance(signups, int) or not 0 <= signups <= SIGNUPS_MAX:
+            continue
+        name = " ".join(channel.split())
+        latest[name.lower()] = (name, signups)
+    return sorted(latest.values(), key=lambda pair: -pair[1])
+
+
+def _first_line(caption: str) -> str:
+    line = next((ln.strip() for ln in caption.splitlines() if ln.strip()), "")
+    if len(line) <= FIRST_LINE_MAX:
+        return line
+    cut = line[: FIRST_LINE_MAX - 1].rsplit(" ", 1)[0].rstrip(" ,;:.")
+    return cut + "\u2026"
+
+
+def _made(data: dict, name: str) -> str:
+    """When the pack was made, as sortable text: its created_at, else the date in its name."""
+    created = data.get("created_at")
+    if isinstance(created, str) and created.strip():
+        return created.strip()
+    m = _DATE_RE.match(name)
+    return m.group(0) if m else ""
+
+
+def best_launch(root: Path) -> PastLaunch | None:
+    """The founder's approved pack with the most recorded sign-ups (more than none); on a tie
+    the most recent. None when no pack has results. Never raises."""
+    found: list[tuple[int, str, str, PastLaunch]] = []
+    try:
+        folders = sorted(p for p in Path(root).iterdir() if p.is_dir())
+    except OSError:
+        return None
+    for folder in folders:
+        try:
+            data = _load(_pack_file(root, folder.name))
+        except _Refused:
+            continue
+        caption = data.get("caption")
+        channels = channel_totals(data.get("results"))
+        total = sum(n for _c, n in channels)
+        if not (isinstance(caption, str) and caption.strip()) or total <= 0:
+            continue
+        brief = data.get("brief") if isinstance(data.get("brief"), dict) else {}
+        shipped = brief.get("shipped") if isinstance(brief.get("shipped"), str) else ""
+        launch = PastLaunch(pack=folder.name, caption=caption.strip(), first_line=_first_line(caption),
+                            signups=total, channels=tuple(channels), shipped=shipped)
+        found.append((total, _made(data, folder.name), folder.name, launch))
+    if not found:
+        return None
+    best = max(found, key=lambda f: (f[0], f[1], f[2]))
+    newest = max(found, key=lambda f: (f[1], f[2]))
+    return PastLaunch(**{**best[3].__dict__, "latest": best is newest})
+
+
+def _count(n: int) -> str:
+    return f"{n:,} sign-up" + ("" if n == 1 else "s")
+
+
+def best_launch_line(launch: PastLaunch) -> str:
+    """One line on the founder's best launch so far, composed from its recorded results."""
+    who = "Your last launch" if launch.latest else "Your best launch so far"
+    shown = [(c, n) for c, n in launch.channels if n > 0]
+    if len(shown) == 1:
+        brought = f"{_count(launch.signups)} on {shown[0][0]}"
+    else:
+        brought = f"{_count(launch.signups)} ({', '.join(f'{n:,} on {c}' for c, n in shown)})"
+    first = _plain(launch.first_line)
+    end = "" if first.endswith((".", "!", "?", "\u2026")) else "."
+    return f'{who} brought {brought} with "{first}"{end}'

@@ -286,3 +286,80 @@ def test_results_keep_the_last_fifty(tmp_path):
     results = read(tmp_path)["results"]
     assert len(results) == 50
     assert [r["signups"] for r in results] == list(range(5, 55))
+
+
+# ------------------------------------------------------------------ past launches (Task 20)
+
+def _results(*pairs):
+    return [{"channel": c, "signups": n, "recorded_at": "2026-11-06T10:00:00+00:00"} for c, n in pairs]
+
+
+def test_no_packs_or_no_results_give_no_best_launch(tmp_path):
+    assert followup.best_launch(tmp_path / "missing") is None
+    make_pack(tmp_path)
+    make_pack(tmp_path, name="2026-11-06-other", results=[])
+    assert followup.best_launch(tmp_path) is None
+
+
+def test_best_launch_is_the_pack_with_most_sign_ups(tmp_path):
+    make_pack(tmp_path, name="2026-11-01-a", results=_results(("X", 4)))
+    make_pack(tmp_path, name="2026-11-02-b", results=_results(("X", 12)),
+              caption="Biscuit got a theme.\n\nPick one in settings.")
+    make_pack(tmp_path, name="2026-11-03-c", results=_results(("X", 2)))
+    best = followup.best_launch(tmp_path)
+    assert (best.pack, best.signups, best.first_line) == ("2026-11-02-b", 12, "Biscuit got a theme.")
+    assert best.caption.startswith("Biscuit got a theme.") and best.channels == (("X", 12),)
+    assert not best.latest
+
+
+def test_a_tie_goes_to_the_most_recent_launch(tmp_path):
+    make_pack(tmp_path, name="2026-11-01-a", results=_results(("X", 12)), created_at="2026-11-01T09:00:00+00:00")
+    make_pack(tmp_path, name="2026-11-01-b", results=_results(("X", 12)), created_at="2026-11-01T18:00:00+00:00")
+    make_pack(tmp_path, name="2026-10-30-c", results=_results(("X", 12)))  # older, no created_at
+    best = followup.best_launch(tmp_path)
+    assert best.pack == "2026-11-01-b" and best.latest
+
+
+def test_a_later_answer_for_a_channel_replaces_the_earlier_one(tmp_path):
+    make_pack(tmp_path, results=_results(("X", 5), ("LinkedIn", 3), ("x", 12)))
+    best = followup.best_launch(tmp_path)
+    assert best.signups == 15
+    assert dict(best.channels) == {"x": 12, "LinkedIn": 3}
+    assert best.channels[0] == ("x", 12)  # most first
+
+
+@pytest.mark.parametrize("results", [
+    "12 on X",
+    [{"channel": "X", "signups": -3}],
+    [{"channel": "X", "signups": True}],
+    [{"channel": "X", "signups": "12"}],
+    [{"channel": 5, "signups": 4}],
+    [{"channel": "", "signups": 4}],
+    [{"signups": 4}],
+    [{"channel": "X", "signups": 10 ** 9}],
+    ["X 12", None, 7],
+    [{"channel": "X", "signups": 0}],
+])
+def test_malformed_or_zero_results_are_ignored(tmp_path, results):
+    make_pack(tmp_path, results=results)
+    assert followup.best_launch(tmp_path) is None
+
+
+def test_unreadable_or_postless_packs_are_skipped(tmp_path):
+    bad = tmp_path / "2026-11-01-bad"
+    bad.mkdir()
+    (bad / "pack.json").write_text("{not json", encoding="utf-8")
+    listy = tmp_path / "2026-11-01-list"
+    listy.mkdir()
+    (listy / "pack.json").write_text("[1, 2]", encoding="utf-8")
+    make_pack(tmp_path, name="2026-11-01-empty", caption="  ", results=_results(("X", 40)))
+    make_pack(tmp_path, results=_results(("X", 3)))
+    best = followup.best_launch(tmp_path)
+    assert best.pack == PACK and best.signups == 3
+
+
+def test_a_long_first_line_is_cut_for_the_line(tmp_path):
+    long_first = "word " * 40
+    make_pack(tmp_path, caption=long_first.strip() + "\n\nmore", results=_results(("X", 3)))
+    best = followup.best_launch(tmp_path)
+    assert len(best.first_line) <= followup.FIRST_LINE_MAX
