@@ -821,3 +821,10 @@ def test_the_card_line_is_never_line_one():
 def test_the_prompt_asks_for_a_card_line_and_stays_short():
     instructions = build_brief_prompt(K3_BRIEF, K3_BRAND, REFS, SHAPES, set())[0]
     assert '"card_line"' in instructions
+
+
+def test_a_use_case_detail_failure_names_its_phrases():
+    invented = {**CLEAN, "use_case": "Pick a theme in one tap and the whole page follows."}
+    _, d = draft([invented, invented])
+    [f] = [f for f in d.failures if f.rule_id == "use-case:unsupported-detail"]
+    assert f.found == "one tap"

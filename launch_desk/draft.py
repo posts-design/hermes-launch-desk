@@ -420,7 +420,7 @@ def _failures(hooks: Sequence[str], caption: str, use_case: str, brief: Brief,
     if not use_case_carried(use_case, "\n".join(caption.split("\n")[1:])):  # every hook replaces line 1
         found.append(Failure(USE_CASE_MISSING, "The caption does not say the use case after its first line.",
                              "Say the use case in a line after the first."))
-    found += [Failure(f"use-case:{f.rule_id}", f"Use case: {f.message}", f.fix)
+    found += [Failure(f"use-case:{f.rule_id}", f"Use case: {f.message}", f.fix, f.found)
               for f in unsupported_details(use_case, facts)]
     for n, hook in enumerate(hooks, 1):
         hook_fails = [f for f in check(hook, network=brief.network, reference_captions=captions,
