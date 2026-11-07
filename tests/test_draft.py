@@ -685,3 +685,11 @@ def test_the_least_bad_fallback_is_marked():
     [only] = hook_options(leaf_draft(hooks, "Snap a leaf.\n\nhttps://fernlight.app"), brief, LEAF_BRAND, REFS)
     assert only.flagged
     assert not any(o.flagged for o in hook_options(leaf_draft(), LEAF_BRIEF, LEAF_BRAND, REFS))
+
+
+@pytest.mark.parametrize("hook", ["I built themes for pet pages.", "We’ve built themes for pet pages.",
+                                  "Today we're launching themes.", "We've shipped themes.", "We just made themes."])
+def test_we_built_covers_i_curly_apostrophes_and_launching(hook):
+    from launch_desk.draft import hook_shape
+    assert hook_shape(hook) == "we-built"
+    assert hook_shape("Pet pages built for you.") == ""

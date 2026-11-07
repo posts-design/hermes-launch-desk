@@ -217,8 +217,8 @@ def _instructions(brief: Brief, relaxed: set[str], refs: Sequence[Reference] | N
         *_rule_lines(brief, relaxed),
     ]
     if brief.detail:
-        rules.append("The founder's detail may open the post as written, so other lines say what shipped "
-                     "without it.")
+        rules.append("Hook 1 is the founder's detail, word for word. Other lines say what shipped "
+                     "and do not restate it.")
     numbered = "\n".join(f"{i}. {r}" for i, r in enumerate(rules, 1))
     return (
         f"You write one launch post for {network}.\n\n"
@@ -516,7 +516,8 @@ def hook_options(draft: Draft, brief: Brief, brand: BrandKit, refs: Sequence[Ref
 
 
 _SHAPES: tuple[tuple[str, re.Pattern], ...] = (
-    ("we-built", re.compile(r"\bwe(?: just|'ve| have)? (?:built|made|shipped|added|launched)\b", re.I)),
+    ("we-built", re.compile(r"\b(?:we|i)(?:'ve|\u2019ve|'re| just| have)? "
+                            r"(?:built|made|shipped|added|launched|launching)\b", re.I)),
     ("call-out", re.compile(r"^are you\b", re.I)),
     ("you-asked", re.compile(r"^you asked\b", re.I)),
     ("every", re.compile(r"^every\b", re.I)),
