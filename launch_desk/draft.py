@@ -227,7 +227,7 @@ def _instructions(brief: Brief, relaxed: set[str], refs: Sequence[Reference] | N
         '{"use_case": "one concrete use", "hooks": ["first line A", "first line B", "first line C"], '
         '"caption": "the whole post"}\n'
         "- use_case: one concrete, true use of what shipped, from FACTS only. No person, pet, name, number "
-        "or time beyond FACTS. The caption says it once, never the words \"use case\".\n"
+        "or time beyond FACTS. A later line says it, never the words \"use case\".\n"
         "- hooks: three first lines, each built differently: hook 1 on pattern A, hook 2 on pattern B, "
         "hook 3 your own. One \"we built\" at most.\n"
         "- caption: the whole post, starting with your best hook as its first line. "
@@ -378,9 +378,9 @@ def _failures(hooks: Sequence[str], caption: str, use_case: str, brief: Brief,
     if is_private_link(brief.product_url):
         found = [f for f in found if f.rule_id != "private-link"]
     found += unsupported_details(caption, facts)
-    if not use_case_carried(use_case, caption):
-        found.append(Failure(USE_CASE_MISSING, "The caption does not say the use case.",
-                             "Say the use case in the caption."))
+    if not use_case_carried(use_case, "\n".join(caption.split("\n")[1:])):  # every hook replaces line 1
+        found.append(Failure(USE_CASE_MISSING, "The caption does not say the use case after its first line.",
+                             "Say the use case in a line after the first."))
     found += [Failure(f"use-case:{f.rule_id}", f"Use case: {f.message}", f.fix)
               for f in unsupported_details(use_case, facts)]
     for n, hook in enumerate(hooks, 1):

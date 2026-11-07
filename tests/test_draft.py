@@ -363,10 +363,12 @@ def test_caption_body_must_carry_the_use_case():
     assert d.failures == () and d.redrafted is True
 
 
-def test_use_case_in_the_first_line_counts():
+def test_use_case_said_only_in_the_first_line_triggers_a_redraft():
+    # every hook replaces line 1, so the lines after it must say the use case
     first_line = {**CLEAN, "use_case": "Pet pages can wear your colours now."}
-    host, d = draft([first_line])
-    assert len(host.llm_calls) == 1 and d.failures == ()
+    host, d = draft([first_line, CLEAN])
+    assert len(host.llm_calls) == 2 and "use-case-missing" in prompt_of(host.llm_calls[1])
+    assert d.redrafted and d.failures == ()
 
 
 def test_unsupported_detail_in_use_case_is_flagged():
