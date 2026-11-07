@@ -558,7 +558,7 @@ def _phase1(host: Host, args: Args, stored: BrandKit | None, get: Callable[[str]
     issues = [i for i in check_setup(lambda: host.mcp("get_my_access", {})) if i.code != "unreachable"]
     if issues:
         _tell(host, notes, f"{issues[0].message}\n{issues[0].command}")
-    best = _best_launch(host)
+    best = _best_launch(host, brand.url)
     loop_line = followup.best_launch_line(best) if best else ""
     if loop_line:
         _tell(host, notes, loop_line)
@@ -604,10 +604,10 @@ def _phase1(host: Host, args: Args, stored: BrandKit | None, get: Callable[[str]
     return pending.reply(host, notes)
 
 
-def _best_launch(host: Host):
-    """The founder's best past launch with recorded sign-ups, if any. Never raises."""
+def _best_launch(host: Host, site: str):
+    """The founder's best past launch for this site with recorded sign-ups, if any. Never raises."""
     try:
-        return followup.best_launch(host.data_dir() / "packs")
+        return followup.best_launch(host.data_dir() / "packs", site=site)
     except Exception:
         logger.warning("launch-desk: past results skipped", exc_info=True)
         return None

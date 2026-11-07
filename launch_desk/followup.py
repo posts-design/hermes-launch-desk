@@ -17,6 +17,7 @@ import json
 import os
 import re
 import tempfile
+import urllib.parse
 from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any
@@ -286,9 +287,28 @@ def _made(data: dict, name: str) -> str:
     return m.group(0) if m else ""
 
 
-def best_launch(root: Path) -> PastLaunch | None:
+def _site(url: Any) -> str:
+    """The host of a URL, lower case, without www."""
+    if not isinstance(url, str):
+        return ""
+    try:
+        host = (urllib.parse.urlsplit(url.strip()).hostname or "").lower()
+    except ValueError:
+        return ""
+    return host[4:] if host.startswith("www.") else host
+
+
+def _pack_site(data: dict) -> str:
+    brand = data.get("brand") if isinstance(data.get("brand"), dict) else {}
+    brief = data.get("brief") if isinstance(data.get("brief"), dict) else {}
+    return _site(brand.get("url")) or _site(brief.get("product_url"))
+
+
+def best_launch(root: Path, site: str | None = None) -> PastLaunch | None:
     """The founder's approved pack with the most recorded sign-ups (more than none); on a tie
-    the most recent. None when no pack has results. Never raises."""
+    the most recent. With `site`, only packs for that site (same host) count, so another
+    product's launch never speaks for this one. None when no pack has results. Never raises."""
+    want = _site(site) if site else ""
     found: list[tuple[int, str, str, PastLaunch]] = []
     try:
         folders = sorted(p for p in Path(root).iterdir() if p.is_dir())
@@ -298,6 +318,8 @@ def best_launch(root: Path) -> PastLaunch | None:
         try:
             data = _load(_pack_file(root, folder.name))
         except _Refused:
+            continue
+        if want and _pack_site(data) != want:
             continue
         caption = data.get("caption")
         channels = channel_totals(data.get("results"))

@@ -1103,11 +1103,12 @@ PAST_FIRST = "Biscuit got a theme today."
 
 
 def past_pack(host, name="2026-11-01-pawr-link-themes", caption=PAST, results=(("X", 12),),
-              created_at="2026-11-01T10:00:00+00:00", raw_results=None):
+              created_at="2026-11-01T10:00:00+00:00", raw_results=None, site=URL):
     folder = host.data_dir() / "packs" / name
     folder.mkdir(parents=True)
     data = {"brief": {"shipped": "feature", "network": "x", "what": "themes", "detail": "",
-                      "product_url": URL},
+                      "product_url": site},
+            "brand": {"name": "pawr.link", "url": site},
             "hook": caption.splitlines()[0], "caption": caption, "created_at": created_at,
             "results": raw_results if raw_results is not None else
             [{"channel": c, "signups": n, "recorded_at": "2026-11-02T10:00:00+00:00"} for c, n in results]}
@@ -1212,3 +1213,12 @@ def test_approved_pack_lists_your_own_launch_and_records_when_it_was_made():
     assert data["references"][0]["signups"] == 12 and data["references"][0]["url"] == name
     assert data["created_at"]
     assert name in (new.parent / "references.md").read_text()
+
+
+def test_results_from_another_site_change_nothing():
+    baseline = start(make_host(PHASE1))
+    host = make_host(PHASE1)
+    past_pack(host, site="https://other.test")
+    reply = start(host)
+    assert extra_lines(reply, baseline) == []
+    assert not any(r.get("signups") for r in pending(host)["refs"])

@@ -363,3 +363,13 @@ def test_a_long_first_line_is_cut_for_the_line(tmp_path):
     make_pack(tmp_path, caption=long_first.strip() + "\n\nmore", results=_results(("X", 3)))
     best = followup.best_launch(tmp_path)
     assert len(best.first_line) <= followup.FIRST_LINE_MAX
+
+
+def test_only_launches_of_the_same_site_count(tmp_path):
+    make_pack(tmp_path, name="2026-11-01-pawr", results=_results(("X", 30)))  # brand url https://pawr.link
+    make_pack(tmp_path, name="2026-11-02-posts", results=_results(("X", 5)),
+              brand={"name": "posts.design", "url": "https://www.posts.design/mcp"})
+    assert followup.best_launch(tmp_path, site="https://posts.design").pack == "2026-11-02-posts"
+    assert followup.best_launch(tmp_path, site="https://pawr.link/x").pack == "2026-11-01-pawr"
+    assert followup.best_launch(tmp_path, site="https://other.test") is None
+    assert followup.best_launch(tmp_path).pack == "2026-11-01-pawr"
