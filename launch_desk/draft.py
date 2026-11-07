@@ -192,13 +192,14 @@ def _rule_lines(brief: Brief, relaxed: set[str]) -> list[str]:
             p for p in STOCK_PHRASES + _ALSO_AVOID if p not in _SAME_AS_LISTED) + ".",
         "template-opener": "Never open with \"Your ... should\".",
         "private-link": None,  # the link is the founder's; the model only copies it
-        "em-dash": "Do not use the long dash (—). Use a full stop or a comma.",
+        "em-dash": "No long dash (—); use a full stop or a comma.",
         "emoji": "No emoji, or one at most.",
         "hashtags": "No hashtags.",
-        "placeholder": "No brackets [ ] or { } and no TODO. Fill every gap with real words.",
+        "placeholder": "No brackets [ ] { } or TODO; fill every gap with real words.",
         "link-first-line": f"Put the link {_one_line(url, 120)} once, on the last line. Never in the first line.",
         "length": "The whole caption is 280 characters or fewer, the link counting as 23. Aim for about 200.",
-        "repeats-first-line": "Each line says something new. Don't restate the first line.",
+        "repeats-first-line": "Each line says something new, no phrase twice. Don't restate the first line.",
+        "repeated-phrase": None,  # said in the repeats-first-line line
         "copied-run": "Never copy from the example posts. Not even 5 words in a row.",
     }
     lines = []
@@ -258,7 +259,7 @@ def _instructions(brief: Brief, relaxed: set[str], refs: Sequence[Reference] | N
 
 def _facts(brief: Brief, brand: BrandKit, short: bool = False) -> str:
     """The FACTS block; `short` (a redraft far over budget) cuts the long fields sooner."""
-    long_ = 200 if short else 300
+    long_ = 150 if short else 300
     lines = [f"Product: {_one_line(brand.name, 80)}"]
     if brand.tagline:
         lines.append(f"What it is: {_one_line(brand.tagline, 100 if short else 200)}")
@@ -402,12 +403,12 @@ def own_words(brief: Brief) -> tuple[str, ...]:
 
 
 def _failures(hooks: Sequence[str], caption: str, use_case: str, brief: Brief,
-              refs: Sequence[Reference], voice: Sequence[str], facts: str) -> list[Failure]:
+              refs: Sequence[Reference], voice: Sequence[str], facts: str, product: str = "") -> list[Failure]:
     """Everything the model is asked to fix. A private link that is the founder's own link is
     left out: the model only copies it, and the checklist shows it."""
     captions = outside_captions(refs)
     found = list(check(caption, network=brief.network, reference_captions=captions, voice_samples=voice,
-                       own_words=own_words(brief)))
+                       own_words=own_words(brief), product=product))
     if is_private_link(brief.product_url):
         found = [f for f in found if f.rule_id != "private-link"]
     found += unsupported_details(caption, facts)
@@ -441,7 +442,7 @@ def draft_post(host: Host, brief: Brief, brand: BrandKit, refs: Sequence[Referen
     if first is None:
         raise DraftError() from ask.last_error
     hooks, caption, use_case = first
-    failures = _failures(hooks, caption, use_case, brief, refs, voice, facts)
+    failures = _failures(hooks, caption, use_case, brief, refs, voice, facts, brand.name)
     if not failures:
         return Draft(tuple(hooks), caption, (), False, use_case)
     r_instructions, r_text = build_redraft_prompt(brief, brand, refs, shapes, relaxed,
@@ -449,7 +450,7 @@ def draft_post(host: Host, brief: Brief, brand: BrandKit, refs: Sequence[Referen
     second = ask(r_instructions, r_text)
     if second is not None:
         hooks2, caption2, use_case2 = second
-        failures2 = _failures(hooks2, caption2, use_case2, brief, refs, voice, facts)
+        failures2 = _failures(hooks2, caption2, use_case2, brief, refs, voice, facts, brand.name)
         if len(failures2) <= len(failures):
             return Draft(tuple(hooks2), caption2, tuple(failures2), True, use_case2, tuple(failures))
     return Draft(tuple(hooks), caption, tuple(failures), False, use_case, tuple(failures))
@@ -475,7 +476,7 @@ def founder_hook(detail: str) -> str:
 def post_failures(text: str, brief: Brief, brand: BrandKit, refs: Sequence[Reference]) -> list[Failure]:
     """The scroll test and unsupported_details() for a post as it will be posted."""
     found = check(text, network=brief.network, reference_captions=outside_captions(refs),
-                  voice_samples=brand.voice_samples, own_words=own_words(brief))
+                  voice_samples=brand.voice_samples, own_words=own_words(brief), product=brand.name)
     return found + unsupported_details(text, facts_text(brief, brand))
 
 
@@ -609,7 +610,9 @@ def checklist(text: str, failures: Sequence[Failure], network: str,
              lambda f: f"Too long for X: {length}/280"),
         line(("copied-run",), "No five words copied from the references",
              lambda f: f"Copies five words from a reference: {_quoted(f)}".rstrip(": ")),
-        line(("repeats-first-line",), "Each line says something new", lambda f: "A later line repeats the first"),
+        line(("repeats-first-line", "repeated-phrase"), "Each line says something new",
+             lambda f: "A later line repeats the first" if f.rule_id == "repeats-first-line"
+             else f"Two lines repeat {_quoted(f)}"),
         line((UNSUPPORTED,), "Only details you gave" + (
             " or your site says (" + ", ".join(f'"{p}"' for p in from_site) + ")" if from_site else ""),
              lambda f: f"Details you didn't give: {quote_phrases(f)}".rstrip(": ")),

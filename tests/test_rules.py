@@ -243,3 +243,45 @@ def test_the_founders_words_do_not_excuse_other_copied_runs():
     ref = REF_SHARED + ["Search every launch post that ever worked for you."]
     text = "We kept pasting our own posts.\n\nSearch every launch post that ever worked, here."
     assert "copied-run" in ids(text, reference_captions=ref, own_words=["we kept pasting our own posts"])
+
+
+# ------------------------------------------------------------------ repeated phrases (Task 22)
+
+BROOKHOUR = ("People kept asking to see their deep work next to their meetings.\n\n"
+             "A focus session sits next to a meeting in your calendar.\n\n"
+             "We put your deep work next to meetings in Brookhour 2.0.\n\nhttp://127.0.0.1:8731/k2/")
+GOOD_POSTS = [  # live runs the judges read as fine: K1 j3k1, K3 j2k3, pawr at 2aa92ac
+    ("We kept pasting our own launch posts into Claude by hand.\n\nWe shipped posts.design MCP. Your agent can "
+     "search 5,000+ real launch posts, OG images and Headers.\n\nhttps://posts.design/mcp", "posts.design"),
+    ("Most of our support emails were blurry photos of sad leaves.\n\nFernlight reads a leaf photo and names the "
+     "likely cause.\n\nYou get three things to do today.\n\nhttp://127.0.0.1:8731/k3/", "Fernlight"),
+    ("People kept asking to match their pet page to their own site.\n\nPeople kept asking for it.\n\n"
+     "Custom themes for pet pages are live.\n\nhttps://pawr.link", "pawr.link"),
+]
+
+
+def test_brookhour_repeats_a_phrase_across_lines_and_names_it():
+    [f] = [f for f in check(BROOKHOUR, network="x", product="Brookhour") if f.rule_id == "repeated-phrase"]
+    assert f.found == "next meeting" and f.found in f.fix
+
+
+@pytest.mark.parametrize("text,product", GOOD_POSTS)
+def test_the_good_live_posts_repeat_nothing(text, product):
+    assert not {"repeated-phrase", "repeats-first-line"} & ids(text, product=product)
+
+
+def test_a_word_in_three_lines_repeats():
+    text = "Themes are here.\n\nPick a colour theme.\n\nEvery theme follows your site."
+    [f] = [f for f in check(text, network="x") if f.rule_id == "repeated-phrase"]
+    assert f.found == "theme"
+
+
+def test_the_product_name_may_appear_in_every_line():
+    text = "Fernlight is out.\n\nFernlight reads a leaf.\n\nGet Fernlight on iPhone."
+    assert "repeated-phrase" not in ids(text, product="Fernlight")
+    assert "repeated-phrase" in ids(text)
+
+
+def test_a_phrase_shared_only_with_the_first_line_is_not_this_rule():
+    text = "Deep work next to meetings.\n\nYour calendar shows deep work now."
+    assert "repeated-phrase" not in ids(text)

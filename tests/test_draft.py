@@ -740,3 +740,22 @@ def test_checklist_says_which_details_came_from_the_site():
     [plain] = [c for c in checklist(text, fails, "x") if "unsupported-detail" in c.rules]
     assert "three" not in plain.text
     assert site_details(text, replace(K3_BRIEF, detail="three things today"), brand) == []
+
+
+REPEATED = {**CLEAN, "caption": "Pet pages can wear your colours now.\n\nPick a colour theme in settings.\n\n"
+                                "The colour theme follows the whole page.\n\nhttps://pawr.link"}
+
+
+def test_a_repeated_phrase_triggers_the_redraft_with_the_phrase():
+    host, d = draft([REPEATED, CLEAN])
+    assert len(host.llm_calls) == 2 and "repeated-phrase" in prompt_of(host.llm_calls[1])
+    assert '"colour theme"' in prompt_of(host.llm_calls[1])
+    assert [f.found for f in d.first_failures if f.rule_id == "repeated-phrase"] == ["colour theme"]
+    assert d.failures == ()
+
+
+def test_checklist_fails_each_line_says_something_new_on_a_repeated_phrase():
+    text = REPEATED["caption"]
+    fails = post_failures(text, BRIEF, BRAND, REFS)
+    [line] = [c for c in checklist(text, fails, "x") if "repeated-phrase" in c.rules]
+    assert not line.ok and "colour theme" in line.text

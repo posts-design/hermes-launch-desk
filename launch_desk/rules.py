@@ -45,6 +45,8 @@ RULES: tuple[Rule, ...] = (
          "Reword the passage so it shares no five-word run with the references.", False),
     Rule("repeats-first-line", "A later line repeats most of the first line.",
          "Make every line after the first say something new; don't restate the first line.", False),
+    Rule("repeated-phrase", "Two lines say the same thing.",
+         "Say the repeated phrase once; give every line something new.", False),
 )
 _RULE_BY_ID = {r.id: r for r in RULES}
 
@@ -223,13 +225,45 @@ def _link_first(text: str) -> bool:
     return bool(_URL_RE.search(_first_line(text)))
 
 
+def _stem(w: str) -> str:
+    return w[:-1] if len(w) > 3 and w.endswith("s") and not w.endswith("ss") else w
+
+
 def _content_words(line: str) -> set[str]:
-    out = set()
-    for w in re.findall(r"[a-z0-9]+", line.lower().replace("'", "").replace("\u2019", "")):
-        if w in STOPWORDS:
-            continue
-        out.add(w[:-1] if len(w) > 3 and w.endswith("s") and not w.endswith("ss") else w)
-    return out
+    return set(_content_seq(line))
+
+
+def _content_seq(line: str, skip: frozenset[str] | set[str] = frozenset()) -> list[str]:
+    """The line's content words in order: lowercase, stopwords out, a plural "s" dropped."""
+    words = re.findall(r"[a-z0-9]+", line.lower().replace("'", "").replace("\u2019", ""))
+    return [s for s in (_stem(w) for w in words if w not in STOPWORDS) if s not in skip]
+
+
+# Words too common to count as a repeat on their own ("you can", "get", "one").
+_FILLER = frozenset(
+    "can will get got has have had was were not but all any more most what when who which there here "
+    "they them then than also about one every each some own out up do does did make makes made me my "
+    "us he she his her yours way".split()
+)
+
+
+def _find_repeated_phrase(text: str, product: str = "") -> str:
+    """What two lines repeat: a phrase of two content words that two lines after the first both
+    have ("next ... meeting"), else a content word in three or more lines. The product's own
+    name never counts, and link-only lines are skipped. "" if nothing repeats."""
+    skip = set(_content_seq(product)) | _FILLER
+    lines = [_URL_RE.sub(" ", ln).strip() for ln in text.split("\n")]
+    seqs = [_content_seq(ln, skip) for ln in lines if ln]
+    first_seen: dict[tuple[str, str], int] = {}
+    for i, seq in enumerate(seqs[1:], 1):
+        for pair in dict.fromkeys(zip(seq, seq[1:])):
+            if first_seen.setdefault(pair, i) != i:
+                return " ".join(pair)
+    lines_with: dict[str, int] = {}
+    for seq in seqs:
+        for w in dict.fromkeys(seq):
+            lines_with[w] = lines_with.get(w, 0) + 1
+    return next((w for seq in seqs for w in seq if lines_with[w] >= 3), "")
 
 
 def repeating_lines(text: str) -> list[int]:
@@ -320,7 +354,8 @@ _FINDERS: dict[str, Callable[[str], str]] = {
 
 
 def check(text: str, *, network: str, reference_captions: Sequence[str] = (),
-          voice_samples: Sequence[str] = (), own_words: Sequence[str] = ()) -> list[Failure]:
+          voice_samples: Sequence[str] = (), own_words: Sequence[str] = (),
+          product: str = "") -> list[Failure]:
     relaxed = relaxed_rules(voice_samples)
     failed: list[Failure] = []
     for rule in RULES:
@@ -332,6 +367,13 @@ def check(text: str, *, network: str, reference_captions: Sequence[str] = (),
         elif rule.id == "copied-run":
             found = _find_copied_run(text, reference_captions, own_words)
             hit = bool(found)
+        elif rule.id == "repeated-phrase":
+            found = _find_repeated_phrase(text, product)
+            hit = bool(found)
+            if hit:
+                failed.append(Failure(rule.id, f'Two lines repeat "{found}".',
+                                      f'Say "{found}" once; give every line something new.', found))
+            continue
         else:
             hit = _PREDICATES[rule.id](text)
             if hit and rule.id in _FINDERS:

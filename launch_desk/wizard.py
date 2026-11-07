@@ -108,9 +108,10 @@ CAUGHT = {
     "length": "a post too long for X",
     "copied-run": "five words copied from a reference",
     "repeats-first-line": "a line repeating the first",
+    "repeated-phrase": "a phrase said twice",
     "unsupported-detail": "details you didn't give",
 }
-_QUOTE = {"stock-phrase", "template-opener", "placeholder", "copied-run"}
+_QUOTE = {"stock-phrase", "template-opener", "placeholder", "copied-run", "repeated-phrase"}
 FOUND_MAX = 40
 NEXT_CHOICES = [
     {"value": "approve", "label": "Approve"},

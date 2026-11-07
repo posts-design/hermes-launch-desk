@@ -1359,3 +1359,12 @@ def test_your_own_launch_that_opened_with_the_same_detail_is_not_a_copy():
     [copied] = [c for c in wizard._Pending(p).checks() if "copied-run" in c.rules]
     assert copied.ok
     assert reply
+
+
+def test_caught_line_names_a_repeated_phrase():
+    rep = {**CLEAN, "caption": "Pet pages can wear your colours now.\n\nPick a colour theme in settings.\n\n"
+                               "The colour theme follows the whole page.\n\nhttps://pawr.link"}
+    clean_reply = start(make_host(PHASE1))
+    reply = start(make_host(PHASE1, llm=(rep, CLEAN)))
+    [line] = [ln for ln in plain(reply) if ln and ln not in plain(clean_reply)]
+    assert '"colour theme"' in line
