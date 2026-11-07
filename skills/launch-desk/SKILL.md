@@ -19,7 +19,7 @@ For example: `/launch https://yoursite.com dark mode for the editor -- people ke
 
 - Add the site link the first time. It is remembered after that.
 - The part after ` -- ` is one true detail, like who asked for it or what it replaced. The draft treats it as a fact and uses nothing it cannot find. Ask for one in the founder's own words if they have none; a real detail is the best thing a launch post can have.
-- Hook 1 is always that detail, word for word, marked "(your words)". The model's hooks come after it, and only ones that pass the checks with the rest of the post are offered. Encourage the founder to lead with their own line.
+- Hook 1 is always that detail, word for word, marked "(your words)". The model's hooks come after it, each offered only if it adds no failure of its own to the post, and no two built the same way. If no model hook passes, the least bad one is offered marked "(has issues)". Encourage the founder to lead with their own line.
 - `/launch` always takes two steps. The first run ends with the draft, the card and a feed preview. Sending `/launch` again lets them approve, change the hook, swap references or discard.
 - `/launch brand <url>` reads the site's colours and logo again. `/launch help` shows the usage.
 - `/launch voice: <a past post>` keeps one of the founder's own posts as a voice sample (the last three are kept); drafts follow its style. `/launch voice: clear` forgets them. The colon is required; `/launch voice mode ...` is a normal launch. It needs a saved brand first: `/launch brand <url>`, or one approved launch.
