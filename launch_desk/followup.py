@@ -25,7 +25,7 @@ from typing import Any
 from .models import PastLaunch
 from .pack import JUDGE_BY_CONVERSION
 from .references import short_brand
-from .rules import _EMOJI_RE, check
+from .rules import _EMOJI_RE, _private_host, check
 
 SKILL = "launch-desk:launch-desk"
 CHECKIN_HOURS = (24, 72)
@@ -287,15 +287,21 @@ def _made(data: dict, name: str) -> str:
     return m.group(0) if m else ""
 
 
+PACK_READ_MAX = 1_000_000  # bytes; a pack.json the plugin writes is a few KB
+
+
 def _site(url: Any) -> str:
-    """The host of a URL, lower case, without www."""
+    """The host of a URL, lower case, without www; with its port when the host is local or
+    private (sites staged on one machine differ only by port). "" when it has no host."""
     if not isinstance(url, str):
         return ""
     try:
-        host = (urllib.parse.urlsplit(url.strip()).hostname or "").lower()
+        parts = urllib.parse.urlsplit(url.strip())
+        host, port = (parts.hostname or "").lower(), parts.port
     except ValueError:
         return ""
-    return host[4:] if host.startswith("www.") else host
+    host = host[4:] if host.startswith("www.") else host
+    return f"{host}:{port}" if host and port and _private_host(host) else host
 
 
 def _pack_site(data: dict) -> str:
@@ -307,24 +313,36 @@ def _pack_site(data: dict) -> str:
 def best_launch(root: Path, site: str | None = None) -> PastLaunch | None:
     """The founder's approved pack with the most recorded sign-ups (more than none); on a tie
     the most recent. With `site`, only packs for that site (same host) count, so another
-    product's launch never speaks for this one. None when no pack has results. Never raises."""
+    product's launch never speaks for this one; a `site` without a host matches nothing.
+    `latest` is True only when no pack of the site with a post is more recent, whatever its
+    results. None when no pack has results. Never raises."""
     want = _site(site) if site else ""
+    if site and not want:
+        return None
     found: list[tuple[int, str, str, PastLaunch]] = []
+    newest: tuple[str, str] | None = None
     try:
         folders = sorted(p for p in Path(root).iterdir() if p.is_dir())
     except OSError:
         return None
     for folder in folders:
         try:
-            data = _load(_pack_file(root, folder.name))
-        except _Refused:
+            path = _pack_file(root, folder.name)
+            if path.stat().st_size > PACK_READ_MAX:
+                continue
+            data = _load(path)
+        except (_Refused, OSError):
             continue
         if want and _pack_site(data) != want:
             continue
         caption = data.get("caption")
+        if not (isinstance(caption, str) and caption.strip()):
+            continue
+        made = (_made(data, folder.name), folder.name)
+        newest = max(newest, made) if newest else made
         channels = channel_totals(data.get("results"))
         total = sum(n for _c, n in channels)
-        if not (isinstance(caption, str) and caption.strip()) or total <= 0:
+        if total <= 0:
             continue
         brief = data.get("brief") if isinstance(data.get("brief"), dict) else {}
         shipped = brief.get("shipped") if isinstance(brief.get("shipped"), str) else ""
@@ -334,12 +352,21 @@ def best_launch(root: Path, site: str | None = None) -> PastLaunch | None:
     if not found:
         return None
     best = max(found, key=lambda f: (f[0], f[1], f[2]))
-    newest = max(found, key=lambda f: (f[1], f[2]))
-    return PastLaunch(**{**best[3].__dict__, "latest": best is newest})
+    return PastLaunch(**{**best[3].__dict__, "latest": (best[1], best[2]) == newest})
 
 
 def _count(n: int) -> str:
     return f"{n:,} sign-up" + ("" if n == 1 else "s")
+
+
+def _curly(text: str) -> str:
+    """Straight double quotes as curly ones, so a quoted line never nests straight quotes."""
+    out, opening = [], True
+    for ch in text:
+        if ch == '"':
+            ch, opening = ("\u201c" if opening else "\u201d"), not opening
+        out.append(ch)
+    return "".join(out)
 
 
 def best_launch_line(launch: PastLaunch) -> str:
@@ -350,6 +377,6 @@ def best_launch_line(launch: PastLaunch) -> str:
         brought = f"{_count(launch.signups)} on {shown[0][0]}"
     else:
         brought = f"{_count(launch.signups)} ({', '.join(f'{n:,} on {c}' for c, n in shown)})"
-    first = _plain(launch.first_line)
+    first = _curly(_plain(launch.first_line))
     end = "" if first.endswith((".", "!", "?", "\u2026")) else "."
     return f'{who} brought {brought} with "{first}"{end}'

@@ -283,7 +283,9 @@ def _dark(kit) -> bool:
     return _lum(kit.bg) < 0.4 and _lum(kit.ink) > 0.6
 
 
-def test_posts_design_reads_dark_with_its_orange_accent():
+def test_posts_design_reads_dark_and_falls_back_to_its_most_used_colour():
+    # posts.design names no saturated accent token and its buttons are grey, so the accent is
+    # the frequency fallback: #FF9602, a stop in a decorative gradient (owner to confirm).
     kit = _posts_design()
     assert kit.bg == "#101010"
     assert _dark(kit)
@@ -408,3 +410,173 @@ def test_face_follows_the_headings_font():
     css = 'body{font-family:Inter,sans-serif}h1,h2{font-family:"Iowan Old Style",Georgia,serif}'
     kit, _ = parse_brand("https://x.test", "", [css])
     assert kit.font_face == "serif"
+
+
+# --- a bounded, forgiving CSS read (Task 20 fixes) ----------------------------
+
+import time  # noqa: E402
+
+PAGE = '<meta property="og:site_name" content="Acme"><title>Acme</title>'
+
+
+def _timed(html: str, css: list[str]):
+    start = time.perf_counter()
+    kit, _ = parse_brand("https://x.test", html, css)
+    return kit, time.perf_counter() - start
+
+
+def test_a_var_chain_resolves_in_linear_time():
+    n = 30
+    css = ":root{--accent:" + " ".join(["var(--l1)"] * n) + ";"
+    css += "".join(f"--l{i}:" + " ".join([f"var(--l{i + 1})"] * n) + ";" for i in range(1, 7))
+    css += "--l7:#e8590c}.a{color:#2f9e44}.b{color:#2f9e44}"
+    kit, took = _timed(PAGE, [css])
+    assert took < 1.0
+    assert kit.accent == "#2F9E44"  # the token is too large to be a colour: the next signal decides
+
+
+def test_a_huge_token_used_by_many_buttons_resolves_once():
+    css = ":root{--big:" + "x" * 1_000_000 + "}" + "".join(
+        f".btn.b{i}{{background:var(--big)}}" for i in range(10_000)) + ".a{color:#2f9e44}"
+    kit, took = _timed(PAGE, [css])
+    assert took < 1.0
+    assert kit.accent == "#2F9E44"
+
+
+def test_var_cycles_and_deep_chains_do_not_loop():
+    cycle = ":root{--a:var(--b);--b:var(--a);--accent:var(--a)}.x{color:#2f9e44}"
+    deep = ":root{--accent:var(--d0);" + "".join(f"--d{i}:var(--d{i + 1});" for i in range(5000)) + \
+        "--d5000:#e8590c}.x{color:#2f9e44}.y{color:#2f9e44}"
+    for css in (cycle, deep):
+        kit, took = _timed(PAGE, [css])
+        assert took < 1.0 and kit.accent == "#2F9E44"
+
+
+def test_a_short_var_chain_still_resolves():
+    css = ":root{--orange:#e8590c;--brand-color:var(--tone, #000);--tone:var(--orange)}.a{color:#2f9e44}"
+    kit, _ = parse_brand("https://x.test", "", [css])
+    assert kit.accent == "#E8590C"
+
+
+TWO_MB = 2 * 1024 * 1024
+
+
+@pytest.mark.parametrize("css", [
+    "/*a" * (TWO_MB // 3),
+    "@m{" * (TWO_MB // 6) + "a{}" * (TWO_MB // 6),
+    "x{" * (TWO_MB // 5) + "a{}" * (TWO_MB // 5),
+    "a{}" * (TWO_MB // 3),
+    "'" + "a" * TWO_MB,
+    ("a{content:'{'}" + '"' + "{") * (TWO_MB // 16),
+], ids=["comments", "at-rules", "nesting", "rules", "string", "braces-in-strings"])
+def test_hostile_css_reads_within_two_seconds(css):
+    kit, took = _timed(PAGE, [css])
+    assert took < 2.0
+    assert kit.name == "Acme"
+
+
+def test_an_unterminated_comment_drops_only_the_rest():
+    css = ":root{--accent:#e8590c}/* never closed :root{--accent:#2f9e44}"
+    kit, _ = parse_brand("https://x.test", "", [css])
+    assert kit.accent == "#E8590C"
+
+
+def test_braces_inside_strings_do_not_shift_rules():
+    css = '.q::before{content:"}{"}:root{--accent:#e8590c}.a{color:#2f9e44}.b{color:#2f9e44}'
+    kit, _ = parse_brand("https://x.test", "", [css])
+    assert kit.accent == "#E8590C"
+
+
+@pytest.mark.parametrize("html,css", [
+    ('<meta name="theme-color" content="#ggg8">', ""),
+    ('<meta name="theme-color" content="#zzzzzz">', ""),
+    ('<meta name="theme-color" content="rgb(1e999, 0, 0)">', ""),
+    ("", ":root{--accent:rgb(1e999,0,0)}"),
+    ("", ":root{--accent:hsl(1e999 50% 50%)}"),
+    ("", ":root{--bg:1.2.3 50% 10%}"),
+    ("", ":root{--bg:nan 50% 10%}"),
+    ("", ":root{--accent:#ggg8;--primary:#zzzzzz}body{background:rgb(inf,0,0)}"),
+    ("", ".btn{background:oklch(1e999 0.2 30)}"),
+])
+def test_a_malformed_colour_drops_only_that_signal(html, css):
+    page = PAGE + html
+    sheet = css + ".a{color:#2f9e44}.b{color:#2f9e44}"
+    kit, _ = parse_brand("https://x.test", page, [sheet])
+    assert kit.name == "Acme"
+    assert kit.accent == "#2F9E44"
+    assert kit.bg == NEUTRAL.bg
+
+
+def test_a_malformed_colour_keeps_the_fetched_brand(tmp_path):
+    def get(url: str) -> bytes:
+        return (PAGE + '<meta name="theme-color" content="#ggg8"><meta name="description" content="Rockets.">'
+                '<style>:root{--accent:rgb(1e999,0,0)}.a{color:#e8590c}</style>').encode()
+
+    kit = fetch_brand("https://x.test", get, tmp_path)
+    assert kit.name == "Acme" and kit.tagline == "Rockets." and kit.accent == "#E8590C"
+
+
+def test_color_scheme_on_a_component_does_not_make_the_site_dark():
+    css = ".login-dialog{color-scheme:dark}"
+    kit, _ = parse_brand("https://x.test", DARK_TC, [css])
+    assert not _dark(kit)
+
+
+@pytest.mark.parametrize("css,dark", [
+    (":root{color-scheme:light dark}", False),
+    ("html{color-scheme:only dark}", True),
+    (":root:not([data-theme]){color-scheme:dark}", True),
+    ("body{color-scheme:dark}", True),
+])
+def test_only_a_dark_only_root_scheme_counts(css, dark):
+    kit, _ = parse_brand("https://x.test", DARK_TC, [css])
+    assert _dark(kit) is dark
+
+
+def test_a_light_dark_scheme_meta_is_not_dark_only():
+    kit, _ = parse_brand("https://x.test", DARK_TC + '<meta name="color-scheme" content="light dark">', [])
+    assert not _dark(kit)
+
+
+@pytest.mark.parametrize("wrapper", ["@supports (color: darkred){%s}", "@layer darkroom{%s}",
+                                     "@media (min-width: 640px){%s}"])
+def test_at_rules_that_only_mention_dark_still_count(wrapper):
+    css = wrapper % ":root{--accent:#e8590c}" + ".a{color:#2f9e44}.b{color:#2f9e44}"
+    kit, _ = parse_brand("https://x.test", "", [css])
+    assert kit.accent == "#E8590C"
+
+
+def test_a_dark_media_block_is_skipped_however_it_is_spaced():
+    css = "@media screen and (prefers-color-scheme : dark){:root{--accent:#e8590c}}.a{color:#2f9e44}.b{color:#2f9e44}"
+    kit, _ = parse_brand("https://x.test", "", [css])
+    assert kit.accent == "#2F9E44"
+
+
+@pytest.mark.parametrize("value,expected", [
+    ("oklch(70.5% 0.213 47.604)", "#FF6900"),
+    ("oklch(0.627 0.194 149.214)", "#00A63E"),
+    ("oklab(0.452 -0.0325 -0.3115)", "#0000FF"),
+])
+def test_oklch_and_oklab_tokens_are_read(value, expected):
+    css = f":root{{--primary:{value}}}.a{{color:#2f9e44}}"
+    kit, _ = parse_brand("https://x.test", "", [css])
+    r, g, b = (int(kit.accent[i:i + 2], 16) for i in (1, 3, 5))
+    er, eg, eb = (int(expected[i:i + 2], 16) for i in (1, 3, 5))
+    assert max(abs(r - er), abs(g - eg), abs(b - eb)) <= 4
+
+
+@pytest.mark.parametrize("css", [
+    "\\'\\{" * (TWO_MB // 4),
+    ("\\" * 1000 + "'") * (TWO_MB // 1001),
+], ids=["escapes", "backslashes"])
+def test_escaped_characters_read_within_two_seconds(css):
+    kit, took = _timed(PAGE, [css])
+    assert took < 2.0
+    assert kit.name == "Acme"
+
+
+def test_escaped_quotes_in_a_selector_do_not_open_a_string():
+    css = (".content-\\[\\'\\'\\]:before{--tw-content:''}"
+           ":root{--accent:#e8590c}.a{color:#2f9e44}.b{color:#2f9e44}")
+    kit, _ = parse_brand("https://x.test", "", [css])
+    assert kit.accent == "#E8590C"

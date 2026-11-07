@@ -427,3 +427,26 @@ def test_only_the_headline_changes_face(tmp_path):
         with Image.open(out) as im:
             crops.append(im.crop((0, 675 - 140, 1200, 675)).tobytes())
     assert crops[0] == crops[1]
+
+
+
+@pytest.mark.parametrize("face,headline", [
+    ("serif", "Новый дизайн уже здесь"),
+    ("serif", "Νέο θέμα σήμερα"),
+    ("rounded", "Νέο θέμα σήμερα"),
+])
+@pytest.mark.parametrize("shots", [0, 1])
+def test_a_headline_the_face_cannot_draw_falls_back_to_inter(tmp_path, face, headline, shots):
+    paths = [_shot(tmp_path)] if shots else []
+    a = render_card(replace(KIT, font_face="sans"), paths, headline, (1200, 675), tmp_path / "a.png")
+    b = render_card(replace(KIT, font_face=face), paths, headline, (1200, 675), tmp_path / "b.png")
+    with Image.open(a) as ia, Image.open(b) as ib:
+        assert ia.tobytes() == ib.tobytes()
+
+
+def test_vietnamese_stays_in_the_brand_face(tmp_path):
+    headline = "Chủ đề mới cho trang của bạn"
+    a = render_card(replace(KIT, font_face="sans"), None, headline, (1200, 675), tmp_path / "a.png")
+    b = render_card(replace(KIT, font_face="serif"), None, headline, (1200, 675), tmp_path / "b.png")
+    with Image.open(a) as ia, Image.open(b) as ib:
+        assert ia.tobytes() != ib.tobytes()

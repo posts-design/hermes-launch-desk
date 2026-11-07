@@ -2,13 +2,14 @@
 from __future__ import annotations
 
 import colorsys
+import math
 import re
 import urllib.parse
 import urllib.request
 from collections import Counter
 from html.parser import HTMLParser
 from pathlib import Path
-from typing import Callable, Sequence
+from typing import Any, Callable, Sequence
 
 from .models import BrandKit
 
@@ -154,9 +155,16 @@ def _font_family(sources: Sequence[str]) -> str | None:
 # the accent the site names or puts on its buttons, and the headings' font. It is not a CSS
 # engine: no cascade, no specificity, only the rules as written.
 
-_COMMENT_RE = re.compile(r"/\*.*?\*/", re.S)
+# Bounds, so any stylesheet within the 2 MB fetch cap reads in about a second: rules kept,
+# brace nesting followed, a value's length after var() and the var()s replaced in one value.
+MAX_RULES = 20_000
+MAX_DEPTH = 32
+MAX_VALUE = 2_000
+MAX_SUBS = 32
+
 _VAR_RE = re.compile(r"var\(\s*(--[\w-]+)\s*(?:,\s*([^()]*(?:\([^()]*\)[^()]*)*))?\)")
 _ROOTS = frozenset({":root", "html", "body"})
+_ROOT_START_RE = re.compile(r"(?::root|html|body)(?![\w-])")
 _STATE_RE = re.compile(r":(?:hover|active|focus|focus-visible|focus-within|disabled|visited)\b|::")
 _BUTTON_RE = re.compile(
     r"(?:^|[\s>+~])button(?![\w-])"
@@ -165,32 +173,90 @@ _BUTTON_RE = re.compile(
     r"|\[type=[\"']?submit")
 _H1_RE = re.compile(r"(?:^|[\s>+~])h1(?![\w-])")
 _BG_TOKEN_RE = re.compile(r"--(?:(?:color|theme|site|page)-)?(?:background|bg)(?:-colou?r)?")
+_DARK_MEDIA_RE = re.compile(r"prefers-color-scheme\s*:\s*dark", re.I)
 _ACCENT_WORDS = ("accent", "brand", "primary")
 _ACCENT_EXTRA = frozenset({"color", "colour", "theme", "site", "ui"})
 _NAMED = {"white": "#FFFFFF", "black": "#000000"}
 _COLOUR_RE = re.compile(
-    r"#[0-9a-fA-F]{3,8}(?![0-9a-zA-Z_-])|(?:rgba?|hsla?)\([^()]*\)|\b(?:white|black)\b", re.I)
+    r"#[0-9a-zA-Z]{3,8}(?![0-9a-zA-Z_-])|(?:rgba?|hsla?|oklch|oklab)\([^()]*\)|\b(?:white|black)\b", re.I)
+_HEX_DIGITS_RE = re.compile(r"[0-9a-fA-F]{3,4}|[0-9a-fA-F]{6}|[0-9a-fA-F]{8}")
 _BARE_HSL_RE = re.compile(r"^\s*(-?[\d.]+)(?:deg)?\s+([\d.]+)%\s+([\d.]+)%\s*(?:/\s*[\d.]+%?)?\s*$")
+_SCAN_RE = re.compile(r"[{}\"']")
 DARK_LUMINANCE = 0.4  # below this the background is dark and the text goes light
 
 
-def _css_rules(text: str) -> list[tuple[str, str, str]]:
-    """(selector, declarations, enclosing at-rules) for each style rule, in order."""
-    text = _COMMENT_RE.sub("", text)
-    out: list[tuple[str, str, str]] = []
-    stack: list[str] = []
-    start = 0
-    for m in re.finditer(r"[{}]", text):
+def _strip_comments(text: str) -> str:
+    """Comments out, in one pass; an unterminated comment drops the rest of the text."""
+    out: list[str] = []
+    i = 0
+    while True:
+        j = text.find("/*", i)
+        if j < 0:
+            out.append(text[i:])
+            break
+        out.append(text[i:j])
+        k = text.find("*/", j + 2)
+        if k < 0:
+            break
+        i = k + 2
+    return "".join(out)
+
+
+def _escaped(text: str, i: int) -> bool:
+    """The character at i follows an odd number of backslashes."""
+    n = 0
+    while i - 1 - n >= 0 and text[i - 1 - n] == "\\":
+        n += 1
+    return n % 2 == 1
+
+
+def _string_end(text: str, i: int) -> int:
+    """Where the string opening at i ends: its closing quote, else the end of its line."""
+    quote, j = text[i], i + 1
+    while True:
+        k = text.find(quote, j)
+        if k < 0:
+            nl = text.find("\n", i)
+            return nl if nl >= 0 else len(text)
+        if "\n" in text[j:k]:
+            return text.find("\n", j)
+        if not _escaped(text, k):
+            return k
+        j = k + 1
+
+
+def _css_rules(text: str) -> list[tuple[str, str, bool]]:
+    """(selector, declarations, inside a dark-scheme block) for each style rule, in order.
+    Linear in the text: strings are skipped, at most MAX_RULES rules are kept and rules
+    nested deeper than MAX_DEPTH are left out."""
+    text = _strip_comments(text)
+    out: list[tuple[str, str, bool]] = []
+    stack: list[tuple[str, bool]] = []  # (prelude, opens a dark-scheme block)
+    dark_open = 0
+    start = pos = 0
+    while len(out) < MAX_RULES:
+        m = _SCAN_RE.search(text, pos)
+        if not m:
+            break
         i, ch = m.start(), m.group(0)
+        if _escaped(text, i):  # a selector like .content-\[\'\'\] escapes quotes and braces
+            pos = i + 1
+            continue
+        if ch in "\"'":
+            pos = _string_end(text, i) + 1
+            continue
+        pos = i + 1
         if ch == "{":
-            stack.append(text[start:i].rsplit(";", 1)[-1].strip())
-            start = i + 1
-        else:
-            if stack:
-                prelude = stack.pop()
-                if prelude and not prelude.startswith("@"):
-                    out.append((prelude, text[start:i], " ".join(p for p in stack if p.startswith("@"))))
-            start = i + 1
+            prelude = text[start:i].rsplit(";", 1)[-1].strip()
+            dark = prelude.startswith("@") and bool(_DARK_MEDIA_RE.search(prelude))
+            stack.append((prelude, dark))
+            dark_open += dark
+        elif stack:
+            prelude, dark = stack.pop()
+            dark_open -= dark
+            if prelude and not prelude.startswith("@") and len(stack) < MAX_DEPTH:
+                out.append((prelude, text[start:i], dark_open > 0))
+        start = i + 1
     return out
 
 
@@ -212,8 +278,16 @@ def _is_root(selector: str) -> bool:
     return bool(parts) and all(p in _ROOTS for p in parts)
 
 
-def _dark_context(context: str) -> bool:
-    return "dark" in context.lower()
+def _starts_at_root(selector: str) -> bool:
+    """Every part of the selector starts with :root, html or body (":root:not([data-theme])")."""
+    parts = _parts(selector)
+    return bool(parts) and all(_ROOT_START_RE.match(p) for p in parts)
+
+
+def _dark_only(value: str) -> bool:
+    """A color-scheme value that offers dark and not light: "dark" or "only dark"."""
+    words = set(value.lower().split())
+    return "dark" in words and "light" not in words
 
 
 def _clamp(v: float) -> int:
@@ -225,10 +299,12 @@ def _hex_rgb(r: float, g: float, b: float) -> str:
 
 
 def _num(text: str, scale: float = 255) -> float:
+    """A CSS number or percentage; ValueError for anything else, infinity and NaN included."""
     text = text.strip()
-    if text.endswith("%"):
-        return float(text[:-1]) / 100 * scale
-    return float(text)
+    value = float(text[:-1]) / 100 * scale if text.endswith("%") else float(text)
+    if not math.isfinite(value):
+        raise ValueError(text)
+    return value
 
 
 def _alpha_ok(text: str | None) -> bool:
@@ -241,24 +317,50 @@ def _alpha_ok(text: str | None) -> bool:
 
 
 def _hsl_hex(h: float, s: float, light: float) -> str:
-    r, g, b = colorsys.hls_to_rgb((h % 360) / 360, light, s)
+    r, g, b = colorsys.hls_to_rgb((h % 360) / 360, min(max(light, 0), 1), min(max(s, 0), 1))
     return _hex_rgb(r * 255, g * 255, b * 255)
 
 
+def _gamma(x: float) -> float:
+    x = min(max(x, 0.0), 1.0)
+    return 12.92 * x if x <= 0.0031308 else 1.055 * x ** (1 / 2.4) - 0.055
+
+
+def _oklab_hex(light: float, a: float, b: float) -> str:
+    """OKLab to sRGB (Björn Ottosson's matrices), clipped to the sRGB gamut."""
+    l_ = (light + 0.3963377774 * a + 0.2158037573 * b) ** 3
+    m_ = (light - 0.1055613458 * a - 0.0638541728 * b) ** 3
+    s_ = (light - 0.0894841775 * a - 1.2914855480 * b) ** 3
+    r = 4.0767416621 * l_ - 3.3077115913 * m_ + 0.2309699292 * s_
+    g = -1.2684380046 * l_ + 2.6097574011 * m_ - 0.3413193965 * s_
+    bl = -0.0041960863 * l_ - 0.7034186147 * m_ + 1.7076127010 * s_
+    return _hex_rgb(_gamma(r) * 255, _gamma(g) * 255, _gamma(bl) * 255)
+
+
 def _colour(token: str) -> str | None:
-    """One CSS colour as upper-case #RRGGBB; None for anything mostly transparent or unknown."""
+    """One CSS colour as upper-case #RRGGBB; None for anything mostly transparent, unknown or
+    malformed. Reads hex, rgb(), hsl(), oklch(), oklab(), white and black; not color-mix()."""
+    try:
+        return _colour_or_raise(token)
+    except (ValueError, OverflowError, ZeroDivisionError, IndexError):
+        return None
+
+
+def _colour_or_raise(token: str) -> str | None:
     t = token.strip()
     low = t.lower()
     if low in _NAMED:
         return _NAMED[low]
     if t.startswith("#"):
         h = t[1:]
+        if not _HEX_DIGITS_RE.fullmatch(h):
+            return None
         if len(h) in (4, 8):
             if int(h[3] * 2 if len(h) == 4 else h[6:8], 16) < 128:
                 return None
             h = h[:3] if len(h) == 4 else h[:6]
-        return _norm_hex(h) if len(h) in (3, 6) else None
-    m = re.fullmatch(r"(rgba?|hsla?)\((.*)\)", low, re.S)
+        return _norm_hex(h)
+    m = re.fullmatch(r"(rgba?|hsla?|oklch|oklab)\((.*)\)", low, re.S)
     if not m:
         return None
     body = m.group(2).replace("/", " / ")
@@ -270,52 +372,107 @@ def _colour(token: str) -> str | None:
         args, alpha = args[:3], args[3]
     if len(args) != 3 or not _alpha_ok(alpha):
         return None
+    kind = m.group(1)
+    if kind.startswith("rgb"):
+        return _hex_rgb(*(_num(a) for a in args))
+    if kind.startswith("hsl"):
+        return _hsl_hex(_num(args[0].replace("deg", "")), _num(args[1], 1), _num(args[2], 1))
+    light = _num(args[0], 1)
+    if kind == "oklch":
+        chroma, hue = _num(args[1], 0.4), math.radians(_num(args[2].replace("deg", "")))
+        return _oklab_hex(light, chroma * math.cos(hue), chroma * math.sin(hue))
+    return _oklab_hex(light, _num(args[1], 0.4), _num(args[2], 0.4))
+
+
+def _bare_hsl(value: str) -> str | None:
+    """A token written as bare HSL numbers, "220 50% 10%"; None when it is not one."""
+    m = _BARE_HSL_RE.match(value)
+    if not m:
+        return None
     try:
-        if m.group(1).startswith("rgb"):
-            return _hex_rgb(*(_num(a) for a in args))
-        return _hsl_hex(float(args[0].replace("deg", "")), _num(args[1], 1), _num(args[2], 1))
-    except ValueError:
+        h, s, light = (_num(m.group(1), 1), _num(m.group(2), 1), _num(m.group(3), 1))
+        return _hsl_hex(h, s / 100, light / 100)
+    except (ValueError, OverflowError):
         return None
 
 
-def _resolve(value: str, tokens: dict[str, str], depth: int = 0) -> str:
-    """The value with var(--x, fallback) replaced from the tokens, a few levels deep."""
-    if depth > 5 or "var(" not in value:
-        return value
-
-    def repl(m: re.Match) -> str:
-        found = tokens.get(m.group(1))
-        return found if found is not None else (m.group(2) or "")
-    return _resolve(_VAR_RE.sub(repl, value), tokens, depth + 1)
-
-
-def _colours(value: str, tokens: dict[str, str]) -> list[str]:
-    value = _resolve(value, tokens)
-    bare = _BARE_HSL_RE.match(value)
-    if bare:  # a token written as bare HSL numbers, "220 50% 10%"
-        return [_hsl_hex(float(bare.group(1)), float(bare.group(2)) / 100, float(bare.group(3)) / 100)]
-    return [c for c in (_colour(m.group(0)) for m in _COLOUR_RE.finditer(value)) if c]
+def _brand_colour(hex_: str) -> bool:
+    return _is_saturated(hex_) and hex_ not in SOCIAL_COLOURS
 
 
 class _Css:
     """The rules of every stylesheet and <style> block, and the custom properties set on
-    :root, html or body outside any dark-mode block (the site's default theme)."""
+    :root, html or body outside any dark-scheme block (the site's default theme).
+
+    var() is resolved with each token worked out once (memoised, cycle-safe, at most
+    MAX_DEPTH deep); a value that grows past MAX_VALUE characters or holds more than
+    MAX_SUBS var()s resolves to "", so it never becomes a colour."""
 
     def __init__(self, sources: Sequence[str]) -> None:
-        self.rules = [r for text in sources for r in _css_rules(text)]
-        self.tokens: dict[str, str] = {}
-        for selector, body, context in self.rules:
-            if _is_root(selector) and not _dark_context(context):
+        self.rules: list[tuple[str, str, bool]] = []
+        for text in sources:
+            if len(self.rules) >= MAX_RULES:
+                break
+            self.rules += _css_rules(text)[: MAX_RULES - len(self.rules)]
+        self.raw: dict[str, str] = {}
+        for selector, body, dark in self.rules:
+            if _is_root(selector) and not dark:
                 for prop, value in _decls(body):
                     if prop.startswith("--"):
-                        self.tokens[prop] = value
+                        self.raw[prop] = value
+        self._memo: dict[str, str | None] = {}
+        self._busy: set[str] = set()
+
+    def _token(self, name: str) -> str | None:
+        if name in self._memo:
+            return self._memo[name]
+        if name not in self.raw or name in self._busy or len(self._busy) >= MAX_DEPTH:
+            return None
+        self._busy.add(name)
+        try:
+            value = self.resolve(self.raw[name])
+        finally:
+            self._busy.discard(name)
+        self._memo[name] = value
+        return value
+
+    def resolve(self, value: str) -> str:
+        if len(value) > MAX_VALUE:
+            return ""
+        if "var(" not in value:
+            return value
+        parts: list[str] = []
+        size = pos = 0
+        for n, m in enumerate(_VAR_RE.finditer(value), 1):
+            if n > MAX_SUBS:
+                return ""
+            found = self._token(m.group(1))
+            if found is None:
+                found = self.resolve(m.group(2)) if m.group(2) else ""
+            parts += [value[pos:m.start()], found]
+            size += m.start() - pos + len(found)
+            if size > MAX_VALUE:
+                return ""
+            pos = m.end()
+        parts.append(value[pos:])
+        out = "".join(parts)
+        return "" if len(out) > MAX_VALUE else out
+
+    def colours(self, value: str) -> list[str]:
+        value = self.resolve(value)
+        bare = _bare_hsl(value)
+        if bare:
+            return [bare]
+        return [c for c in (_colour(m.group(0)) for m in _COLOUR_RE.finditer(value)) if c]
 
     def default_rules(self):
-        return [(s, b) for s, b, c in self.rules if not _dark_context(c)]
+        return [(s, b) for s, b, dark in self.rules if not dark]
 
     def scheme_dark(self) -> bool:
-        return any(prop == "color-scheme" and "dark" in value.lower()
-                   for _s, body, _c in self.rules for prop, value in _decls(body))
+        """The site declares a dark-only color-scheme on :root, html or body."""
+        return any(prop == "color-scheme" and _dark_only(value)
+                   for selector, body, _d in self.rules if _starts_at_root(selector)
+                   for prop, value in _decls(body))
 
     def page_background(self) -> str | None:
         """The background html, body or :root is given, else a background token on them."""
@@ -325,23 +482,23 @@ class _Css:
                 continue
             for prop, value in _decls(body):
                 if prop in ("background", "background-color"):
-                    found = next(iter(_colours(value, self.tokens)), found)
+                    found = next(iter(self.colours(value)), found)
         if found:
             return found
-        for name, value in self.tokens.items():
+        for name in self.raw:
             if _BG_TOKEN_RE.fullmatch(name):
-                found = next(iter(_colours(value, self.tokens)), found)
+                found = next(iter(self.colours(f"var({name})")), found)
         return found
 
     def accent_token(self) -> str | None:
         """The saturated colour of a token named like --accent, --brand or --color-primary."""
         ranked = []
-        for pos, (name, value) in enumerate(self.tokens.items()):
+        for pos, name in enumerate(self.raw):
             words = name[2:].lower().split("-")
             key = next((w for w in _ACCENT_WORDS if w in words), None)
             if key is None or any(w not in _ACCENT_EXTRA and w != key for w in words):
                 continue
-            colour = next(iter(_colours(value, self.tokens)), None)
+            colour = next(iter(self.colours(f"var({name})")), None)
             if colour and _brand_colour(colour):
                 ranked.append((_ACCENT_WORDS.index(key), len(words), pos, colour))
         return min(ranked)[3] if ranked else None
@@ -355,7 +512,7 @@ class _Css:
                 continue
             for prop, value in _decls(body):
                 if prop in ("background", "background-color", "background-image"):
-                    for c in _colours(value, self.tokens):
+                    for c in self.colours(value):
                         if _brand_colour(c):
                             counts[c] += 1
         return counts.most_common(1)[0][0] if counts else None
@@ -367,14 +524,18 @@ class _Css:
                 continue
             for prop, value in _decls(body):
                 if prop == "font-family":
-                    resolved = _resolve(value, self.tokens).strip()
+                    resolved = self.resolve(value).strip()
                     if resolved and "var(" not in resolved:
                         return resolved
         return None
 
 
-def _brand_colour(hex_: str) -> bool:
-    return _is_saturated(hex_) and hex_ not in SOCIAL_COLOURS
+def _signal(read: Callable[[], Any], default: Any = None) -> Any:
+    """One brand signal; a value the reader cannot handle drops this signal, not the brand."""
+    try:
+        return read()
+    except Exception:
+        return default
 
 
 # ------------------------------------------------------------------ the headline face
@@ -467,17 +628,17 @@ def _background(page: _Page, sheet: _Css) -> str:
         colour = _colour(content)
         if not colour:
             continue
-        if "dark" in media:
+        if _DARK_MEDIA_RE.search(media):
             dark = dark or colour
         else:
             light = light or colour
-    scheme = page.meta.get("color-scheme", "").lower()
-    page_bg = sheet.page_background()
+    scheme_meta = _dark_only(page.meta.get("color-scheme", ""))
+    page_bg = _signal(sheet.page_background)
 
     def is_dark(c: str | None) -> bool:
         return bool(c) and _luminance(c) < DARK_LUMINANCE
 
-    if dark and is_dark(dark) and ("dark" in scheme or sheet.scheme_dark()):
+    if dark and is_dark(dark) and (scheme_meta or _signal(sheet.scheme_dark, False)):
         return dark
     if is_dark(light):
         return light
@@ -498,8 +659,8 @@ def parse_brand(url: str, html: str, css: Sequence[str]) -> tuple[BrandKit, str 
         "description", ""
     ).strip()
     sources = [*css, *page.styles]
-    sheet = _Css(sources)
-    bg = _background(page, sheet)
+    sheet = _signal(lambda: _Css(sources)) or _Css([])
+    bg = _signal(lambda: _background(page, sheet), NEUTRAL.bg)
     ink = NEUTRAL.ink if _luminance(bg) >= DARK_LUMINANCE else NEUTRAL.bg
     decl = _font_decl(sources)
     kit = BrandKit(
@@ -508,10 +669,11 @@ def parse_brand(url: str, html: str, css: Sequence[str]) -> tuple[BrandKit, str 
         tagline=_cut_tagline(tagline),
         bg=bg,
         ink=ink,
-        accent=sheet.accent_token() or sheet.button_colour() or _accent(sources),
+        accent=(_signal(sheet.accent_token) or _signal(sheet.button_colour)
+                or _signal(lambda: _accent(sources), NEUTRAL.accent)),
         font_family=_first_family(decl) if decl else None,
         logo_path=None,
-        font_face=_stack_face(sheet.heading_font() or decl),
+        font_face=_signal(lambda: _stack_face(_signal(sheet.heading_font) or decl), "sans"),
     )
     return kit, _logo_url(page, url)
 

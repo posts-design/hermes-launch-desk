@@ -590,7 +590,10 @@ def render_card(brand: BrandKit, screenshots: Sequence[Path | str | None] | Path
               if (im := _open_image(p)) is not None][-2:]
     logo_raw = _open_image(brand.logo_path)
     card = _Card(brand, (int(size[0]), int(size[1])), logo_raw.convert("RGBA") if logo_raw else None)
-    headline = _drop_missing(" ".join(headline.split()), card.head_path) or _display_name(brand)
+    headline = " ".join(headline.split())
+    if _drop_missing(headline, card.head_path) != _drop_missing(headline):
+        card.head_path = str(FONT_PATH)  # the brand face lacks a letter Inter has (Cyrillic, Greek)
+    headline = _drop_missing(headline, card.head_path) or _display_name(brand)
     shots = [_flatten(im, card.bg) for im, _ in opened]
     fits = _layout_for(len(shots))
     if layout not in LAYOUTS or (layout == "split" and len(shots) < 2) or (layout == "hero" and not shots):

@@ -373,3 +373,58 @@ def test_only_launches_of_the_same_site_count(tmp_path):
     assert followup.best_launch(tmp_path, site="https://pawr.link/x").pack == "2026-11-01-pawr"
     assert followup.best_launch(tmp_path, site="https://other.test") is None
     assert followup.best_launch(tmp_path).pack == "2026-11-01-pawr"
+
+
+# ------------------------------------------------------------------ Task 20 fixes
+
+def test_last_means_the_newest_pack_of_the_site_whatever_its_results(tmp_path):
+    make_pack(tmp_path, name="2026-11-01-a", results=_results(("X", 12)), created_at="2026-11-01T10:00:00+00:00")
+    make_pack(tmp_path, name="2026-11-05-b", results=_results(("X", 0)), created_at="2026-11-05T10:00:00+00:00")
+    make_pack(tmp_path, name="2026-11-06-c", created_at="2026-11-06T10:00:00+00:00")
+    best = followup.best_launch(tmp_path, site="https://pawr.link")
+    assert best.pack == "2026-11-01-a" and best.latest is False
+    assert followup.best_launch_line(best).startswith("Your best launch so far")
+
+
+def test_a_newer_pack_without_results_also_makes_it_not_the_last(tmp_path):
+    make_pack(tmp_path, name="2026-11-01-a", results=_results(("X", 12)), created_at="2026-11-01T10:00:00+00:00")
+    make_pack(tmp_path, name="2026-11-06-c", created_at="2026-11-06T10:00:00+00:00")
+    assert followup.best_launch(tmp_path).latest is False
+
+
+def test_another_site_newer_pack_does_not_change_last(tmp_path):
+    make_pack(tmp_path, name="2026-11-01-a", results=_results(("X", 12)), created_at="2026-11-01T10:00:00+00:00")
+    make_pack(tmp_path, name="2026-11-06-other", created_at="2026-11-06T10:00:00+00:00",
+              brand={"name": "Other", "url": "https://other.test"})
+    assert followup.best_launch(tmp_path, site="https://pawr.link").latest is True
+
+
+@pytest.mark.parametrize("site", ["not a url", "/relative/path", "https://"])
+def test_a_site_without_a_host_matches_nothing(tmp_path, site):
+    make_pack(tmp_path, results=_results(("X", 12)))
+    assert followup.best_launch(tmp_path, site=site) is None
+
+
+def test_local_and_private_hosts_keep_their_port(tmp_path):
+    k2 = {"name": "Brookhour", "url": "http://127.0.0.1:8731/k2/"}
+    make_pack(tmp_path, name="2026-11-01-k2", results=_results(("X", 4)), brand=k2)
+    assert followup.best_launch(tmp_path, site="http://127.0.0.1:8731/k3/").pack == "2026-11-01-k2"
+    assert followup.best_launch(tmp_path, site="http://127.0.0.1:9000/") is None
+    assert followup.best_launch(tmp_path, site="http://192.168.1.5:8731/") is None
+    make_pack(tmp_path, name="2026-11-02-pub", results=_results(("X", 4)),
+              brand={"name": "Pub", "url": "https://pub.test:8443/"})
+    assert followup.best_launch(tmp_path, site="https://pub.test/").pack == "2026-11-02-pub"
+
+
+def test_quotes_inside_the_first_line_do_not_nest(tmp_path):
+    make_pack(tmp_path, caption='He said "ship it" and we did.\n\nMore.', results=_results(("X", 3)))
+    line = followup.best_launch_line(followup.best_launch(tmp_path))
+    assert line.count('"') == 2 and "ship it" in line
+
+
+def test_an_oversized_pack_json_is_skipped(tmp_path):
+    folder = make_pack(tmp_path, results=_results(("X", 3)))
+    data = json.loads((folder / "pack.json").read_text())
+    data["padding"] = "x" * (followup.PACK_READ_MAX + 1)
+    (folder / "pack.json").write_text(json.dumps(data), encoding="utf-8")
+    assert followup.best_launch(tmp_path) is None
