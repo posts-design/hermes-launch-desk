@@ -12,7 +12,8 @@ The model writes about 20% of this. The rest is code and your own material:
 - Your words lead. The detail you give after ` -- ` is offered as the first line, word for word, marked as yours. The model's hooks come after it, and only ones that pass the checks with the rest of the post.
 - References are real launch posts from posts.design, chosen in code by what you shipped.
 - The draft is checked in code against AI-sounding copy and against details you never gave it, and is redrafted when it fails. You see the checks: a line says what the first draft was caught on, and the draft comes with a checklist of the post, one line per check.
-- The card is composed from your screenshot, colours and logo. It is never generated.
+- The card is composed from your screenshot, colours and logo. It is never generated. It reads your site the way a visitor sees it: dark if the site is dark, the accent your site names or puts on its buttons, and a headline face close to yours (a serif, a rounded sans, or Inter).
+- Your results feed the next launch. Once you record sign-ups for a pack, the next `/launch` opens with one line on your best launch so far, and that post is reference 1: the draft borrows its shape, never its words.
 
 Because the checks and the design do the heavy lifting, it works on small models.
 
@@ -51,6 +52,8 @@ To make drafts sound like you, send `/launch voice: <a past post of yours>`. It 
 
 After you approve, `/launch` asks whether to check in tomorrow and in 3 days. Say Yes and Hermes' own scheduler runs two check-ins that post to the same chat. Each posts one message composed in code from your pack and run through the same copy checks: it asks how many sign-ups each channel brought and gives up to two next-post ideas (a reply with your detail, a hook you did not use, or the shape of a reference you did not see). Reply with your numbers and the agent records them in the pack with `launch_desk_record_results`. The reply names each job. To cancel one in the terminal chat, send `/cron remove <id>`; in a chat app, ask the agent to remove check-in `<id>`, or run `hermes cron remove <id>` where Hermes runs. There is also an automation blueprint, `launch-desk:follow-up`, for one more check-in on a pack from `/blueprint`.
 
+The next `/launch` reads those numbers back. The pack with the most sign-ups (the most recent one on a tie) gives one line, such as: Your last launch brought 12 sign-ups on X with "Pet pages can wear your colours now." Its post is listed first among the references as your own launch, with its sign-ups and pack name, and the draft borrows its shape. The check for five copied words applies to it like any other reference. A later answer for a channel replaces the earlier one, since each check-in asks for the count so far. Packs without results change nothing.
+
 To put your product on the card, send a screenshot and the agent attaches it with `launch_desk_attach_screenshot`. Send two and the card shows them side by side; with none, the card sets your hook large as a quote. The plugin also ships a skill, `launch-desk:launch-desk`, that teaches the agent the launch workflow, so it steers you well even when you do not type the command.
 
 ## What it checks
@@ -78,15 +81,15 @@ Sent to posts.design, through your own account:
 
 Not sent to posts.design: the detail after ` -- `, your site link, the draft, your brand kit and your screenshots.
 
-Sent to the model Hermes is configured with, which may be a hosted provider: the brief (what you shipped and your detail), your product name, tagline and link, the reference captions, and your voice samples if any. A check-in also sends it the pack it reads: the post, its X link, the unused hooks, your detail, the brand, link and shape of references you did not see, and any sign-ups you recorded.
+Sent to the model Hermes is configured with, which may be a hosted provider: the brief (what you shipped and your detail), your product name, tagline and link, the reference captions (including your own past post with the most sign-ups, when you have recorded some), and your voice samples if any. A check-in also sends it the pack it reads: the post, its X link, the unused hooks, your detail, the brand, link and shape of references you did not see, and any sign-ups you recorded.
 
 Fetched from the internet: your site, its stylesheets and the logo it links to (at most 4 requests, each following up to 3 redirects).
 
 Stored on your machine, in the plugin's data folder and Hermes plugin state:
 
-- The brand kit: name, site link, tagline, colours, font name, logo file and voice samples.
+- The brand kit: name, site link, tagline, colours, font name and face, logo file and voice samples.
 - A pending draft with its card, its preview and the search results it came from (items.json), kept up to 24 hours or until you approve or discard it.
-- Finished packs, kept until you delete them, with the sign-ups per channel you report after a check-in (the last 50).
+- Finished packs, kept until you delete them, with when they were made and the sign-ups per channel you report after a check-in (the last 50). The next `/launch` reads them from there.
 - Copies of the card and preview in Hermes' image cache, so chat apps can show them. Hermes clears them after about a day.
 - The paths of up to two attached screenshots, until you approve or discard the draft that used them. The files are not copied; the screenshot tool reads each image where it is and leaves it there.
 
@@ -100,6 +103,6 @@ One search per run, about one posts.design credit. Free accounts get 100 credits
 
 ## License
 
-MIT. The bundled Inter font is under the SIL Open Font License.
+MIT. The bundled fonts are under the SIL Open Font License 1.1, each with its licence beside it in `launch_desk/fonts/`: Inter (headlines and all small text), and Newsreader and Nunito (headlines for serif and rounded brands), from [google/fonts](https://github.com/google/fonts).
 
 Built by [posts.design](https://posts.design).
