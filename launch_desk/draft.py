@@ -546,7 +546,7 @@ def checklist(text: str, failures: Sequence[Failure], network: str,
               use_case: str = "") -> list[CheckLine]:
     """The post's checks as lines for the founder, one per rule (the three style rules share
     one), pass or fail, from the failures post_failures() found. Given the draft's use case (the
-    wizard passes it when the founder's words dropped a body line), a post whose lines after the
+    wizard passes it when the founder's words lead, since they replace the caption's first line), a post whose lines after the
     first no longer say it gets one more, failing line. Composed here, never by the model."""
     by_id: dict[str, Failure] = {}
     for f in failures:

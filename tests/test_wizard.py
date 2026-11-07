@@ -1113,3 +1113,18 @@ def test_caught_line_quotes_each_invented_detail_whole():
     reply = start(host)
     [line] = [ln for ln in plain(reply) if ln and ln not in plain(clean_reply)]
     assert line.count('"') % 2 == 0 and '"in seconds"' in line
+
+
+def test_founder_words_replacing_the_only_line_that_says_what_shipped_fail_says_what_shipped():
+    first_only = {"use_case": "Custom themes for pet pages.",
+                  "hooks": ["Custom themes for pet pages are live.", "Every pet page looked alike until today.",
+                            "Are you a pet owner? Stop settling."],
+                  "caption": "Custom themes for pet pages are live.\n\nA small thing, but it makes the page feel "
+                             "like yours.\n\nhttps://pawr.link"}
+    host = make_host(PHASE1, llm=(first_only,))
+    start(host, args=f"{URL} custom themes for pet pages -- people kept asking to match their pet page to their own site")
+    p = wizard._Pending(pending(host))
+    assert p.option.source == "founder" and not p.option.dropped
+    assert [c.ok for c in p.checks() if "use-case-missing" in c.rules] == [False]
+    resume(host, "hook", "2")
+    assert not [c for c in wizard._Pending(pending(host)).checks() if "use-case-missing" in c.rules]

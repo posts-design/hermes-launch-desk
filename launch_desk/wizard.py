@@ -455,7 +455,7 @@ class _Pending:
     def checks(self) -> list[CheckLine]:
         text = self.text
         return checklist(text, post_failures(text, self.brief, self.brand, self.refs), self.brief.network,
-                         use_case=str(self.data.get("use_case") or "") if self.option.dropped else "")
+                         use_case=str(self.data.get("use_case") or "") if self.option.source == "founder" else "")
 
     def items(self) -> list[dict]:
         try:
