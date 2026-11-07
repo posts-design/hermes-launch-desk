@@ -1094,3 +1094,22 @@ def test_change_hook_offers_the_same_options_with_the_founder_first():
     assert pending(host)["hook"] == CLEAN["hooks"][0]
     resume(host, "approve", "no")
     assert pack_data(host)["hook_source"] == "model"
+
+
+def test_the_fallback_hook_is_marked_on_its_button():
+    bad = {**CLEAN, "hooks": ["Your page should check this out.", "Check this out: themes.",
+                              "Your site should say hello to themes."]}
+    host = make_host(PHASE1, llm=(bad, bad))
+    start(host, args=f"{URL} custom themes for pet profile pages")
+    [choice] = hook_choices(host)
+    assert choice["label"] != pending(host)["hooks"][0] and pending(host)["hooks"][0] in choice["label"]
+
+
+def test_caught_line_quotes_each_invented_detail_whole():
+    invented = {**CLEAN, "caption": CLEAN["caption"].replace(
+        "follows.", "follows in seconds, every minute, for 3 days and 12 hours, all weeks long.")}
+    host = make_host(PHASE1, llm=(invented, CLEAN))
+    clean_reply = start(make_host(PHASE1))
+    reply = start(host)
+    [line] = [ln for ln in plain(reply) if ln and ln not in plain(clean_reply)]
+    assert line.count('"') % 2 == 0 and '"in seconds"' in line

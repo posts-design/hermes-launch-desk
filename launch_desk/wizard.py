@@ -26,7 +26,7 @@ from typing import Any, Callable
 
 from . import followup
 from .brand import NEUTRAL, PRESET_ACCENTS, fetch_brand, http_get
-from .draft import DraftError, checklist, draft_post, hook_options, post_failures
+from .draft import UNSUPPORTED, DraftError, checklist, draft_post, hook_options, post_failures, quote_phrases
 from .hooks import pick_hook_shapes
 from .host import Host, SourceUnavailable
 from .models import BrandKit, Brief, CheckLine, Draft, HookOption, Reference
@@ -90,6 +90,7 @@ CHECKIN_QUESTION = "Your launch pack is saved.\nCheck in with you tomorrow and i
 CHECKIN_CHOICES = [{"value": "yes", "label": "Yes"}, {"value": "no", "label": "No"}]
 CHECKIN_WHEN = ("tomorrow", "in 3 days")
 YOUR_WORDS = "(your words)"
+HAS_ISSUES = "(has issues)"
 CHECKED = "Checked in code:"
 PASS_MARK, FAIL_MARK = "\u2713", "\u2717"
 # What the scroll test caught, as the founder reads it in "Caught in the first draft: ...".
@@ -353,8 +354,11 @@ def _pick_hook(host: Host, options: list[HookOption], caption: str, refs: list[R
     for n, o in enumerate(options, 1):
         for line in o.dropped:
             question += f"\n\nWith hook {n}, this line comes out, since it repeats those words: {line}"
-    choices = [{"value": str(n), "label": f"{o.text} {YOUR_WORDS}" if o.source == "founder" else o.text}
-               for n, o in enumerate(options, 1)]
+    def label(o: HookOption) -> str:
+        mark = YOUR_WORDS if o.source == "founder" else HAS_ISSUES if o.flagged else ""
+        return f"{o.text} {mark}" if mark else o.text
+
+    choices = [{"value": str(n), "label": label(o)} for n, o in enumerate(options, 1)]
     picked = _ask(host, question, choices)
     return int(picked) - 1
 
@@ -372,8 +376,8 @@ def caught_line(draft: Draft) -> str:
             continue
         found = groups.setdefault(base, [])
         if f.found:
-            shown = _cut(f.found, FOUND_MAX)
-            shown = f'"{shown}"' if base in _QUOTE else shown
+            cut = replace(f, found=_cut(f.found, FOUND_MAX))  # cut before quoting: no quote left open
+            shown = quote_phrases(cut) if base in _QUOTE or base == UNSUPPORTED else cut.found
             if shown.lower() not in (x.lower() for x in found):
                 found.append(shown)
     if not groups:
@@ -423,13 +427,15 @@ class _Pending:
             return [HookOption(h, "model", post_text(plain, h)) for h in hooks]
         sources = self.data.get("sources") or ["model"] * len(hooks)
         dropped = self.data.get("dropped") or [[] for _ in hooks]
-        return [HookOption(h, s if s == "founder" else "model", p, tuple(d))
-                for h, s, p, d in zip(hooks, sources, posts, dropped)]
+        flagged = self.data.get("flagged") or [False] * len(hooks)
+        return [HookOption(h, s if s == "founder" else "model", p, tuple(d), bool(f))
+                for h, s, p, d, f in zip(hooks, sources, posts, dropped, flagged)]
 
-    def set_options(self, options: list[HookOption], caption: str) -> None:
+    def set_options(self, options: list[HookOption], draft: Draft) -> None:
         self.data.update(hooks=[o.text for o in options], sources=[o.source for o in options],
                          posts=[o.post for o in options], dropped=[list(o.dropped) for o in options],
-                         caption=caption)
+                         flagged=[o.flagged for o in options], caption=draft.caption,
+                         use_case=draft.use_case)
 
     @property
     def option(self) -> HookOption:
@@ -448,7 +454,8 @@ class _Pending:
 
     def checks(self) -> list[CheckLine]:
         text = self.text
-        return checklist(text, post_failures(text, self.brief, self.brand, self.refs), self.brief.network)
+        return checklist(text, post_failures(text, self.brief, self.brand, self.refs), self.brief.network,
+                         use_case=str(self.data.get("use_case") or "") if self.option.dropped else "")
 
     def items(self) -> list[dict]:
         try:
@@ -591,7 +598,7 @@ def _phase1(host: Host, args: Args, stored: BrandKit | None, get: Callable[[str]
         "used_pack": bool(pack_note), "hook": options[picked].text,
         "screenshots": shots, "round": 0,
     })
-    pending.set_options(options, draft.caption)
+    pending.set_options(options, draft)
     pending.render(host)
     host.state_set(PENDING_KEY, pending.data)
     return pending.reply(host, notes)
@@ -726,7 +733,7 @@ def _resume(host: Host, p: _Pending) -> str:
             options = hook_options(draft, p.brief, p.brand, fresh)
             picked = _pick_hook(host, options, draft.caption, fresh, p.data["used_pack"], lead)
             p.set_refs(fresh)
-            p.set_options(options, draft.caption)
+            p.set_options(options, draft)
             p.data["hook"] = options[picked].text
         else:
             notes.append(NO_MORE_REFS)

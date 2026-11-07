@@ -613,3 +613,73 @@ def test_checklist_quotes_what_it_caught():
     failures = post_failures(text, LEAF_BRIEF, LEAF_BRAND, REFS)
     bad = " ".join(line.text for line in checklist(text, failures, "x") if not line.ok)
     assert "Check this out" in bad and "127.0.0.1:8731" in bad
+
+
+# ------------------------------------------------------------------ review fixes
+
+@pytest.mark.parametrize("detail,hook", [("iOS users kept asking for widgets", "iOS users kept asking for widgets."),
+                                         ("pawr.link pages got slow", "pawr.link pages got slow."),
+                                         ("npm install works now", "Npm install works now.")])
+def test_founder_hook_keeps_names_with_an_inner_capital_or_a_dot(detail, hook):
+    assert founder_hook(detail) == hook
+
+
+PAWR_BRIEF = Brief("feature", "x", "custom themes for pet pages", "https://pawr.link",
+                   detail="people kept asking to match their pet page to their own site")
+PAWR_BRAND = BrandKit("pawr.link", "https://pawr.link", "", "#fff", "#111", "#f60", None, None)
+PAWR_LIVE = Draft(("Pet pages look the same. We built themes to match your site.",
+                   "Custom themes for pet pages are live.", "Are you a pet owner? Stop settling."),
+                  "Custom themes for pet pages are live.\n\nYou can now match your pet page to your own site."
+                  "\n\nA small thing, but it makes the page feel like yours.\n\nhttps://pawr.link",
+                  (), False, "Match your pet page to your own site.")
+
+
+def test_a_founder_post_that_lost_what_shipped_fails_a_says_what_shipped_line():
+    [founder, *_] = hook_options(PAWR_LIVE, PAWR_BRIEF, PAWR_BRAND, REFS)
+    assert founder.dropped
+    lines = checklist(founder.post, post_failures(founder.post, PAWR_BRIEF, PAWR_BRAND, REFS), "x",
+                      use_case=PAWR_LIVE.use_case)
+    missing = [line for line in lines if "use-case-missing" in line.rules]
+    assert len(lines) <= 12 and len(missing) == 1 and not missing[0].ok
+    kept = PAWR_LIVE.caption
+    lines = checklist(kept, post_failures(kept, PAWR_BRIEF, PAWR_BRAND, REFS), "x", use_case=PAWR_LIVE.use_case)
+    assert not [line for line in lines if "use-case-missing" in line.rules]
+
+
+def test_the_prompt_tells_the_model_the_founder_words_lead():
+    with_detail = build_brief_prompt(PAWR_BRIEF, PAWR_BRAND, REFS, SHAPES, set())[0]
+    without = build_brief_prompt(BRIEF, BRAND, REFS, SHAPES, set())[0]
+    assert len(with_detail.splitlines()) == len(without.splitlines()) + 1
+
+
+def test_two_model_hooks_never_share_a_shape():
+    brief = Brief("feature", "x", "photo diagnosis", "https://fernlight.app")
+    hooks = ("Plant apps guess. We built Fernlight to look at the leaf.",
+             "Most plant apps guess. We made Fernlight read the leaf.",
+             "Are you a plant parent? Stop guessing at brown spots.")
+    caption = "Fernlight reads the leaf for you.\n\nNow the photo itself gets you an answer.\n\nhttps://fernlight.app"
+    opts = hook_options(leaf_draft(hooks, caption), brief, LEAF_BRAND, REFS)
+    assert [o.text for o in opts] == [hooks[0], hooks[2]]
+
+
+def test_no_shape_asks_for_we_built_or_watch_this():
+    from launch_desk.hooks import HOOK_SHAPES
+    for s in HOOK_SHAPES.values():
+        assert "we built" not in s.shape.lower() and "watch this" not in s.shape.lower()
+
+
+def test_a_hook_adding_a_second_invented_detail_is_filtered():
+    brief = Brief("feature", "x", "photo diagnosis", "https://fernlight.app")
+    caption = "Fernlight reads the leaf for you.\n\nIt took a week to build.\n\nhttps://fernlight.app"
+    hooks = ("Snap a leaf, get an answer in 3 seconds.", "Plant care that looks at the leaf.",
+             "Fernlight reads the leaf for you.")
+    opts = hook_options(leaf_draft(hooks, caption), brief, LEAF_BRAND, REFS)
+    assert hooks[0] not in [o.text for o in opts]
+
+
+def test_the_least_bad_fallback_is_marked():
+    brief = Brief("feature", "x", "photo diagnosis", "https://fernlight.app")
+    hooks = ("Your plant should check this out.", "Check this out: the leaf.", "Your leaf should say hello to you.")
+    [only] = hook_options(leaf_draft(hooks, "Snap a leaf.\n\nhttps://fernlight.app"), brief, LEAF_BRAND, REFS)
+    assert only.flagged
+    assert not any(o.flagged for o in hook_options(leaf_draft(), LEAF_BRIEF, LEAF_BRAND, REFS))

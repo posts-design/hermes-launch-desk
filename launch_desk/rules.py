@@ -3,6 +3,7 @@ from __future__ import annotations
 
 import ipaddress
 import re
+import socket
 import urllib.parse
 from dataclasses import dataclass
 from typing import Callable, Sequence
@@ -51,7 +52,7 @@ STOCK_PHRASES: tuple[str, ...] = (
     "excited to announce", "thrilled to", "game-changer", "game changer",
     "seamless", "seamlessly", "revolutionize", "unlock", "supercharge",
     "in today's fast-paced", "glow-up", "level up", "elevate your",
-    "check this out", "say hello to", "meet the new",
+    "check this out", "say hello to", "meet the new", "watch this",
 )
 
 _STOCK_RE = re.compile(
@@ -60,10 +61,11 @@ _STOCK_RE = re.compile(
 )
 _URL_RE = re.compile(r"https?://\S+", re.IGNORECASE)
 _TEMPLATE_RE = re.compile(r"^your \w+(?: \w+)? should\b", re.IGNORECASE)
-# A link written without its scheme: localhost, an IPv4 address or a .local name, then a port or a path.
+# A link written without its scheme: localhost, an IPv4 address or a .local name, then a port or a
+# path. Without either it is a word in a sentence ("runs on localhost", "Version 10.0.0.1"), not a link.
 _BARE_HOST_RE = re.compile(
-    r"(?<![\w.@/:-])((?:localhost|[\w-]+(?:\.[\w-]+)*\.(?:localhost|local)|\d{1,3}(?:\.\d{1,3}){3})"
-    r"(?::\d+)?)(?=[/:\s]|$)(?:/\S*)?",
+    r"(?<![\w.@/:-])(?P<host>localhost|[\w-]+(?:\.[\w-]+)*\.(?:localhost|local)|\d{1,3}(?:\.\d{1,3}){3})"
+    r"(?:(?P<port>:\d+)|(?=/[^\s/]|/(?:\s|$)))\S*",
     re.IGNORECASE,
 )
 _HASHTAG_RE = re.compile(r"(?<!\w)#\w+")
@@ -172,7 +174,12 @@ def _private_host(host: str) -> bool:
     try:
         addr = ipaddress.ip_address(host.split("%", 1)[0])
     except ValueError:
-        return False
+        if not re.fullmatch(r"[0-9.]+", host):
+            return False
+        try:  # the short and decimal forms a browser also opens: 127.1, 2130706433
+            addr = ipaddress.ip_address(socket.inet_aton(host))
+        except OSError:
+            return False
     return addr.is_loopback or addr.is_private or addr.is_link_local or addr.is_unspecified
 
 
@@ -187,8 +194,8 @@ def _find_private_link(text: str) -> str:
         if host and _private_host(host):
             return parts.netloc
     for m in _BARE_HOST_RE.finditer(_URL_RE.sub(" ", text)):
-        if _private_host(m.group(1).rsplit(":", 1)[0]):
-            return m.group(1)
+        if _private_host(m.group("host")):
+            return m.group("host") + (m.group("port") or "")
     return ""
 
 

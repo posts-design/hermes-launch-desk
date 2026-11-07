@@ -69,6 +69,7 @@ PROMPT_BUDGET = 5900  # instructions + input; Hermes adds the schema (~300) on t
 HOOK_CHARS = 160
 
 UNSUPPORTED = "unsupported-detail"
+PHRASE_SEP = ", "  # between the phrases in an unsupported-detail Failure.found
 _UNSUPPORTED_MAX = 5
 USE_CASE_MISSING = "use-case-missing"
 USE_CASE_CHARS = 140
@@ -118,7 +119,8 @@ def unsupported_details(text: str, facts: str) -> list[Failure]:
         return []
     listed = ", ".join(f'"{p[:20]}"' for p in found[:_UNSUPPORTED_MAX])
     return [Failure(UNSUPPORTED, f"The post adds details that are not in the facts: {listed}.",
-                    f"Remove {listed}, or replace with something from FACTS.", listed)]
+                    f"Remove {listed}, or replace with something from FACTS.",
+                    PHRASE_SEP.join(p[:20] for p in found[:_UNSUPPORTED_MAX]))]
 
 
 def _stems(text: str) -> set[str]:
@@ -214,6 +216,9 @@ def _instructions(brief: Brief, relaxed: set[str], refs: Sequence[Reference] | N
         _borrow(refs),
         *_rule_lines(brief, relaxed),
     ]
+    if brief.detail:
+        rules.append("The founder's detail may open the post as written, so other lines say what shipped "
+                     "without it.")
     numbered = "\n".join(f"{i}. {r}" for i, r in enumerate(rules, 1))
     return (
         f"You write one launch post for {network}.\n\n"
@@ -221,11 +226,10 @@ def _instructions(brief: Brief, relaxed: set[str], refs: Sequence[Reference] | N
         "Reply with JSON only, no other text:\n"
         '{"use_case": "one concrete use", "hooks": ["first line A", "first line B", "first line C"], '
         '"caption": "the whole post"}\n'
-        "- use_case: one concrete, true use of what shipped, from FACTS only (best source: the founder's detail; "
-        "else the founder's words for what shipped). No person, pet, name, number or time beyond FACTS. "
-        "The caption says it once (the first line counts), never the words \"use case\".\n"
-        "- hooks: three different first lines for this post. Hook 1 follows pattern A, "
-        "hook 2 follows pattern B, hook 3 is your own.\n"
+        "- use_case: one concrete, true use of what shipped, from FACTS only. No person, pet, name, number "
+        "or time beyond FACTS. The caption says it once, never the words \"use case\".\n"
+        "- hooks: three first lines, each built differently: hook 1 on pattern A, hook 2 on pattern B, "
+        "hook 3 your own. One \"we built\" at most.\n"
         "- caption: the whole post, starting with your best hook as its first line. "
         "Use \\n for line breaks."
     )
@@ -428,7 +432,9 @@ def founder_hook(detail: str) -> str:
     text = " ".join((detail or "").split())
     if not text:
         return ""
-    text = text[:1].upper() + text[1:]
+    first = text.split(" ", 1)[0].rstrip(".,;:!?")
+    if not (any(c.isupper() for c in first[1:]) or "." in first):  # keep iOS, pawr.link as written
+        text = text[:1].upper() + text[1:]
     return text if _END_RE.search(text) else text + "."
 
 
@@ -463,6 +469,11 @@ def _drop_repeats(post: str) -> tuple[str, tuple[str, ...]]:
     return re.sub(r"\n{3,}", "\n\n", "\n".join(kept)).strip(), tuple(dropped)
 
 
+def same_line(a: str, b: str) -> bool:
+    """The same line, ignoring case, spacing and end punctuation."""
+    return _same(a, b)
+
+
 def _same(a: str, b: str) -> bool:
     def key(s: str) -> str:
         return " ".join(s.lower().split()).rstrip(" .!?\u2026")
@@ -473,27 +484,50 @@ def hook_options(draft: Draft, brief: Brief, brand: BrandKit, refs: Sequence[Ref
     """The hooks to offer, each with the post it makes. With a founder's detail, option 1 is
     their words (always offered; a body line that would repeat them is dropped) and the model's
     hooks fill two more places; without one, up to three model hooks. A model hook is offered
-    only when, as the first line of the post, it fails no rule that the body alone does not
-    fail. If none passes and there is no founder hook, the one with the fewest failures is."""
+    only when, as the first line of the post, it adds no failure of its own (one the body alone
+    does not have, compared by rule and by what was caught), and only when no hook already
+    offered has the same hook_shape(). If none passes and there is no founder hook, the one
+    with the fewest failures is offered, flagged."""
     options: list[HookOption] = []
     words = founder_hook(brief.detail)
     if words:
         post, dropped = _drop_repeats(with_first_line(draft.caption, words))
         options.append(HookOption(words, "founder", post, dropped))
     lines = draft.caption.strip().split("\n")
-    body_ids = {f.rule_id for f in post_failures("\n" + "\n".join(lines[1:]), brief, brand, refs)}
+    body = {(f.rule_id, f.found) for f in post_failures("\n" + "\n".join(lines[1:]), brief, brand, refs)}
     scored: list[tuple[int, str, str]] = []
     for hook in draft.hooks:
         if any(_same(hook, o.text) for o in options) or any(_same(hook, h) for _, h, _ in scored):
             continue
         post = with_first_line(draft.caption, hook)
-        extra = {f.rule_id for f in post_failures(post, brief, brand, refs)} - body_ids
+        extra = {(f.rule_id, f.found) for f in post_failures(post, brief, brand, refs)} - body
         scored.append((len(extra), hook, post))
-    passing = [(hook, post) for n, hook, post in scored if n == 0][:3 - len(options)]
+    passing: list[tuple[str, str]] = []
+    shapes = {hook_shape(o.text) for o in options} - {""}
+    for n, hook, post in scored:
+        if n or len(options) + len(passing) == 3 or hook_shape(hook) in shapes:
+            continue
+        passing.append((hook, post))
+        shapes |= {hook_shape(hook)} - {""}
     if not passing and not options and scored:
         _, hook, post = min(scored, key=lambda s: s[0])
-        passing = [(hook, post)]
+        return [HookOption(hook, "model", post, flagged=True)]
     return options + [HookOption(hook, "model", post) for hook, post in passing]
+
+
+_SHAPES: tuple[tuple[str, re.Pattern], ...] = (
+    ("we-built", re.compile(r"\bwe(?: just|'ve| have)? (?:built|made|shipped|added|launched)\b", re.I)),
+    ("call-out", re.compile(r"^are you\b", re.I)),
+    ("you-asked", re.compile(r"^you asked\b", re.I)),
+    ("every", re.compile(r"^every\b", re.I)),
+    ("now", re.compile(r"\bcan now\b|\bnow (?:you|your)\b", re.I)),
+)
+
+
+def hook_shape(hook: str) -> str:
+    """A name for a hook's build ("we-built", "call-out", ...) when it has a recognisable one,
+    else "". Two hooks offered together never share one."""
+    return next((name for name, pattern in _SHAPES if pattern.search(hook)), "")
 
 
 # ------------------------------------------------------------------ the visible checklist
@@ -502,9 +536,18 @@ def _quoted(f: Failure) -> str:
     return f'"{f.found}"' if f.found else ""
 
 
-def checklist(text: str, failures: Sequence[Failure], network: str) -> list[CheckLine]:
+def quote_phrases(f: Failure) -> str:
+    """What a failure caught, in quotes; each phrase of an unsupported-detail on its own."""
+    parts = f.found.split(PHRASE_SEP) if f.rule_id.endswith(UNSUPPORTED) else [f.found]
+    return ", ".join(f'"{p}"' for p in parts if p)
+
+
+def checklist(text: str, failures: Sequence[Failure], network: str,
+              use_case: str = "") -> list[CheckLine]:
     """The post's checks as lines for the founder, one per rule (the three style rules share
-    one), pass or fail, from the failures post_failures() found. Composed here, never by the model."""
+    one), pass or fail, from the failures post_failures() found. Given the draft's use case (the
+    wizard passes it when the founder's words dropped a body line), a post whose lines after the
+    first no longer say it gets one more, failing line. Composed here, never by the model."""
     by_id: dict[str, Failure] = {}
     for f in failures:
         by_id.setdefault(f.rule_id, f)
@@ -532,6 +575,9 @@ def checklist(text: str, failures: Sequence[Failure], network: str) -> list[Chec
         line(("copied-run",), "No five words copied from the references",
              lambda f: f"Copies five words from a reference: {_quoted(f)}".rstrip(": ")),
         line(("repeats-first-line",), "Each line says something new", lambda f: "A later line repeats the first"),
-        line((UNSUPPORTED,), "Only details you gave", lambda f: f"Details you didn't give: {f.found}".rstrip(": ")),
+        line((UNSUPPORTED,), "Only details you gave",
+             lambda f: f"Details you didn't give: {quote_phrases(f)}".rstrip(": ")),
     ]
+    if use_case and not use_case_carried(use_case, "\n".join(text.split("\n")[1:])):
+        out.append(CheckLine((USE_CASE_MISSING,), False, "Says what shipped: no line says it now"))
     return out
