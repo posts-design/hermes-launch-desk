@@ -309,9 +309,32 @@ def test_with_own_never_lists_it_twice():
     assert [r.id for r in out] == [own.id, "a", "b"]
 
 
-def test_copying_five_words_from_your_own_launch_still_fails():
+def test_your_own_launch_is_not_compared_for_copied_words():
+    # R40: the founder's own past post is theirs to reuse; only outside references count.
     brief = Brief("feature", "x", "dark mode", "https://pawr.link")
     brand = BrandKit("pawr.link", "https://pawr.link", "", "#FAFAFA", "#111111", "#6A3CFF", None, None)
     refs = with_own(OWN, [_ref("a", "Acme")])
     text = "Dark mode is here.\n\nBiscuit got a theme today, and a dark one.\n\nhttps://pawr.link"
+    assert "copied-run" not in {f.rule_id for f in post_failures(text, brief, brand, refs)}
+
+
+def test_an_outside_reference_still_flags_copied_words():
+    brief = Brief("feature", "x", "dark mode", "https://pawr.link")
+    brand = BrandKit("pawr.link", "https://pawr.link", "", "#FAFAFA", "#111111", "#6A3CFF", None, None)
+    outside = Reference(id="a", brand="Acme", url="https://posts.design/p/a",
+                        caption="Acme shipped a thing for every team today.", views=1000,
+                        category="feature-update", why="Same kind of launch")
+    refs = with_own(OWN, [outside])
+    text = "Dark mode is here.\n\nWe shipped a thing for every team today.\n\nhttps://pawr.link"
     assert "copied-run" in {f.rule_id for f in post_failures(text, brief, brand, refs)}
+
+
+def test_the_founders_detail_never_counts_as_copied():
+    detail = "we kept pasting our own launch posts into Claude by hand"
+    brief = Brief("feature", "x", "search", "https://posts.design/mcp", detail=detail)
+    brand = BrandKit("posts.design", "https://posts.design/mcp", "", "#101010", "#FAFAFA", "#FF9602", None, None)
+    outside = Reference(id="a", brand="Acme", url="https://posts.design/p/a",
+                        caption="We kept pasting our own launch posts into Claude by hand too.", views=10,
+                        category="feature-update", why="Same kind of launch")
+    text = "We kept pasting our own launch posts into Claude by hand.\n\nNow search them.\n\nhttps://posts.design/mcp"
+    assert "copied-run" not in {f.rule_id for f in post_failures(text, brief, brand, [outside])}

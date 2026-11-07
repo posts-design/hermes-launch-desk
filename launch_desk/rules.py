@@ -293,9 +293,10 @@ def _runs(text: str) -> list[tuple[str, ...]]:
     return out
 
 
-def _find_copied_run(text: str, references: Sequence[str]) -> str:
-    """The first five-word run the text shares with a reference caption, lowercased; "" if none."""
-    runs = set(_runs(text))
+def _find_copied_run(text: str, references: Sequence[str], own_words: Sequence[str] = ()) -> str:
+    """The first five-word run the text shares with a reference caption, lowercased; "" if none.
+    A run inside the founder's own words (own_words) is theirs, never a copy (R40)."""
+    runs = set(_runs(text)) - {run for words in own_words for run in _runs(words or "")}
     if not runs:
         return ""
     for ref in references:
@@ -319,7 +320,7 @@ _FINDERS: dict[str, Callable[[str], str]] = {
 
 
 def check(text: str, *, network: str, reference_captions: Sequence[str] = (),
-          voice_samples: Sequence[str] = ()) -> list[Failure]:
+          voice_samples: Sequence[str] = (), own_words: Sequence[str] = ()) -> list[Failure]:
     relaxed = relaxed_rules(voice_samples)
     failed: list[Failure] = []
     for rule in RULES:
@@ -329,7 +330,7 @@ def check(text: str, *, network: str, reference_captions: Sequence[str] = (),
         if rule.id == "length":
             hit = network == "x" and x_length(text) > 280
         elif rule.id == "copied-run":
-            found = _find_copied_run(text, reference_captions)
+            found = _find_copied_run(text, reference_captions, own_words)
             hit = bool(found)
         else:
             hit = _PREDICATES[rule.id](text)

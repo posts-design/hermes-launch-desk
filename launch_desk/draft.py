@@ -369,12 +369,24 @@ class _Asker:
         return parse_draft(reply)
 
 
+def outside_captions(refs: Sequence[Reference]) -> list[str]:
+    """The captions the copied-run check compares against: outside references only. The
+    founder's own past launch (a reference with sign-ups) is theirs to reuse (R40)."""
+    return [r.caption for r in refs if r.signups is None]
+
+
+def own_words(brief: Brief) -> tuple[str, ...]:
+    """The founder's words for this launch, which never count as copied (R40)."""
+    return (brief.detail,) if brief.detail else ()
+
+
 def _failures(hooks: Sequence[str], caption: str, use_case: str, brief: Brief,
               refs: Sequence[Reference], voice: Sequence[str], facts: str) -> list[Failure]:
     """Everything the model is asked to fix. A private link that is the founder's own link is
     left out: the model only copies it, and the checklist shows it."""
-    captions = [r.caption for r in refs]
-    found = list(check(caption, network=brief.network, reference_captions=captions, voice_samples=voice))
+    captions = outside_captions(refs)
+    found = list(check(caption, network=brief.network, reference_captions=captions, voice_samples=voice,
+                       own_words=own_words(brief)))
     if is_private_link(brief.product_url):
         found = [f for f in found if f.rule_id != "private-link"]
     found += unsupported_details(caption, facts)
@@ -385,7 +397,8 @@ def _failures(hooks: Sequence[str], caption: str, use_case: str, brief: Brief,
               for f in unsupported_details(use_case, facts)]
     for n, hook in enumerate(hooks, 1):
         hook_fails = [f for f in check(hook, network=brief.network, reference_captions=captions,
-                                       voice_samples=voice) if f.rule_id in HOOK_RULES]
+                                       voice_samples=voice, own_words=own_words(brief))
+                      if f.rule_id in HOOK_RULES]
         hook_fails += unsupported_details(hook, facts)
         found += [Failure(f"hook{n}:{f.rule_id}", f"Hook {n}: {f.message}", f.fix, f.found) for f in hook_fails]
     return found
@@ -440,8 +453,8 @@ def founder_hook(detail: str) -> str:
 
 def post_failures(text: str, brief: Brief, brand: BrandKit, refs: Sequence[Reference]) -> list[Failure]:
     """The scroll test and unsupported_details() for a post as it will be posted."""
-    found = check(text, network=brief.network, reference_captions=[r.caption for r in refs],
-                  voice_samples=brand.voice_samples)
+    found = check(text, network=brief.network, reference_captions=outside_captions(refs),
+                  voice_samples=brand.voice_samples, own_words=own_words(brief))
     return found + unsupported_details(text, facts_text(brief, brand))
 
 

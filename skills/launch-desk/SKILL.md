@@ -61,7 +61,7 @@ Use this to steer the founder even when they are not running `/launch`.
 5. The image comes from a real screenshot of the product, in the product's own colours. The card should carry the hook even with the caption covered.
 6. Judge the launch by sign-ups or downloads per channel, using a tracked link, and by who comes back. Not by views.
 
-The scroll test checks a draft for: a first line over 12 words, stock phrases, a "Your X should" opener, more than one em-dash, more than one emoji, more than two hashtags, placeholders like [link], a link in the first line, a link only the founder's machine can open (localhost, a private address, a .local name), X length over 280 (each link counts as 23), a copied run of five words from a reference, a line that repeats the first, and details that are not in the facts.
+The scroll test checks a draft for: a first line over 12 words, stock phrases, a "Your X should" opener, more than one em-dash, more than one emoji, more than two hashtags, placeholders like [link], a link in the first line, a link only the founder's machine can open (localhost, a private address, a .local name), X length over 280 (each link counts as 23), a copied run of five words from an outside reference (not the founder's own past post or detail), a line that repeats the first, and details that are not in the facts.
 
 The checks are shown, not hidden. When the first draft fails and is redrafted, one line says what was caught ("Caught in the first draft: ..."). The draft comes with a checklist of the post as it will be posted, one line per check with a pass or fail mark, and the pack keeps it. If the founder asks why a line was flagged, point to that checklist; do not argue with it or rewrite the post in chat.
 

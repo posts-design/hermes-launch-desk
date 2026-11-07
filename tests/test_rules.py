@@ -224,3 +224,22 @@ def test_watch_this_is_a_stock_phrase():
 @pytest.mark.parametrize("link", ["http://127.1:8080/", "http://2130706433/", "http://10.1/"])
 def test_short_and_decimal_ipv4_links_fail(link):
     assert "private-link" in ids(f"Themes are live.\n{link}")
+
+
+
+# R40: the founder's own words never count as copied.
+
+REF_SHARED = ["We kept pasting our own launch posts into Claude by hand, so we built this."]
+
+
+def test_a_run_inside_the_founders_words_is_not_copied():
+    text = "We kept pasting our own launch posts into Claude by hand.\n\nNow search 5,000+ of them."
+    assert "copied-run" in ids(text, reference_captions=REF_SHARED)
+    assert "copied-run" not in ids(text, reference_captions=REF_SHARED,
+                                   own_words=["we kept pasting our own launch posts into Claude by hand"])
+
+
+def test_the_founders_words_do_not_excuse_other_copied_runs():
+    ref = REF_SHARED + ["Search every launch post that ever worked for you."]
+    text = "We kept pasting our own posts.\n\nSearch every launch post that ever worked, here."
+    assert "copied-run" in ids(text, reference_captions=ref, own_words=["we kept pasting our own posts"])

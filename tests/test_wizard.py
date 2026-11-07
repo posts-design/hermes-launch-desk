@@ -1341,3 +1341,21 @@ def test_live_references_log_no_fallback(caplog):
     caplog.set_level(logging.INFO)
     start(make_host(PHASE1))
     assert _fallback_logs(caplog) == []
+
+
+
+# ------------------------------------------------------------------ R40
+
+def test_your_own_launch_that_opened_with_the_same_detail_is_not_a_copy():
+    # The live case: the past post opened with the founder's detail, and this launch's hook 1 is
+    # that detail again. No redraft, and the checklist passes the copied-words line.
+    host = make_host(PHASE1)
+    past_pack(host, caption=FOUNDER + "\n\nPick a theme in settings and the whole page follows."
+              "\n\nhttps://pawr.link")
+    reply = start(host)
+    assert len(host.llm_calls) == 1  # no redraft
+    p = pending(host)
+    assert p["refs"][0]["signups"] == 12
+    [copied] = [c for c in wizard._Pending(p).checks() if "copied-run" in c.rules]
+    assert copied.ok
+    assert reply
