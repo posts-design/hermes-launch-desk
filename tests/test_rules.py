@@ -201,3 +201,26 @@ def test_a_shared_link_is_not_a_copied_run():
     assert "copied-run" not in ids(text, reference_captions=ref)
     assert "copied-run" in ids("We said pick one and the page follows today. https://pawr.link",
                                reference_captions=ref)
+
+
+@pytest.mark.parametrize("text", ["Launch Desk runs on localhost too.", "Hermes now binds 0.0.0.0 by default.",
+                                  "Version 10.0.0.1 is out.", "Works with names like printer.local too."])
+def test_prose_mentions_of_local_hosts_are_not_links(text):
+    assert "private-link" not in ids(text)
+
+
+@pytest.mark.parametrize("text,found", [("Try it: 127.0.0.1:8731/k3/", "127.0.0.1:8731"),
+                                        ("Run it at localhost:3000", "localhost:3000"),
+                                        ("Open printer.local/status", "printer.local")])
+def test_bare_local_links_with_a_port_or_path_fail(text, found):
+    [f] = [f for f in check(text, network="x") if f.rule_id == "private-link"]
+    assert f.found == found
+
+
+def test_watch_this_is_a_stock_phrase():
+    assert "stock-phrase" in ids("Are you a founder? Stop pasting. Watch this.")
+
+
+@pytest.mark.parametrize("link", ["http://127.1:8080/", "http://2130706433/", "http://10.1/"])
+def test_short_and_decimal_ipv4_links_fail(link):
+    assert "private-link" in ids(f"Themes are live.\n{link}")

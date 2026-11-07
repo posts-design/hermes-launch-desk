@@ -428,3 +428,38 @@ def test_an_oversized_pack_json_is_skipped(tmp_path):
     data["padding"] = "x" * (followup.PACK_READ_MAX + 1)
     (folder / "pack.json").write_text(json.dumps(data), encoding="utf-8")
     assert followup.best_launch(tmp_path) is None
+
+
+# ------------------------------------------------------------------ the founder's words are not repeated
+
+from launch_desk.draft import founder_hook  # noqa: E402
+
+FOUNDER = founder_hook(DETAIL)
+MODEL_HOOKS = ["Pet pages can wear your colours now.", "Every pet page looked the same until today."]
+
+
+def kinds(out):
+    return [s["kind"] for s in out["suggestions"]]
+
+
+def test_founder_hook_posted_no_reply_with_the_same_words(tmp_path):
+    make_pack(tmp_path, hook=FOUNDER, hooks=[FOUNDER, *MODEL_HOOKS], hook_source="founder")
+    out = followup.followup(tmp_path, PACK)
+    assert "reply-with-detail" not in kinds(out)
+    assert out["unused_hooks"] == MODEL_HOOKS
+
+
+def test_model_hook_posted_the_founder_words_are_not_an_unused_hook(tmp_path):
+    make_pack(tmp_path, hook=MODEL_HOOKS[0], hooks=[FOUNDER, *MODEL_HOOKS], hook_source="model")
+    out = followup.followup(tmp_path, PACK)
+    assert out["unused_hooks"] == MODEL_HOOKS[1:]
+    assert kinds(out).count("reply-with-detail") == 1
+    assert sum(DETAIL.lower() in line.lower() for line in out["message"].splitlines()) == 1
+
+
+def test_an_older_pack_whose_hook_is_the_founder_words_skips_the_reply(tmp_path):
+    loose = FOUNDER.rstrip(".").upper()  # no hook_source, a looser spelling
+    make_pack(tmp_path, hook=loose, hooks=[loose, *MODEL_HOOKS])
+    out = followup.followup(tmp_path, PACK)
+    assert "reply-with-detail" not in kinds(out)
+    assert out["unused_hooks"] == MODEL_HOOKS

@@ -1,0 +1,31 @@
+/* Preview only (tools/desktop_check.mjs --out): rough stand-ins for Hermes Desktop's theme tokens
+   and SDK components, so the page's own layout can be eyeballed without the app. The real look
+   comes from the app's theme; check it in Hermes Desktop. */
+* { box-sizing: border-box; }
+body { margin: 0; display: grid; grid-template-columns: repeat(auto-fit, minmax(640px, 1fr)); gap: 16px; padding: 16px;
+  font: 13px/1.4 -apple-system, BlinkMacSystemFont, "Segoe UI", Inter, sans-serif; background: #d9d9de; }
+.frame[data-theme="light"] { --ui-base: #1d1d22; --ui-text-primary: #1d1d22; --ui-text-secondary: #4a4a52; --ui-text-tertiary: #7b7b85;
+  --ui-stroke-secondary: #e2e2e6; --ui-accent: #5b5bd6; --ui-bg-card: #fafafb; --bg: #ffffff; --chip: #ececf0; --color-destructive: #d13b3b; }
+.frame[data-theme="dark"] { --ui-base: #ececf1; --ui-text-primary: #ececf1; --ui-text-secondary: #b9b9c2; --ui-text-tertiary: #8a8a94;
+  --ui-stroke-secondary: #2f2f36; --ui-accent: #8b8bff; --ui-bg-card: #1d1d22; --bg: #16161a; --chip: #2a2a31; --color-destructive: #ff6b6b; }
+.frame { background: var(--bg); color: var(--ui-text-primary); border-radius: 10px; overflow: hidden; height: 900px; display: flex; flex-direction: column; }
+.titlebar { padding: 8px 12px; font-size: 11px; color: var(--ui-text-tertiary); border-bottom: 1px solid var(--ui-stroke-secondary); }
+.pane { flex: 1; min-height: 0; }
+.sdk-btn { display: inline-flex; align-items: center; gap: 6px; font: 500 12px/16px inherit; border: 0; border-radius: 3px; padding: 4px 10px; cursor: pointer; }
+.sdk-btn-default { background: var(--ui-accent); color: #fff; }
+.sdk-btn-secondary { background: var(--chip); color: var(--ui-text-primary); }
+.sdk-btn-ghost { background: none; color: var(--ui-text-secondary); }
+.sdk-btn-link { background: none; color: var(--ui-accent); padding: 0; }
+.sdk-btn-inline { padding: 0; }
+.sdk-badge { display: inline-flex; align-items: center; border-radius: 3px; padding: 2px 6px; font-size: 10.5px; font-weight: 500; line-height: 1; }
+.sdk-badge-default { background: color-mix(in srgb, var(--ui-accent) 14%, transparent); color: var(--ui-accent); }
+.sdk-badge-muted { background: var(--chip); color: var(--ui-text-secondary); }
+.sdk-badge-outline { border: 1px solid var(--ui-stroke-secondary); color: var(--ui-text-tertiary); }
+.sdk-seg { display: inline-grid; grid-auto-flow: column; gap: 2px; padding: 2px; border-radius: 5px; background: var(--chip); width: fit-content; }
+.sdk-seg button { border: 0; background: none; font: 500 11px inherit; padding: 2px 10px; border-radius: 3px; color: var(--ui-text-tertiary); }
+.sdk-seg .sdk-seg-on { background: var(--bg); color: var(--ui-text-primary); }
+.sdk-icon { font-style: normal; display: inline-block; width: 1em; text-align: center; }
+.sdk-icon-check::before { content: "\2713"; } .sdk-icon-close::before { content: "\2715"; } .sdk-icon-circle-small::before { content: "\00B7"; }
+.sdk-icon-copy::before { content: "\29C9"; } .sdk-icon-link-external::before { content: "\2197"; } .sdk-icon-refresh::before { content: "\21BB"; }
+.sdk-skeleton { background: var(--chip); }
+.sdk-empty, .sdk-error { padding: 48px 0; text-align: center; color: var(--ui-text-tertiary); }

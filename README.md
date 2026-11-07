@@ -9,7 +9,7 @@ You get a pack with the text, the card, a feed preview and a link to post on X. 
 
 The model writes about 20% of this. The rest is code and your own material:
 
-- Your words lead. The detail you give after ` -- ` is offered as the first line, word for word, marked as yours. The model's hooks come after it, and only ones that pass the checks with the rest of the post.
+- Your words lead. The detail you give after ` -- ` is offered as the first line, word for word, marked as yours. The model's hooks come after it, each offered only if it adds no failure of its own to the post, and no two built the same way.
 - References are real launch posts from posts.design, chosen in code by what you shipped.
 - The draft is checked in code against AI-sounding copy and against details you never gave it, and is redrafted when it fails. You see the checks: a line says what the first draft was caught on, and the draft comes with a checklist of the post, one line per check.
 - The card is composed from your screenshot, colours and logo. It is never generated. It reads your site the way a visitor sees it: dark if the site is dark, the accent your site names or puts on its buttons, and a headline face close to yours (a serif, a rounded sans, or Inter).
@@ -56,10 +56,18 @@ The next `/launch` reads those numbers back. Of the packs for the same site, the
 
 To put your product on the card, send a screenshot and the agent attaches it with `launch_desk_attach_screenshot`. Send two and the card shows them side by side; with none, the card sets your hook large as a quote. The plugin also ships a skill, `launch-desk:launch-desk`, that teaches the agent the launch workflow, so it steers you well even when you do not type the command.
 
+## Hermes Desktop
+
+In Hermes Desktop, Launch Desk adds a Launch Desk page to the sidebar (also in the command palette as Open Launch Desk). It shows every pack, newest first: the card and the feed preview, the post with your own words marked, the checks, the three reference posts with their views, the check-ins and the sign-ups you recorded. Copy post copies the text; Open X opens X with it filled in, in your browser. The status bar shows when the next check-in runs, or how many never ran.
+
+The Desktop half ships off. Turn on Launch Desk in Capabilities → Plugins. If Desktop and Hermes run on different machines, install it from Desktop with Install from Git and the Desktop part checked, or with this link: `hermes://plugin/install?repo=posts-design/hermes-launch-desk`.
+
+The page only reads. Its backend (`dashboard/plugin_api.py`, loaded when the plugin is enabled in Hermes) reads this plugin's own packs folder and, from Hermes' `cron/jobs.json`, the ids, state and times of the check-in jobs `/launch` created. It writes nothing and sends nothing anywhere. Links on the page open only if they are web (https) links.
+
 ## What it checks
 
 - The first line is 12 words or fewer, with no link in it.
-- No stock launch phrases such as "excited to announce", "check this out" or "game-changer".
+- No stock launch phrases such as "excited to announce", "check this out", "watch this" or "game-changer".
 - No "Your X should" opener, the template that gives a post away as written by a model.
 - At most one em-dash, one emoji and two hashtags.
 - No placeholders such as [link], {name} or TODO.
@@ -69,7 +77,7 @@ To put your product on the card, send a screenshot and the agent attaches it wit
 - No line that just restates the first.
 - No numbers or time and effort claims that are not in your facts.
 
-The reply shows this list for your post, each line marked pass or fail, and the pack keeps it in `pack.json` and `checklist.md`. A hook the model wrote is only offered if the post still passes with it. Your own words are always offered, and if they break a rule (say, over 12 words) the checklist says so.
+The reply shows this list for your post, each line marked pass or fail, and the pack keeps it in `pack.json` and `checklist.md`. A hook the model wrote is offered only if it adds no failure of its own; if none does, the least bad one is offered marked "(has issues)". Your own words are always offered, and if they break a rule (say, over 12 words) the checklist says so. If picking your words drops the only line that said what shipped, the checklist says that too.
 
 ## What goes where
 

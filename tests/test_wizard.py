@@ -1222,3 +1222,37 @@ def test_results_from_another_site_change_nothing():
     reply = start(host)
     assert extra_lines(reply, baseline) == []
     assert not any(r.get("signups") for r in pending(host)["refs"])
+
+
+def test_the_fallback_hook_is_marked_on_its_button():
+    bad = {**CLEAN, "hooks": ["Your page should check this out.", "Check this out: themes.",
+                              "Your site should say hello to themes."]}
+    host = make_host(PHASE1, llm=(bad, bad))
+    start(host, args=f"{URL} custom themes for pet profile pages")
+    [choice] = hook_choices(host)
+    assert choice["label"] != pending(host)["hooks"][0] and pending(host)["hooks"][0] in choice["label"]
+
+
+def test_caught_line_quotes_each_invented_detail_whole():
+    invented = {**CLEAN, "caption": CLEAN["caption"].replace(
+        "follows.", "follows in seconds, every minute, for 3 days and 12 hours, all weeks long.")}
+    host = make_host(PHASE1, llm=(invented, CLEAN))
+    clean_reply = start(make_host(PHASE1))
+    reply = start(host)
+    [line] = [ln for ln in plain(reply) if ln and ln not in plain(clean_reply)]
+    assert line.count('"') % 2 == 0 and '"in seconds"' in line
+
+
+def test_founder_words_replacing_the_only_line_that_says_what_shipped_fail_says_what_shipped():
+    first_only = {"use_case": "Custom themes for pet pages.",
+                  "hooks": ["Custom themes for pet pages are live.", "Every pet page looked alike until today.",
+                            "Are you a pet owner? Stop settling."],
+                  "caption": "Custom themes for pet pages are live.\n\nA small thing, but it makes the page feel "
+                             "like yours.\n\nhttps://pawr.link"}
+    host = make_host(PHASE1, llm=(first_only,))
+    start(host, args=f"{URL} custom themes for pet pages -- people kept asking to match their pet page to their own site")
+    p = wizard._Pending(pending(host))
+    assert p.option.source == "founder" and not p.option.dropped
+    assert [c.ok for c in p.checks() if "use-case-missing" in c.rules] == [False]
+    resume(host, "hook", "2")
+    assert not [c for c in wizard._Pending(pending(host)).checks() if "use-case-missing" in c.rules]

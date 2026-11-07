@@ -22,6 +22,7 @@ from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any
 
+from .draft import founder_hook, same_line
 from .models import PastLaunch
 from .pack import JUDGE_BY_CONVERSION
 from .references import short_brand
@@ -174,10 +175,15 @@ def followup(root: Path, pack: Any) -> dict:
         return _failed(pack, str(exc))
     brief = data.get("brief") if isinstance(data.get("brief"), dict) else {}
     hook = data.get("hook") if isinstance(data.get("hook"), str) else ""
-    unused = [h for h in _strings(data.get("hooks")) if h.strip() != hook.strip()]
-    more = _dicts(data.get("more_references"))
     detail = brief.get("detail") if isinstance(brief.get("detail"), str) else ""
-    suggestions = _suggestions(detail.strip(), unused, more)
+    # The founder's words are hook 1 of every pack with a detail: never offer them again as a
+    # hook, and when they lead the post, a reply with them would repeat its first line.
+    words = founder_hook(detail)
+    unused = [h for h in _strings(data.get("hooks"))
+              if not same_line(h, hook) and not (words and same_line(h, words))]
+    led = data.get("hook_source") == "founder" or bool(words and same_line(hook, words))
+    more = _dicts(data.get("more_references"))
+    suggestions = _suggestions("" if led else detail.strip(), unused, more)
     return {
         "ok": True,
         "pack": pack,

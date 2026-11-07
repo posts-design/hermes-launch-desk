@@ -86,6 +86,7 @@ class HookOption:
     source: Literal["founder", "model"]
     post: str
     dropped: tuple[str, ...] = ()  # body lines left out because they repeat this hook
+    flagged: bool = False  # offered although it fails a check: no model hook passed
 
 
 @dataclass(frozen=True)
