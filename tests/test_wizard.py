@@ -1054,12 +1054,12 @@ def test_a_private_product_link_is_flagged_without_a_redraft():
     assert "127.0.0.1:8731" in failed[0]["text"]
 
 
-def test_caught_message_only_when_the_redraft_fixed_something():
-    clean = make_host(PHASE1)
+def test_caught_message_in_a_chat_app_comes_before_the_hook_question_only_after_a_fix():
+    clean = make_host(PHASE1, surface="telegram")
     start(clean)
-    fixed = make_host(PHASE1, llm=(STOCK_HOOK, CLEAN))
+    fixed = make_host(PHASE1, llm=(STOCK_HOOK, CLEAN), surface="telegram")
     start(fixed)
-    unfixed = make_host(PHASE1, llm=(STOCK_HOOK, STOCK_HOOK))
+    unfixed = make_host(PHASE1, llm=(STOCK_HOOK, STOCK_HOOK), surface="telegram")
     start(unfixed)
     assert len(fixed.llm_calls) == 2 and len(unfixed.llm_calls) == 2
     extra = [t for t in fixed.said if t not in clean.said]
@@ -1067,6 +1067,22 @@ def test_caught_message_only_when_the_redraft_fixed_something():
     assert [t for t in unfixed.said if t not in clean.said] == []
     hook_q = questions(fixed, "1")[0]
     assert fixed.events.index(("say", extra[0])) < fixed.events.index(("ask", hook_q))
+
+
+def test_caught_message_on_a_local_client_leads_the_hook_question_and_the_reply():
+    # a terminal shows no progress messages, so the line goes where the founder reads
+    clean = make_host(PHASE1)
+    clean_reply = start(clean)
+    fixed = make_host(PHASE1, llm=(STOCK_HOOK, CLEAN))
+    fixed_reply = start(fixed)
+    unfixed = make_host(PHASE1, llm=(STOCK_HOOK, STOCK_HOOK))
+    unfixed_reply = start(unfixed)
+    assert fixed.said == clean.said
+    extra = [line for line in plain(fixed_reply) if line and line not in plain(clean_reply)]
+    assert len(extra) == 1 and "check this out" in extra[0].lower()
+    assert questions(fixed, "1")[0].startswith(extra[0])
+    assert [line for line in plain(unfixed_reply) if line and line not in plain(clean_reply)] == []
+    assert questions(unfixed, "1")[0] == questions(clean, "1")[0]
 
 
 def test_change_hook_offers_the_same_options_with_the_founder_first():

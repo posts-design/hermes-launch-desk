@@ -341,11 +341,13 @@ def _refs_block(refs: list[Reference], used_pack: bool) -> str:
 
 
 def _pick_hook(host: Host, options: list[HookOption], caption: str, refs: list[Reference],
-               used_pack: bool) -> int:
+               used_pack: bool, lead: str = "") -> int:
     """Ask which hook leads; the index of the picked option. The founder's words are marked
-    as theirs (the mark is not part of the post), and a body line one option leaves out is named."""
+    as theirs (the mark is not part of the post), and a body line one option leaves out is named.
+    `lead`, if any, opens the question."""
     body = "\n".join(caption.strip().splitlines()[1:]).strip()
-    question = _refs_block(refs, used_pack) + "\n\nPick the hook, the first line of your post."
+    question = (lead + "\n\n" if lead else "") + _refs_block(refs, used_pack)
+    question += "\n\nPick the hook, the first line of your post."
     if body:
         question += "\nThe rest of the post:\n\n" + body
     for n, o in enumerate(options, 1):
@@ -381,10 +383,18 @@ def caught_line(draft: Draft) -> str:
     return f"Caught in the first draft: {joined}. Redrafted."
 
 
-def _say_caught(host: Host, draft: Draft) -> None:
+def _caught(host: Host, draft: Draft, notes: list[str]) -> str:
+    """Show the caught line before the hook question. A chat app gets it as a message now. A
+    terminal or desktop client shows no progress messages, so there it opens the hook question
+    (returned) and goes in the reply's notes."""
     line = caught_line(draft)
-    if line:
-        host.say(line)
+    if not line:
+        return ""
+    if _local(host):
+        notes.append(line)
+        return line
+    host.say(line)
+    return ""
 
 
 def _check_lines(checks: list[CheckLine]) -> list[str]:
@@ -569,9 +579,9 @@ def _phase1(host: Host, args: Args, stored: BrandKit | None, get: Callable[[str]
     if kept:
         notes.append(f"Kept your style: your past posts use {' and '.join(kept)}, so the draft may too.")
     draft = draft_post(host, brief, brand, refs, pick_hook_shapes(brief.shipped, brief.detail))
-    _say_caught(host, draft)
+    lead = _caught(host, draft, notes)
     options = hook_options(draft, brief, brand, refs)
-    picked = _pick_hook(host, options, draft.caption, refs, bool(pack_note))
+    picked = _pick_hook(host, options, draft.caption, refs, bool(pack_note), lead)
 
     (folder / "items.json").write_text(json.dumps(items, ensure_ascii=False), encoding="utf-8")
     pending = _Pending({
@@ -706,14 +716,15 @@ def _resume(host: Host, p: _Pending) -> str:
         _forget_screenshot(host, p.data)
         return DISCARDED
     notes: list[str] = []
+    caught: list[str] = []
     if picked == "swap":
         fresh = rank_references(p.items(), p.brief, exclude=set(p.data["shown"]))
         if fresh:
             host.say("Drafting again with new references.")
             draft = draft_post(host, p.brief, p.brand, fresh, pick_hook_shapes(p.brief.shipped, p.brief.detail))
-            _say_caught(host, draft)
+            lead = _caught(host, draft, caught)
             options = hook_options(draft, p.brief, p.brand, fresh)
-            picked = _pick_hook(host, options, draft.caption, fresh, p.data["used_pack"])
+            picked = _pick_hook(host, options, draft.caption, fresh, p.data["used_pack"], lead)
             p.set_refs(fresh)
             p.set_options(options, draft.caption)
             p.data["hook"] = options[picked].text
@@ -725,7 +736,7 @@ def _resume(host: Host, p: _Pending) -> str:
     if not notes:
         p.render(host)
     host.state_set(PENDING_KEY, p.data)
-    return p.reply(host, notes)
+    return p.reply(host, caught + notes)
 
 
 # ------------------------------------------------------------------ the command
