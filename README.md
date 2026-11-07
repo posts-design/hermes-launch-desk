@@ -12,7 +12,7 @@ The model writes about 20% of this. The rest is code and your own material:
 - Your words lead. The detail you give after ` -- ` is offered as the first line, word for word, marked as yours. The model's hooks come after it, each offered only if it adds no failure of its own to the post, and no two built the same way.
 - References are real launch posts from posts.design, chosen in code by what you shipped.
 - The draft is checked in code against AI-sounding copy and against details you never gave it, and is redrafted when it fails. You see the checks: a line says what the first draft was caught on, and the draft comes with a checklist of the post, one line per check.
-- The card is composed from your screenshot, colours and logo. It is never generated. It reads your site the way a visitor sees it: dark if the site is dark, the accent your site names or puts on its buttons, and a headline face close to yours (a serif, a rounded sans, or Inter).
+- The card is composed from your screenshot, colours and logo. It is never generated. Its headline names your product and what shipped (9 words at most, checked like the post), so it never repeats the first line of your post. It reads your site the way a visitor sees it: dark if the site is dark, the accent your site names or puts on its buttons, and a headline face close to yours (a serif, a rounded sans, or Inter).
 - Your results feed the next launch. Once you record sign-ups for a pack, the next `/launch` opens with one line on your best launch so far, and that post is reference 1: the draft borrows its shape, never its words.
 
 Because the checks and the design do the heavy lifting, it works on small models.
@@ -74,8 +74,8 @@ The page only reads. Its backend (`dashboard/plugin_api.py`, loaded when the plu
 - No link that only opens on your machine or network: localhost, a loopback or private address, or a .local name.
 - At most 280 characters on X, counting each link as 23.
 - No run of five words copied from a reference (your own past post and your own detail don't count).
-- No line that just restates the first.
-- No numbers or time and effort claims that are not in your facts.
+- No line that just restates the first, and no phrase said twice: two lines sharing a phrase ("next to meetings"), or a word other than your product's name in three lines.
+- No numbers, counts or time and effort claims ("three things", "today", "in seconds") that are not in your facts. Ones that only your site's description gives are named in the checklist as from your site.
 
 The reply shows this list for your post, each line marked pass or fail, and the pack keeps it in `pack.json` and `checklist.md`. A hook the model wrote is offered only if it adds no failure of its own; if none does, the least bad one is offered marked "(has issues)". Your own words are always offered, and if they break a rule (say, over 12 words) the checklist says so. If picking your words drops the only line that said what shipped, the checklist says that too.
 
