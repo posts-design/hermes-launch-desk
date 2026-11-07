@@ -15,6 +15,9 @@ class BrandKit:
     font_family: str | None
     logo_path: str | None
     voice_samples: tuple[str, ...] = ()
+    # The headline face that suits the brand: "serif", "rounded" or "sans"; "" when unknown
+    # (a kit saved before faces were read), and the card then judges it from font_family.
+    font_face: str = ""
 
 
 @dataclass(frozen=True)

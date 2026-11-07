@@ -1,0 +1,153 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Brookhour — a calm focus timer for Mac</title>
+<meta name="description" content="Brookhour is a calm focus timer for Mac. New in 2.0: every focus session lands on your calendar, right next to your meetings.">
+<meta name="theme-color" content="#FFF6EC">
+<meta property="og:site_name" content="Brookhour">
+<meta property="og:title" content="Brookhour 2.0 — focus sessions now show up in your calendar">
+<meta property="og:description" content="A calm focus timer for Mac. Your deep work, right next to your meetings.">
+<meta property="og:type" content="website">
+<link rel="apple-touch-icon" href="icon.png">
+<link rel="icon" type="image/png" href="icon.png">
+<style>
+h1,h2,h3,.serif{font-family:"Iowan Old Style","Palatino Linotype",Palatino,"Book Antiqua",Georgia,serif}
+:root{
+  --bg:#FFF6EC; --ink:#2B1B17; --ink2:#6B5A52; --line:#F0E1D3;
+  --accent:#FF5B2E; --accent-deep:#E2461C; --amber:#FFA53A; --rose:#EC4C72; --plum:#6E2A55;
+}
+*{box-sizing:border-box;margin:0;padding:0}
+html{background:var(--bg)}
+body{font-family:"Avenir Next",Avenir,"Segoe UI",system-ui,sans-serif;color:var(--ink);background:var(--bg);-webkit-font-smoothing:antialiased;overflow-x:hidden}
+a{color:inherit;text-decoration:none}
+.wrap{max-width:1240px;margin:0 auto;padding:0 32px}
+
+/* nav */
+header{position:relative;z-index:5}
+nav{display:flex;align-items:center;gap:36px;height:76px}
+.brand{display:flex;align-items:center;gap:10px;font-weight:600;font-size:19px;letter-spacing:-.01em}
+.brand img{width:34px;height:34px;filter:drop-shadow(0 3px 6px rgba(226,70,28,.25))}
+nav .links{display:flex;gap:28px;font-size:15px;font-weight:500;color:var(--ink2)}
+nav .cta{margin-left:auto;display:flex;align-items:center;gap:18px;font-size:15px;font-weight:500}
+.btn{display:inline-flex;align-items:center;gap:10px;height:46px;padding:0 22px;border-radius:14px;font-weight:600;font-size:16px;color:#fff;
+  background:linear-gradient(180deg,#FF7448,var(--accent));box-shadow:0 1px 0 rgba(255,255,255,.35) inset,0 8px 20px -8px rgba(226,70,28,.7),0 0 0 1px rgba(200,60,20,.25)}
+.btn.sm{height:38px;padding:0 16px;font-size:14.5px;border-radius:11px}
+.ghost{display:inline-flex;align-items:center;gap:8px;height:46px;padding:0 18px;border-radius:14px;font-weight:600;font-size:16px;color:var(--ink);background:#fff;box-shadow:0 0 0 1px var(--line)}
+
+/* hero */
+.hero{position:relative;padding:44px 0 0;min-height:900px}
+.sun{position:absolute;width:980px;height:980px;right:-260px;top:-260px;border-radius:50%;
+  background:radial-gradient(circle at 50% 50%,#FFD9A6 0%,#FFB98A 30%,rgba(255,150,120,.45) 52%,rgba(255,246,236,0) 70%);pointer-events:none}
+.hero .copy{position:relative;width:520px;z-index:2;padding-top:40px}
+.pill{display:inline-flex;align-items:center;gap:10px;background:#fff;border-radius:999px;padding:6px 14px 6px 6px;font-size:14px;font-weight:500;box-shadow:0 0 0 1px var(--line),0 4px 14px -6px rgba(120,50,20,.18)}
+.pill b{background:var(--accent);color:#fff;border-radius:999px;padding:3px 10px;font-size:12px;letter-spacing:.04em}
+h1{font-size:76px;line-height:.98;letter-spacing:-.025em;font-weight:700;margin:26px 0 22px}
+h1 em{font-style:italic;font-weight:500;color:var(--accent-deep)}
+.lede{font-size:20px;line-height:1.5;color:var(--ink2);max-width:470px}
+.ctas{display:flex;gap:12px;margin-top:32px;align-items:center}
+.fine{font-size:13.5px;color:var(--ink2);margin-top:14px}
+.shots{position:absolute;left:560px;top:96px;width:980px;z-index:1}
+.shots .desk{width:980px;border-radius:18px;box-shadow:0 40px 80px -30px rgba(120,30,20,.45),0 0 0 1px rgba(120,40,20,.08);display:block}
+.phone{position:absolute;left:-40px;top:330px;width:230px;border-radius:44px;padding:9px;background:#1C1210;box-shadow:0 30px 60px -20px rgba(80,20,10,.55),inset 0 0 0 2px #3a2a25}
+.phone img{width:100%;display:block;border-radius:36px}
+
+/* sections */
+section.wrap{padding:110px 32px}
+.kicker{font-size:13px;font-weight:600;letter-spacing:.12em;text-transform:uppercase;color:var(--accent-deep)}
+h2{font-size:50px;line-height:1.05;letter-spacing:-.02em;margin:14px 0 18px;max-width:760px}
+.grid3{display:grid;grid-template-columns:repeat(3,1fr);gap:20px;margin-top:48px}
+.f{background:#fff;border-radius:22px;padding:28px;box-shadow:0 0 0 1px var(--line)}
+.f .ic{width:44px;height:44px;border-radius:12px;display:grid;place-items:center;margin-bottom:18px}
+.f h3{font-size:24px;letter-spacing:-.01em;margin-bottom:8px}
+.f p{color:var(--ink2);line-height:1.55;font-size:16px}
+.quote{background:linear-gradient(150deg,#FFAA45 0%,#FF6A33 45%,#E9456B 100%);color:#fff;border-radius:32px;padding:72px 80px;position:relative;overflow:hidden}
+.quote p{font-family:"Iowan Old Style",Palatino,Georgia,serif;font-size:44px;line-height:1.15;letter-spacing:-.015em;max-width:900px;position:relative}
+.quote span{display:block;margin-top:22px;font-size:16px;opacity:.9;position:relative}
+.quote::after{content:"";position:absolute;left:0;right:0;bottom:0;height:120px;opacity:.16;
+  background:url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='160' height='120'%3E%3Cpath d='M0 30 Q40 6 80 30 T160 30' fill='none' stroke='white' stroke-width='5'/%3E%3Cpath d='M0 70 Q40 46 80 70 T160 70' fill='none' stroke='white' stroke-width='5'/%3E%3Cpath d='M0 110 Q40 86 80 110 T160 110' fill='none' stroke='white' stroke-width='5'/%3E%3C/svg%3E") repeat-x}
+.split{display:grid;grid-template-columns:1fr 360px;gap:80px;align-items:center}
+.split .phone{position:relative;left:auto;top:auto;width:330px}
+.price{display:flex;gap:20px;margin-top:40px}
+.price .f{flex:1}
+.price .amt{font-family:"Iowan Old Style",Palatino,Georgia,serif;font-size:56px;font-weight:700;letter-spacing:-.02em;margin:6px 0}
+footer{border-top:1px solid var(--line);padding:36px 0 48px;color:var(--ink2);font-size:14px}
+footer .wrap{display:flex;justify-content:space-between;align-items:center;gap:20px;flex-wrap:wrap}
+@media (max-width:900px){
+  h1{font-size:52px}.hero .copy{width:auto}.shots{position:relative;left:0;top:0;width:100%;margin-top:48px}.shots .desk{width:100%}
+  .phone{display:none}.grid3,.split,.price{grid-template-columns:1fr;display:grid}.quote{padding:44px 28px}.quote p{font-size:30px}nav .links{display:none}
+}
+</style>
+</head>
+<body>
+<header class="wrap">
+  <nav>
+    <a class="brand" href="#"><img src="icon.png" alt="">Brookhour</a>
+    <div class="links"><a href="#new">What’s new</a><a href="#iphone">iPhone</a><a href="#pricing">Pricing</a><a href="#">Changelog</a></div>
+    <div class="cta"><a href="#">Sign in</a><a class="btn sm" href="#">Download</a></div>
+  </nav>
+</header>
+
+<main>
+<div class="hero wrap">
+  <div class="sun"></div>
+  <div class="copy">
+    <a class="pill" href="#new"><b>2.0</b>Focus sessions now show up in your calendar →</a>
+    <h1>Deep work, right next to your <em>meetings.</em></h1>
+    <p class="lede">Brookhour is a calm focus timer for Mac. Every session you run now lands on your calendar as Busy, so your week finally shows the work, not just the talking.</p>
+    <div class="ctas">
+      <a class="btn" href="#"><svg width="14" height="16" viewBox="0 0 14 16"><path d="M7 1v10M2.5 7L7 11.5 11.5 7M1.5 15h11" fill="none" stroke="#fff" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/></svg>Download for Mac</a>
+      <a class="ghost" href="#iphone">Also on iPhone</a>
+    </div>
+    <p class="fine">Free for 14 days · macOS 14 or later · Works with any calendar on your Mac</p>
+  </div>
+  <div class="shots">
+    <img class="desk" src="shot-desktop.png" alt="Brookhour week view: focus sessions in warm colours next to meetings">
+    <div class="phone"><img src="shot-phone.png" alt="Brookhour on iPhone: today’s focus sessions and meetings"></div>
+  </div>
+</div>
+
+<section id="new" class="wrap">
+  <div class="kicker">New in Brookhour 2.0</div>
+  <h2>Your calendar only showed the meetings. Now it shows the work.</h2>
+  <div class="grid3">
+    <div class="f"><div class="ic" style="background:#FFE9DF"><svg width="22" height="22" viewBox="0 0 22 22" fill="none" stroke="#E2461C" stroke-width="2"><rect x="2.5" y="3.5" width="17" height="16" rx="3.5"/><path d="M2.5 8.5h17M7 1.5v4M15 1.5v4"/><rect x="6" y="11.5" width="7" height="4.5" rx="1.2" fill="#FF5B2E" stroke="none"/></svg></div>
+      <h3>Sessions land on your calendar</h3><p>Start a timer and a block appears in the calendar you choose. Finish early and it shrinks to fit.</p></div>
+    <div class="f"><div class="ic" style="background:#FFF1DA"><svg width="22" height="22" viewBox="0 0 22 22" fill="none" stroke="#D97A12" stroke-width="2"><circle cx="11" cy="11" r="8.5"/><path d="M11 6v5l3.5 2"/></svg></div>
+      <h3>Busy means busy</h3><p>Teammates see a Busy block, not your task list. Turn on task names only if you want to.</p></div>
+    <div class="f"><div class="ic" style="background:#FBE3EA"><svg width="22" height="22" viewBox="0 0 22 22" fill="none" stroke="#C93A62" stroke-width="2"><path d="M4 19v-6M9 19V7M14 19v-9M19 19V3"/></svg></div>
+      <h3>Focus vs. meetings, weekly</h3><p>One honest number on Friday: how much of your booked time was actually yours.</p></div>
+  </div>
+</section>
+
+<section class="wrap" style="padding-top:0">
+  <div class="quote"><p>“People kept asking to see their deep work next to their meetings. So we put it there.”</p><span>From the Brookhour 2.0 release notes</span></div>
+</section>
+
+<section id="iphone" class="wrap">
+  <div class="split">
+    <div>
+      <div class="kicker">Brookhour for iPhone</div>
+      <h2>Your day, sessions and meetings in one list.</h2>
+      <p class="lede">The timer follows you to your phone and the Dynamic Island. Plan a focus block in the gap before lunch, and it’s on your calendar before you’ve put the phone down.</p>
+    </div>
+    <div class="phone"><img src="shot-phone.png" alt="Brookhour on iPhone"></div>
+  </div>
+</section>
+
+<section id="pricing" class="wrap" style="padding-top:20px">
+  <div class="kicker">Pricing</div>
+  <h2>Pay once. Focus for years.</h2>
+  <div class="price">
+    <div class="f"><h3>Brookhour</h3><div class="amt">$29</div><p>Mac app, one-time purchase. All 2.x updates included.</p></div>
+    <div class="f"><h3>Brookhour + iPhone</h3><div class="amt">$39</div><p>Mac and iPhone, synced sessions, Live Activities and widgets.</p></div>
+  </div>
+</section>
+</main>
+
+<footer>
+  <div class="wrap"><span class="serif" style="font-size:17px;color:var(--ink)">Brookhour</span><span>Sample product made for the Launch Desk demo.</span><span>© 2026</span></div>
+</footer>
+</body>
+</html>

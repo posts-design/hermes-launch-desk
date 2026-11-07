@@ -256,3 +256,155 @@ def test_accent_skips_social_platform_colours():
     assert kit.accent == "#E8590C"
     only_social, _ = parse_brand("https://x.test", "", [".t{color:#1DA1F2}.f{color:#1877F2}"])
     assert only_social.accent == NEUTRAL.accent
+
+
+# --- dark brands, exact accents and the headline face (Task 20) -------------
+
+import gzip  # noqa: E402
+
+from launch_desk.brand import font_face  # noqa: E402
+
+
+def _gz(name: str) -> str:
+    return gzip.decompress((FIX / name).read_bytes()).decode("utf-8")
+
+
+def _posts_design():
+    return parse_brand("https://posts.design/mcp", _gz("posts-mcp.html.gz"),
+                       [_gz("posts-mcp-1.css.gz"), _gz("posts-mcp-2.css.gz")])[0]
+
+
+def _lum(hex_: str) -> float:
+    r, g, b = (int(hex_[i:i + 2], 16) / 255 for i in (1, 3, 5))
+    return 0.2126 * r + 0.7152 * g + 0.0722 * b
+
+
+def _dark(kit) -> bool:
+    return _lum(kit.bg) < 0.4 and _lum(kit.ink) > 0.6
+
+
+def test_posts_design_reads_dark_with_its_orange_accent():
+    kit = _posts_design()
+    assert kit.bg == "#101010"
+    assert _dark(kit)
+    assert kit.accent == "#FF9602"
+
+
+def test_brookhour_reads_light_orange_and_serif():
+    kit, _ = parse_brand("http://127.0.0.1:8731/k2/", _fix("brookhour.html"), [])
+    assert kit.bg == "#FFF6EC" and not _dark(kit)
+    assert kit.accent == "#FF5B2E"
+    assert kit.font_face == "serif"
+
+
+def test_fernlight_reads_light_button_green_and_rounded():
+    kit, _ = parse_brand("http://127.0.0.1:8731/k3/", _fix("fernlight.html"), [])
+    assert kit.bg == "#F1F6E9" and not _dark(kit)
+    assert kit.accent == "#17A34A"
+    assert kit.font_face == "rounded"
+
+
+def test_pawr_accent_and_face_unchanged():
+    kit, _ = parse_brand("https://pawr.link", _fix("pawr.html"), [_fix("pawr.css")])
+    assert kit.accent == "#6A3CFF"
+    assert kit.font_face == "sans"
+    assert not _dark(kit)
+
+
+DARK_TC = ('<meta name="theme-color" content="#f5f5f5" media="(prefers-color-scheme: light)">'
+           '<meta name="theme-color" content="#0b0b0b" media="(prefers-color-scheme: dark)">')
+
+
+def test_dark_theme_color_counts_when_css_sets_dark_scheme():
+    css = "@media (prefers-color-scheme:dark){:root{color-scheme:dark}}"
+    kit, _ = parse_brand("https://x.test", DARK_TC, [css])
+    assert kit.bg == "#0B0B0B" and _dark(kit)
+
+
+def test_dark_theme_color_counts_with_a_color_scheme_meta():
+    html = DARK_TC + '<meta name="color-scheme" content="dark">'
+    kit, _ = parse_brand("https://x.test", html, [])
+    assert kit.bg == "#0B0B0B" and _dark(kit)
+
+
+def test_dark_theme_color_alone_keeps_the_light_background():
+    kit, _ = parse_brand("https://x.test", DARK_TC, [":root{color-scheme:light}"])
+    assert kit.bg == "#F5F5F5" and not _dark(kit)
+
+
+def test_default_theme_color_that_is_dark_makes_a_dark_kit():
+    kit, _ = parse_brand("https://x.test", '<meta name="theme-color" content="#111">', [])
+    assert kit.bg == "#111111" and _dark(kit)
+
+
+@pytest.mark.parametrize("css", [
+    "body{margin:0;background:#0d0f12}",
+    "html{background-color:rgb(12, 14, 20)}",
+    ":root{--bg:#0d0f12}body{color:#fff}",
+    ":root{--background:#0d0f12}",
+    ":root{--page:#0d0f12}html,body{background:var(--page)}",
+])
+def test_dark_page_background_makes_a_dark_kit(css):
+    kit, _ = parse_brand("https://x.test", '<meta name="theme-color" content="#ffffff">', [css])
+    assert _dark(kit)
+
+
+def test_light_page_background_with_dark_mode_tokens_stays_light():
+    css = (":root{--bg:#fafafa}body{background:var(--bg)}"
+           "@media (prefers-color-scheme:dark){:root{--bg:#0d0f12}}"
+           "[data-theme=dark]{--background:#000}")
+    kit, _ = parse_brand("https://x.test", "", [css])
+    assert not _dark(kit)
+
+
+def test_accent_token_beats_the_most_frequent_colour():
+    css = (":root{--accent:#17a34a;--accent-deep:#0f7f38}"
+           ".a{color:#0f7f38}.b{color:#0f7f38}.c{border-color:#0f7f38}")
+    kit, _ = parse_brand("https://x.test", "", [css])
+    assert kit.accent == "#17A34A"
+
+
+@pytest.mark.parametrize("name", ["--brand", "--color-primary", "--primary", "--brand-color"])
+def test_accent_token_names(name):
+    css = f":root{{{name}:#e8590c}}.a{{color:#2f9e44}}.b{{color:#2f9e44}}"
+    kit, _ = parse_brand("https://x.test", "", [css])
+    assert kit.accent == "#E8590C"
+
+
+def test_accent_token_scoped_to_a_theme_or_grey_is_skipped():
+    css = ("[data-theme=sunny]{--accent:#ff9b3d}:root{--primary:#171717;--accent:#f3f3f4}"
+           ".a{color:#6a3cff}.b{color:#6a3cff}")
+    kit, _ = parse_brand("https://x.test", "", [css])
+    assert kit.accent == "#6A3CFF"
+
+
+def test_button_background_beats_the_most_frequent_colour():
+    css = (":root{--go:#7048e8}.btn{background:var(--go);color:#fff}"
+           ".a{color:#2f9e44}.b{color:#2f9e44}.c{color:#2f9e44}")
+    kit, _ = parse_brand("https://x.test", "", [css])
+    assert kit.accent == "#7048E8"
+
+
+def test_button_hover_state_does_not_count():
+    css = "button:hover{background:#c2255c}.a{color:#2f9e44}.b{color:#2f9e44}"
+    kit, _ = parse_brand("https://x.test", "", [css])
+    assert kit.accent == "#2F9E44"
+
+
+@pytest.mark.parametrize("family,face", [
+    ("Iowan Old Style", "serif"), ("Georgia", "serif"), ("Times New Roman", "serif"),
+    ("Source Serif 4", "serif"), ("Newsreader", "serif"), ("EB Garamond", "serif"),
+    ("Charter", "serif"), ("Palatino Linotype", "serif"),
+    ("SF Pro Rounded", "rounded"), ("Nunito", "rounded"), ("Quicksand", "rounded"),
+    ("Varela Round", "rounded"), ("ui-rounded", "rounded"),
+    ("Inter", "sans"), ("Open Sans", "sans"), ("IBM Plex Sans", "sans"), ("PT Sans Serif", "sans"),
+    (None, "sans"), ("", "sans"),
+])
+def test_font_face_from_family(family, face):
+    assert font_face(family) == face
+
+
+def test_face_follows_the_headings_font():
+    css = 'body{font-family:Inter,sans-serif}h1,h2{font-family:"Iowan Old Style",Georgia,serif}'
+    kit, _ = parse_brand("https://x.test", "", [css])
+    assert kit.font_face == "serif"
