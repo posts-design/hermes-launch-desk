@@ -71,9 +71,13 @@ def test_registers_a_page_and_renders_every_state():
     assert areas["routes"]["path"] == areas["sidebar.nav"]["path"] == "/launch-desk"
     assert {"palette", "statusBar.right"} <= set(areas)
     assert report["sdkChecked"] and report["reactWarnings"] == []
+    assert report["opened"] == ["https://posts.design/a", "HTTPS://x.com/intent/post?text=a"]
+    # Two packs claim the founder's words; only the one whose post still opens with the hook is marked.
     assert report["loaded"]["packs"] == 2 and report["loaded"]["founderMarked"] == 1
+    assert report["loaded"]["webLinks"] == 1 and report["loaded"]["plainReferences"] == 1
+    assert report["loaded"]["missed"] == 1
     assert report["states"] == {"empty": True, "error": True, "loading": True}
-    assert report["chip"] == {"due": True, "hiddenWhenNone": True, "hiddenWhenOff": True}
+    assert report["chip"] == {"missed": True, "next": True, "hiddenWhenNone": True, "hiddenWhenOff": True}
 
 
 @pytest.mark.skipif(not (NODE and HAS_REACT), reason="needs node and HERMES_AGENT_SRC with node_modules")
@@ -81,10 +85,13 @@ def test_renders_packs_from_the_real_backend_listing(tmp_path):
     from test_dashboard_api import api, jobs, job, make_pack  # noqa: PLC0415
 
     root = tmp_path / "packs"
-    make_pack(root, "2026-11-06-a", 2_000, hook_source="founder",
-              results=[{"channel": "X", "signups": 5}, {"channel": "LinkedIn", "signups": 1}])
+    make_pack(root, "2026-11-06-a", 2_000, hook_source="founder", hook="Post text from the file.",
+              results=[{"channel": "X", "signups": 5}, {"channel": "LinkedIn", "signups": 1}],
+              references=[{"brand": "Web", "url": "https://posts.design/a", "views": 3},
+                          {"brand": "Local", "url": "file:///Applications/X.app", "views": 2}])
     make_pack(root, "2026-11-05-b", 1_000, hook_source="model")
-    path = jobs(tmp_path / "jobs.json", job("2026-11-06-a", "j1"), job("2026-11-06-a", "j2"))
+    path = jobs(tmp_path / "jobs.json", job("2026-11-06-a", "j1", next_run_at="2099-01-01T00:00:00+00:00"),
+                job("2026-11-06-a", "j2", next_run_at="2020-01-01T00:00:00+00:00"))
     listing = api.list_packs(root, path)
     images = {p["name"]: {"card": api.data_url(api.pack_image(root, p["name"], "card")),
                           "preview": api.data_url(api.pack_image(root, p["name"], "preview"))}
@@ -94,6 +101,7 @@ def test_renders_packs_from_the_real_backend_listing(tmp_path):
     result = run_check("--react", str(SRC / "node_modules"), "--data", str(data), "--out", str(tmp_path / "p.html"))
     report = json.loads(result.stdout)
     assert result.returncode == 0, report["failures"]
-    assert report["loaded"] == {"packs": 2, "founderMarked": 1, "copyButtons": 2, "images": 2,
-                                "checkins": 2, "channels": 2, "emptyOrError": 0}
+    assert report["loaded"] == {"packs": 2, "founderMarked": 1, "copyButtons": 2, "images": 2, "checkins": 2,
+                                "channels": 2, "emptyOrError": 0, "webLinks": 4, "plainReferences": 1,
+                                "missed": 1}
     assert (tmp_path / "p.html").is_file()

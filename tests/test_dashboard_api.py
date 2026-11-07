@@ -5,6 +5,7 @@ import io
 import json
 import os
 import sys
+from datetime import datetime, timezone
 from pathlib import Path
 
 import pytest
@@ -130,8 +131,12 @@ def test_lists_packs_newest_first_with_the_fields_the_pane_shows(tmp_path):
     ]
     assert pack["has_card"] and pack["has_preview"]
     assert pack["alt_text"] == "Launch card for pawr.link."
-    assert pack["results"] == [] and pack["signups"] == [] and pack["checkins"] == []
-    assert listing["checkins_due"] == 0
+    assert pack["signups"] == [] and pack["checkins"] == []
+    assert listing["checkins"] == {"next_run_at": None, "missed": 0}
+    # Only what the page shows goes out.
+    assert set(pack) == {"name", "date", "created", "product", "post", "hook", "hook_source", "checks",
+                         "references", "layout", "intent_url", "alt_text", "has_card", "has_preview",
+                         "signups", "checkins"}
 
 
 def test_recording_results_later_does_not_move_a_pack_to_the_top(tmp_path):
@@ -142,7 +147,8 @@ def test_recording_results_later_does_not_move_a_pack_to_the_top(tmp_path):
 
 
 def test_missing_root_lists_nothing(tmp_path):
-    assert api.list_packs(tmp_path / "packs", tmp_path / "cron" / "jobs.json") == {"packs": [], "checkins_due": 0}
+    assert api.list_packs(tmp_path / "packs", tmp_path / "cron" / "jobs.json") == {
+        "packs": [], "checkins": {"next_run_at": None, "missed": 0}}
 
 
 def test_missing_and_wrong_typed_fields_fall_back(tmp_path):
@@ -155,28 +161,42 @@ def test_missing_and_wrong_typed_fields_fall_back(tmp_path):
     }), encoding="utf-8")
     pack = api.list_packs(tmp_path)["packs"][0]
     assert pack["post"] == "From the caption."  # no post file: the caption
-    assert pack["hook"] == "" and pack["hooks"] == []
+    assert pack["hook"] == ""
     assert pack["references"] == [{"brand": "", "views": None, "url": ""}]
     assert pack["layout"] is None and pack["intent_url"] is None
     assert pack["has_card"] is False and pack["has_preview"] is False
-    assert pack["results"] == [] and pack["hook_source"] is None and pack["checks"] is None
+    assert pack["signups"] == [] and pack["hook_source"] is None and pack["checks"] is None
     assert pack["date"] == "2026-11-06"
 
 
-def test_hook_source_and_checks_are_passed_through_when_present(tmp_path):
+def test_hook_source_and_the_saved_checklist_are_passed_through(tmp_path):
+    # The shape /launch saves (launch_desk.models.CheckLine): {rules, ok, text}.
     make_pack(tmp_path, "2026-11-06-founder", 1_000, hook_source="founder", checks=[
-        {"id": "first-line", "label": "First line: 10 words", "ok": True},
-        {"id": "x-length", "text": "Fits X: 183/280", "passed": False, "fix": "Cut a line."},
-        "Only details you gave",
-        {"ok": True},  # no label: dropped
+        {"rules": ["first-line-words"], "ok": True, "text": "First line: 10 words"},
+        {"rules": ["x-length"], "ok": False, "text": "Fits X: 290/280"},
+        {"rules": [], "ok": "yes", "text": "Odd flag"},
+        {"rules": ["no-text"], "ok": True},
+        "a bare string",
     ])
     pack = api.list_packs(tmp_path)["packs"][0]
     assert pack["hook_source"] == "founder"
     assert pack["checks"] == [
-        {"label": "First line: 10 words", "ok": True, "detail": None},
-        {"label": "Fits X: 183/280", "ok": False, "detail": "Cut a line."},
-        {"label": "Only details you gave", "ok": None, "detail": None},
+        {"text": "First line: 10 words", "ok": True},
+        {"text": "Fits X: 290/280", "ok": False},
+        {"text": "Odd flag", "ok": None},
     ]
+
+
+@pytest.mark.parametrize("url", ["file:///etc/passwd", "/Applications/Calculator.app", "~/Desktop/x.sh",
+                                 "javascript:alert(1)", "http://posts.design/a", "smb://host/share",
+                                 "\\\\host\\share", " ", None, 7])
+def test_only_https_links_reach_the_page(tmp_path, url):
+    make_pack(tmp_path, "2026-11-06-links", 1_000, intent_url=url,
+              references=[{"brand": "Bad", "url": url, "views": 1},
+                          {"brand": "Good", "url": "https://posts.design/ok", "views": 2}])
+    pack = api.list_packs(tmp_path)["packs"][0]
+    assert [r["url"] for r in pack["references"]] == ["", "https://posts.design/ok"]
+    assert pack["intent_url"] is None
 
 
 def test_signups_show_the_latest_number_per_channel(tmp_path):
@@ -187,7 +207,6 @@ def test_signups_show_the_latest_number_per_channel(tmp_path):
         {"channel": "Reddit", "signups": "lots"},
     ])
     pack = api.list_packs(tmp_path)["packs"][0]
-    assert len(pack["results"]) == 3
     assert [(s["channel"], s["signups"]) for s in pack["signups"]] == [("X", 12), ("LinkedIn", 2)]
 
 
@@ -216,7 +235,29 @@ def test_a_linked_pack_json_is_not_read(tmp_path):
     assert api.list_packs(tmp_path / "packs")["packs"] == []
 
 
+def test_one_pack_name_is_checked_without_listing_every_pack(tmp_path, monkeypatch):
+    root = tmp_path / "packs"
+    for i in range(5):
+        make_pack(root, f"2026-11-0{i + 1}-p", 1_000 + i)
+    calls = []
+    real = os.listdir
+    monkeypatch.setattr(api.os, "listdir", lambda p: calls.append(Path(p)) or real(p))
+    assert api.pack_image(root, "2026-11-03-p", "card") == CARD
+    assert calls.count(root) == 1 and len(calls) <= 4  # root once, then only that pack's folder
+
+
+def test_reads_refuse_a_link_even_when_asked_directly(tmp_path):
+    (tmp_path / "real.png").write_bytes(CARD)
+    (tmp_path / "link.png").symlink_to(tmp_path / "real.png")
+    assert api._read_bytes(tmp_path / "real.png", 1_000_000) == CARD
+    assert api._read_bytes(tmp_path / "link.png", 1_000_000) is None  # O_NOFOLLOW
+    assert api._read_bytes(tmp_path, 1_000_000) is None  # not a regular file
+
+
 # ------------------------------------------------------------------ check-ins
+
+NOW = datetime(2026, 11, 7, 12, 0, tzinfo=timezone.utc)
+
 
 def test_check_ins_come_from_hermes_jobs_by_name(tmp_path):
     root = tmp_path / "packs"
@@ -224,19 +265,41 @@ def test_check_ins_come_from_hermes_jobs_by_name(tmp_path):
     make_pack(root, "2026-11-05-b", 1_000)
     path = jobs(tmp_path / "cron" / "jobs.json",
                 job("2026-11-06-a", "j72", next_run_at="2026-11-09T10:00:00+00:00"),
-                job("2026-11-06-a", "j24"),
+                job("2026-11-06-a", "j24", next_run_at="2026-11-08T10:00:00+00:00"),
                 job("2026-11-05-b", "jdone", state="completed", next_run_at=None,
                     last_run_at="2026-11-06T09:00:00+00:00", last_status="ok"),
-                job("2026-11-05-b", "jpaused", enabled=False),
+                job("2026-11-05-b", "joff", enabled=False),
+                job("2026-11-05-b", "jmarked", paused_at="2026-11-06T08:00:00+00:00"),  # enabled, but held
+                job("2026-11-05-b", "jstate", state="paused"),
+                job("2026-11-05-b", "jzero", enabled=0),
                 {"id": "other", "name": "Morning brief", "state": "scheduled",
                  "next_run_at": "2026-11-07T07:00:00+00:00"},
                 "junk")
-    listing = api.list_packs(root, path)
+    listing = api.list_packs(root, path, NOW)
     a, b = listing["packs"]
     assert [c["id"] for c in a["checkins"]] == ["j24", "j72"]  # soonest first
-    assert all(c["state"] == "scheduled" for c in a["checkins"])
-    assert {c["id"]: c["state"] for c in b["checkins"]} == {"jdone": "completed", "jpaused": "paused"}
-    assert listing["checkins_due"] == 2
+    assert all(c["state"] == "scheduled" and not c["missed"] for c in a["checkins"])
+    assert {c["id"]: c["state"] for c in b["checkins"]} == {
+        "jdone": "completed", "joff": "paused", "jmarked": "paused", "jstate": "paused", "jzero": "paused"}
+    assert listing["checkins"] == {"next_run_at": "2026-11-08T10:00:00+00:00", "missed": 0}
+
+
+def test_a_check_in_past_its_time_that_never_ran_is_missed(tmp_path):
+    root = tmp_path / "packs"
+    make_pack(root, "2026-11-05-a", 1_000)
+    path = jobs(tmp_path / "jobs.json",
+                job("2026-11-05-a", "late", next_run_at="2026-11-07T09:00:00+00:00"),
+                job("2026-11-05-a", "just-now", next_run_at="2026-11-07T11:58:00+00:00"),  # within the grace
+                job("2026-11-05-a", "ran", next_run_at="2026-11-07T08:00:00+00:00",
+                    last_run_at="2026-11-07T08:00:05+00:00"),
+                job("2026-11-05-a", "paused-late", enabled=False, next_run_at="2026-11-06T09:00:00+00:00"),
+                job("2026-11-05-a", "naive", next_run_at="2026-11-06T09:00:00"),
+                job("2026-11-05-a", "next", next_run_at="2026-11-10T09:00:00+00:00"))
+    listing = api.list_packs(root, path, NOW)
+    missed = {c["id"]: c["missed"] for c in listing["packs"][0]["checkins"]}
+    assert missed == {"late": True, "just-now": False, "ran": False, "paused-late": False,
+                      "naive": True, "next": False}
+    assert listing["checkins"] == {"next_run_at": "2026-11-10T09:00:00+00:00", "missed": 2}
 
 
 @pytest.mark.parametrize("content", ["", "{broken", "[]", json.dumps({"jobs": "nope"})])
@@ -246,7 +309,7 @@ def test_unreadable_jobs_file_means_no_check_ins(tmp_path, content):
     path = tmp_path / "jobs.json"
     path.write_text(content, encoding="utf-8")
     listing = api.list_packs(root, path)
-    assert listing["packs"][0]["checkins"] == [] and listing["checkins_due"] == 0
+    assert listing["packs"][0]["checkins"] == [] and listing["checkins"]["missed"] == 0
 
 
 # ------------------------------------------------------------------ images and traversal
@@ -298,7 +361,7 @@ def client(tmp_path, monkeypatch):
     make_pack(root, "2026-11-05-older", 1_000)
     make_pack(root, "2026-11-06-newer", 2_000, hook_source="founder")
     make_pack(tmp_path, "secret-pack", 3_000)  # beside packs/, never reachable
-    jobs(tmp_path / "cron" / "jobs.json", job("2026-11-06-newer", "j1"))
+    jobs(tmp_path / "cron" / "jobs.json", job("2026-11-06-newer", "j1", next_run_at="2099-01-01T00:00:00+00:00"))
     monkeypatch.setattr(api, "packs_root", lambda: root)
     monkeypatch.setattr(api, "jobs_file", lambda: tmp_path / "cron" / "jobs.json")
     app = fastapi.FastAPI()
@@ -313,7 +376,7 @@ def test_route_lists_packs(client):
     assert [p["name"] for p in body["packs"]] == ["2026-11-06-newer", "2026-11-05-older"]
     assert body["packs"][0]["hook_source"] == "founder"
     assert [c["id"] for c in body["packs"][0]["checkins"]] == ["j1"]
-    assert body["checkins_due"] == 1
+    assert body["checkins"] == {"next_run_at": "2099-01-01T00:00:00+00:00", "missed": 0}
 
 
 def test_routes_serve_the_card_and_preview_pngs(client):
@@ -323,17 +386,19 @@ def test_routes_serve_the_card_and_preview_pngs(client):
     assert preview.status_code == 200 and preview.content == PREVIEW
 
 
-def test_images_route_returns_data_urls(client):
-    body = client.get("/api/plugins/launch-desk/packs/2026-11-05-older/images").json()
-    assert base64.b64decode(body["card"].split(",", 1)[1]) == CARD
-    assert base64.b64decode(body["preview"].split(",", 1)[1]) == PREVIEW
-    assert body["card"].startswith("data:image/png;base64,")
+def test_images_route_returns_one_image_as_a_data_url(client):
+    base = "/api/plugins/launch-desk/packs/2026-11-05-older/images"
+    card, preview = client.get(base).json(), client.get(base + "?kind=preview").json()
+    assert card["kind"] == "card" and card["url"].startswith("data:image/png;base64,")
+    assert base64.b64decode(card["url"].split(",", 1)[1]) == CARD
+    assert base64.b64decode(preview["url"].split(",", 1)[1]) == PREVIEW
+    assert client.get(base + "?kind=pack").status_code == 404
 
 
 @pytest.mark.parametrize("path", [
     "/packs/..%2Fsecret-pack/card", "/packs/%2E%2E/card", "/packs/secret-pack/card",
     "/packs/2026-11-06-missing/preview", "/packs/2026-11-06-newer/pack.json",
-    "/packs/..%2F..%2Fcron/images", "/packs/2026-11-06-newer%2F..%2F..%2Fsecret-pack/card",
+    "/packs/..%2F..%2Fcron/images", "/packs/secret-pack/images?kind=card", "/packs/2026-11-06-newer%2F..%2F..%2Fsecret-pack/card",
 ])
 def test_routes_refuse_anything_outside_the_packs(client, path):
     res = client.get("/api/plugins/launch-desk" + path)

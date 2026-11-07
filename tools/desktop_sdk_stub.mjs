@@ -20,6 +20,11 @@ export const host = {
   notify: n => void state.notified.push(n)
 }
 
+export const queryClient = { invalidateQueries: () => Promise.resolve() }
+
+export const relativeTime = (ms, now = Date.now()) =>
+  new Intl.RelativeTimeFormat('en', { numeric: 'auto' }).format(Math.round((ms - now) / 3_600_000), 'hour')
+
 export const fmtDateTime = new Intl.DateTimeFormat('en-GB', { dateStyle: 'medium', timeStyle: 'short', timeZone: 'UTC' })
 
 export function useQuery(options) {

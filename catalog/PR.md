@@ -31,6 +31,8 @@ After approve, it asks whether to check in a day and three days later. Only on Y
 
 It also ships a skill, `launch-desk:launch-desk`, so the agent steers founders to `/launch` and the screenshot tool without the command being typed.
 
+It also ships an optional Hermes Desktop page (`desktop/plugin.js`, off until the user turns it on in Capabilities → Plugins). It lists every pack with its card, post, checks, references, check-ins and sign-ups, with Copy post and Open X. Its read-only backend (`dashboard/plugin_api.py`, mounted at `/api/plugins/launch-desk`) serves the packs and their PNGs. Only https links are opened.
+
 ## How it was tested
 
 - `hermes plugins validate . --install-deps` (Hermes 0.22.7): `Validation passed.` All checks green, security scan `safe`, declared tools match registrations. One informational line: `Isolation — in-process only: launch_desk/host.py ctx.post_message()`.
@@ -54,6 +56,7 @@ It also ships a skill, `launch-desk:launch-desk`, so the agent steers founders t
   - finished packs, kept until the founder deletes them, with the sign-ups per channel reported after a check-in (the last 50);
   - copies of the card and preview in Hermes' image cache, so chat apps can show them (Hermes clears them after about a day);
   - the paths of up to two attached screenshots, until the draft that used them is approved or discarded. The files are not copied.
+- Read by the optional Hermes Desktop page's backend, read-only: the plugin's own packs folder, and from Hermes' `cron/jobs.json` the id, state and times of the check-in jobs `/launch` created (matched by their name). It writes nothing, reads no other plugin's data, follows no links out of a pack folder and sends nothing anywhere. The Desktop half is off until the user turns it on.
 - Scheduled, only on the founder's Yes after approve: two check-ins (a day and three days later), created as ordinary Hermes cron jobs through Hermes' own `cronjob_manage` tool. They run with the plugin's own tools and no MCP server, post to the same chat, and show in `hermes cron list`. Nothing else is scheduled.
 - Nothing is posted or sent to any social network. No credentials are read, no shell commands are run, no telemetry.
 

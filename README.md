@@ -54,11 +54,11 @@ To put your product on the card, send a screenshot and the agent attaches it wit
 
 ## Hermes Desktop
 
-In Hermes Desktop, Launch Desk adds a Launch Desk page to the sidebar (also in the command palette as Open Launch Desk). It shows every pack, newest first: the card and the feed preview, the post with your own words marked, the checks, the three reference posts with their views, the check-ins and the sign-ups you recorded. Copy post copies the text; Open X opens X with it filled in, in your browser. When a check-in is coming up, the status bar says so.
+In Hermes Desktop, Launch Desk adds a Launch Desk page to the sidebar (also in the command palette as Open Launch Desk). It shows every pack, newest first: the card and the feed preview, the post with your own words marked, the checks, the three reference posts with their views, the check-ins and the sign-ups you recorded. Copy post copies the text; Open X opens X with it filled in, in your browser. The status bar shows when the next check-in runs, or how many never ran.
 
 The Desktop half ships off. Turn on Launch Desk in Capabilities → Plugins. If Desktop and Hermes run on different machines, install it from Desktop with Install from Git and the Desktop part checked, or with this link: `hermes://plugin/install?repo=posts-design/hermes-launch-desk`.
 
-The page only reads. Its backend (`dashboard/plugin_api.py`, loaded when the plugin is enabled in Hermes) reads this plugin's own packs folder and the names and times of the check-in jobs `/launch` created. It writes nothing and sends nothing anywhere.
+The page only reads. Its backend (`dashboard/plugin_api.py`, loaded when the plugin is enabled in Hermes) reads this plugin's own packs folder and, from Hermes' `cron/jobs.json`, the ids, state and times of the check-in jobs `/launch` created. It writes nothing and sends nothing anywhere. Links on the page open only if they are web (https) links.
 
 ## What it checks
 

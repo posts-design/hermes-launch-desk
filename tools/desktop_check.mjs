@@ -60,8 +60,6 @@ if (args['sdk-src']) {
     for (const m of text.matchAll(/export\s+(?:const|function|class)\s+([A-Za-z_$][\w$]*)/g)) exported.add(m[1])
     for (const m of text.matchAll(/export\s+\*\s+as\s+([A-Za-z_$][\w$]*)/g)) exported.add(m[1])
   }
-  const routes = fs.readFileSync(path.join(args['sdk-src'], 'app', 'routes.ts'), 'utf8')
-  for (const m of routes.matchAll(/export\s+const\s+([A-Z_]+)\s*=/g)) exported.add(m[1])
   for (const name of report.sdkNames) if (!exported.has(name)) fail(`not an export of @hermes/plugin-sdk: ${name}`)
   report.sdkChecked = true
 }
@@ -78,27 +76,29 @@ try {
 }
 
 // ------------------------------------------------------------------ 3. load, register, render
+const FUTURE = new Date(Date.now() + 5 * 3_600_000).toISOString()
 const FIXTURE = {
   packs: {
-    checkins_due: 1,
+    checkins: { next_run_at: FUTURE, missed: 0 },
     packs: [
       {
-        name: '2026-11-06-acme-dark-mode', date: '2026-11-06', created: '2026-11-06T09:00:00+00:00',
-        product: 'Acme', product_url: 'https://acme.test', network: 'x', what: 'dark mode',
+        name: '2026-11-06-acme-dark-mode', date: '2026-11-06', created: '2026-11-06T09:00:00+00:00', product: 'Acme',
         post: 'Most of our support emails asked for dark mode.\n\nDark mode is live in the editor.\n\nhttps://acme.test',
-        hook: 'Most of our support emails asked for dark mode.', hook_source: 'founder', hooks: [],
-        checks: [{ label: 'First line: 9 words', ok: true, detail: null }, { label: 'Fits X: 101/280', ok: true, detail: null }],
+        hook: 'Most of our support emails asked for dark mode.', hook_source: 'founder',
+        checks: [{ text: 'First line: 9 words', ok: true }, { text: 'Fits X: 101/280', ok: false }],
         references: [{ brand: 'Notion', views: 20483, url: 'https://posts.design/a' }, { brand: 'Linear', views: null, url: '' }],
-        layout: 'statement', screenshots: 0, intent_url: 'https://x.com/intent/post?text=x', alt_text: 'Launch card for Acme.',
+        layout: 'statement', intent_url: 'https://x.com/intent/post?text=x', alt_text: 'Launch card for Acme.',
         has_card: true, has_preview: true,
-        results: [{ channel: 'X', signups: 12, recorded_at: null }], signups: [{ channel: 'X', signups: 12, recorded_at: null }],
-        checkins: [{ id: 'j1', state: 'scheduled', next_run_at: '2026-11-07T09:00:00+00:00', last_run_at: null, last_status: null }]
+        signups: [{ channel: 'X', signups: 12, recorded_at: null }],
+        checkins: [
+          { id: 'j1', state: 'scheduled', missed: false, next_run_at: FUTURE, last_run_at: null },
+          { id: '', state: 'scheduled', missed: true, next_run_at: '2026-11-01T09:00:00+00:00', last_run_at: null }
+        ]
       },
       {
-        name: '2026-11-05-acme-export', date: '2026-11-05', created: null, product: null, product_url: null, network: 'x',
-        what: null, post: 'Export to CSV.', hook: 'Export to CSV.', hook_source: null, hooks: [], checks: null, references: [],
-        layout: null, screenshots: null, intent_url: null, alt_text: null, has_card: false, has_preview: false,
-        results: [], signups: [], checkins: []
+        name: '2026-11-05-acme-export', date: '2026-11-05', created: null, product: null, post: 'Export to CSV.\nNow.',
+        hook: 'Something else.', hook_source: 'founder', checks: null, references: [], layout: null, intent_url: null,
+        alt_text: null, has_card: false, has_preview: false, signups: [], checkins: []
       }
     ]
   },
@@ -130,13 +130,16 @@ async function loadPlugin(reactDir) {
   return { React, server, mod }
 }
 
+const events = []
+const opened = []
 function fakeCtx(contributions) {
   const ctx = {
     source: 'plugin:launch-desk',
     register: c => (contributions.push(c), () => {}),
     registerMany: cs => (contributions.push(...cs), () => {}),
     rest: () => Promise.reject(new Error('not in a check')),
-    os: { openExternal: async () => true, writeClipboard: async () => true },
+    onEvent: (type, fn) => (events.push(type), () => {}),
+    os: { openExternal: async url => (opened.push(url), true), writeClipboard: async () => true },
     storage: { get: (_k, d) => d, set() {}, remove() {} },
     onDispose() {},
     setTimeout: () => () => {},
@@ -181,14 +184,17 @@ if (args.react) {
     }
   }
   const packsKey = JSON.stringify(['launch-desk', 'packs'])
+  // The page asks for one image at a time: ['launch-desk', 'image', <pack>, 'card' | 'preview'].
   const imageQueries = Object.fromEntries(
-    Object.entries(data.images || {}).map(([name, body]) => [JSON.stringify(['launch-desk', 'images', name]), { status: 'success', data: body }])
+    Object.entries(data.images || {}).flatMap(([name, body]) =>
+      ['card', 'preview'].map(kind => [JSON.stringify(['launch-desk', 'image', name, kind]), { status: 'success', data: { name, kind, url: body[kind] } }])
+    )
   )
   const page = () => route.render()
 
   const loaded = render({ [packsKey]: { status: 'success', data: data.packs }, ...imageQueries }, page())
   const packs = data.packs.packs
-  const founder = packs.filter(p => p.hook_source === 'founder').length
+  const founder = packs.filter(p => p.hook_source === 'founder' && p.hook && p.post.split('\n')[0].trim() === p.hook.trim()).length
   report.loaded = {
     packs: count(loaded, /data-pack="/g),
     founderMarked: count(loaded, /data-founder-words="true"/g),
@@ -196,7 +202,10 @@ if (args.react) {
     images: count(loaded, /<img /g),
     checkins: count(loaded, /data-checkin="/g),
     channels: count(loaded, /data-channel="/g),
-    emptyOrError: count(loaded, /data-sdk="(EmptyState|ErrorState)"/g)
+    emptyOrError: count(loaded, /data-sdk="(EmptyState|ErrorState)"/g),
+    webLinks: count(loaded, /data-link="/g),
+    plainReferences: count(loaded, /data-plain-reference="true"/g),
+    missed: count(loaded, /data-checkin="missed"/g)
   }
   const expect = (name, got, want) => got !== want && fail(`loaded page: ${name} ${got}, expected ${want}`)
   expect('pack cards', report.loaded.packs, packs.length)
@@ -207,14 +216,26 @@ if (args.react) {
   expect('empty or error states', report.loaded.emptyOrError, 0)
   expect('images', report.loaded.images, packs.filter(p => {
     const img = (data.images || {})[p.name]
-    return img && (img.card || img.preview)
+    return img && img[p.has_card ? 'card' : 'preview']
   }).length)
+  const refs = packs.flatMap(p => p.references)
+  expect('reference links', report.loaded.webLinks, refs.filter(r => /^https:\/\//i.test(r.url || '')).length)
+  expect('plain references', report.loaded.plainReferences, refs.filter(r => !/^https:\/\//i.test(r.url || '')).length)
+  expect('missed check-ins', report.loaded.missed, packs.reduce((n, p) => n + p.checkins.filter(c => c.missed).length, 0))
+  if (!events.includes('cron.changed')) fail('does not refresh on cron.changed')
+  if (plugin.defaultEnabled !== false) fail('the Desktop half must ship off (defaultEnabled: false)')
+  // Only web links reach the OS: Desktop's openExternal also opens file: URLs and local paths.
+  const tries = ['https://posts.design/a', 'HTTPS://x.com/intent/post?text=a', 'file:///etc/passwd', '/Applications/X.app',
+    '~/x.sh', 'javascript:alert(1)', 'http://posts.design/a', '\\\\host\\share', '', null]
+  for (const url of tries) await mod.openLink(ctx, url)
+  report.opened = opened.slice()
+  if (JSON.stringify(opened) !== JSON.stringify(tries.slice(0, 2))) fail(`openLink passed a non-web link to the OS: ${JSON.stringify(opened)}`)
   for (const p of packs) {
     const html = loaded.split(`data-pack="${p.name}"`)[1]?.split('data-pack="')[0] ?? ''
     for (const r of p.references) if (r.brand && !html.includes(r.brand.replace(/&/g, '&amp;'))) fail(`reference ${r.brand} missing from ${p.name}`)
   }
 
-  const empty = render({ [packsKey]: { status: 'success', data: { packs: [], checkins_due: 0 } } }, page())
+  const empty = render({ [packsKey]: { status: 'success', data: { packs: [], checkins: { next_run_at: null, missed: 0 } } } }, page())
   if (!empty.includes('data-sdk="EmptyState"') || empty.includes('data-pack=')) fail('no packs: the empty state is not shown')
   const error = render({ [packsKey]: { status: 'error', error: new Error('404: Not Found') } }, page())
   if (!error.includes('data-sdk="ErrorState"') || error.includes('data-pack=')) fail('backend off: the error state is not shown')
@@ -222,12 +243,19 @@ if (args.react) {
   if (!loading.includes('data-sdk="Skeleton"')) fail('loading: no placeholder')
   report.states = { empty: true, error: true, loading: true }
 
-  const chipDue = render({ [packsKey]: { status: 'success', data: { packs: [], checkins_due: 2 } } }, chip.render())
-  const chipNone = render({ [packsKey]: { status: 'success', data: { packs: [], checkins_due: 0 } } }, chip.render())
+  const chipWith = checkins => render({ [packsKey]: { status: 'success', data: { packs: [], checkins } } }, chip.render())
+  const chipMissed = chipWith({ next_run_at: FUTURE, missed: 2 })
+  const chipNext = chipWith({ next_run_at: FUTURE, missed: 0 })
+  const chipPast = chipWith({ next_run_at: '2026-01-01T00:00:00+00:00', missed: 0 })
+  const chipNone = chipWith({ next_run_at: null, missed: 0 })
   const chipOff = render({ [packsKey]: { status: 'error', error: new Error('off') } }, chip.render())
-  if (!chipDue.includes('data-checkins-due="2"')) fail('status chip does not show check-ins due')
-  if (chipNone !== '' || chipOff !== '') fail('status chip shows when nothing is due or the backend is off')
-  report.chip = { due: true, hiddenWhenNone: chipNone === '', hiddenWhenOff: chipOff === '' }
+  report.chip = {
+    missed: chipMissed.includes('data-checkins-missed="2"'),
+    next: chipNext.includes(`data-next-checkin="${FUTURE}"`) && chipNext.includes('data-checkins-missed="0"'),
+    hiddenWhenNone: chipNone === '' && chipPast === '',
+    hiddenWhenOff: chipOff === ''
+  }
+  for (const [k, v] of Object.entries(report.chip)) if (!v) fail(`status chip: ${k}`)
   report.reactWarnings = warnings
   for (const w of warnings) fail(`React warned while rendering: ${w}`)
 
