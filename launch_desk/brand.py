@@ -161,6 +161,8 @@ MAX_RULES = 20_000
 MAX_DEPTH = 32
 MAX_VALUE = 2_000
 MAX_SUBS = 32
+SCAN_BUDGET = 1_000_000  # characters of resolved values scanned for colours in one read
+MAX_COLOURS = 4  # colours taken from one value; every caller uses the first one or few
 
 _VAR_RE = re.compile(r"var\(\s*(--[\w-]+)\s*(?:,\s*([^()]*(?:\([^()]*\)[^()]*)*))?\)")
 _ROOTS = frozenset({":root", "html", "body"})
@@ -422,6 +424,9 @@ class _Css:
                         self.raw[prop] = value
         self._memo: dict[str, str | None] = {}
         self._busy: set[str] = set()
+        self._resolved: dict[str, str] = {}
+        self._scanned: dict[str, list[str]] = {}
+        self._budget = SCAN_BUDGET
 
     def _token(self, name: str) -> str | None:
         if name in self._memo:
@@ -459,11 +464,30 @@ class _Css:
         return "" if len(out) > MAX_VALUE else out
 
     def colours(self, value: str) -> list[str]:
-        value = self.resolve(value)
-        bare = _bare_hsl(value)
-        if bare:
-            return [bare]
-        return [c for c in (_colour(m.group(0)) for m in _COLOUR_RE.finditer(value)) if c]
+        """The first MAX_COLOURS colours in a value, var() resolved. Each distinct value is
+        scanned once, and one read scans at most SCAN_BUDGET characters; past it, []."""
+        if value not in self._resolved:
+            if len(self._resolved) >= MAX_RULES:
+                return []
+            self._resolved[value] = self.resolve(value)
+        resolved = self._resolved[value]
+        if resolved in self._scanned:
+            return self._scanned[resolved]
+        if self._budget < len(resolved):
+            self._budget = 0
+            return []
+        self._budget -= len(resolved)
+        bare = _bare_hsl(resolved)
+        found: list[str] = [bare] if bare else []
+        if not bare:
+            for m in _COLOUR_RE.finditer(resolved):
+                c = _colour(m.group(0))
+                if c:
+                    found.append(c)
+                    if len(found) == MAX_COLOURS:
+                        break
+        self._scanned[resolved] = found
+        return found
 
     def default_rules(self):
         return [(s, b) for s, b, dark in self.rules if not dark]

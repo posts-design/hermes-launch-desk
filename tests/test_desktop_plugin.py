@@ -87,7 +87,8 @@ def test_renders_packs_from_the_real_backend_listing(tmp_path):
     root = tmp_path / "packs"
     make_pack(root, "2026-11-06-a", 2_000, hook_source="founder", hook="Post text from the file.",
               results=[{"channel": "X", "signups": 5}, {"channel": "LinkedIn", "signups": 1}],
-              references=[{"brand": "Web", "url": "https://posts.design/a", "views": 3},
+              references=[{"brand": "Your own launch", "url": "2026-11-01-x", "views": None, "signups": 12},
+                          {"brand": "Web", "url": "https://posts.design/a", "views": 3},
                           {"brand": "Local", "url": "file:///Applications/X.app", "views": 2}])
     make_pack(root, "2026-11-05-b", 1_000, hook_source="model")
     path = jobs(tmp_path / "jobs.json", job("2026-11-06-a", "j1", next_run_at="2099-01-01T00:00:00+00:00"),
@@ -102,6 +103,6 @@ def test_renders_packs_from_the_real_backend_listing(tmp_path):
     report = json.loads(result.stdout)
     assert result.returncode == 0, report["failures"]
     assert report["loaded"] == {"packs": 2, "founderMarked": 1, "copyButtons": 2, "images": 2, "checkins": 2,
-                                "channels": 2, "emptyOrError": 0, "webLinks": 4, "plainReferences": 1,
-                                "missed": 1}
+                                "channels": 2, "emptyOrError": 0, "webLinks": 4, "plainReferences": 2,
+                                "ownReferences": 1, "missed": 1}
     assert (tmp_path / "p.html").is_file()

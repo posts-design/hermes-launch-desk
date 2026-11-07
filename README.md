@@ -44,7 +44,7 @@ Without them, `/launch` runs on a built-in sample pack of launch posts and tells
 /launch a new onboarding flow
 ```
 
-The text after ` -- ` is one true detail, such as who asked for it. The draft treats it as a fact, and it is hook 1, word for word. If a line of the draft would repeat it, that line comes out when you pick it. Add your site's link the first time; it is remembered.
+The text after ` -- ` is one true detail, such as who asked for it. The draft treats it as a fact, and it is hook 1, word for word. If a line of the draft would repeat it, that line comes out when you pick it. Add your site's link the first time; it is remembered. A brand saved by an older version, before dark sites and headline faces were read, is read again once on your next `/launch`.
 
 It takes two steps. The first run ends with the draft, the card and a feed preview. Send `/launch` again to approve, change the hook, swap references or discard. `/launch brand <url>` reads your site's colours and logo again, and `/launch help` shows the usage.
 

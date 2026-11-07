@@ -409,3 +409,25 @@ def test_routes_refuse_anything_outside_the_packs(client, path):
 def test_only_get_routes_exist(client):
     assert client.post("/api/plugins/launch-desk/packs", json={}).status_code == 405
     assert client.delete("/api/plugins/launch-desk/packs/2026-11-06-newer/card").status_code == 405
+
+
+
+def test_your_own_launch_reference_carries_its_sign_ups_and_pack(tmp_path):
+    make_pack(tmp_path, "2026-11-07-own", 1_000, references=[
+        {"id": "own:2026-11-02-a", "brand": "Your own launch", "url": "2026-11-02-a", "views": None,
+         "signups": 12},
+        {"id": "own:bad", "brand": "Your own launch", "url": "../../etc", "views": None, "signups": 3},
+        {"id": "a", "brand": "Perplexity", "url": "https://posts.design/a", "views": 42749},
+    ])
+    refs = api.list_packs(tmp_path)["packs"][0]["references"]
+    assert refs[0] == {"brand": "Your own launch", "views": None, "url": "", "signups": 12, "pack": "2026-11-02-a"}
+    assert refs[1]["signups"] == 3 and refs[1]["pack"] == ""
+    assert refs[2] == {"brand": "Perplexity", "views": 42749, "url": "https://posts.design/a"}
+
+
+@pytest.mark.parametrize("signups", [-1, True, "12", 1.5])
+def test_a_malformed_own_sign_up_count_is_left_out(tmp_path, signups):
+    make_pack(tmp_path, "2026-11-07-own", 1_000, references=[
+        {"brand": "Your own launch", "url": "2026-11-02-a", "views": None, "signups": signups}])
+    ref = api.list_packs(tmp_path)["packs"][0]["references"][0]
+    assert "signups" not in ref and "pack" not in ref

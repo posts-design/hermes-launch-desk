@@ -226,8 +226,8 @@ def _instructions(brief: Brief, relaxed: set[str], refs: Sequence[Reference] | N
         "Reply with JSON only, no other text:\n"
         '{"use_case": "one concrete use", "hooks": ["first line A", "first line B", "first line C"], '
         '"caption": "the whole post"}\n'
-        "- use_case: one concrete, true use of what shipped, from FACTS only. No person, pet, name, number "
-        "or time beyond FACTS. A later line says it, never the words \"use case\".\n"
+        "- use_case: one concrete use that names what shipped, from FACTS only, never the founder's detail. "
+        "Nothing beyond FACTS. A later line says it, never the words \"use case\".\n"
         "- hooks: three first lines, each built differently: hook 1 on pattern A, hook 2 on pattern B, "
         "hook 3 your own. One \"we built\" at most.\n"
         "- caption: the whole post, starting with your best hook as its first line. "

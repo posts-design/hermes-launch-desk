@@ -41,6 +41,10 @@ const row = { display: 'flex', flexWrap: 'wrap', alignItems: 'center', gap: '6px
 const stack = gap => ({ display: 'flex', flexDirection: 'column', gap })
 
 const fmtViews = n => (typeof n === 'number' ? `${new Intl.NumberFormat().format(n)} views` : null)
+// The founder's own past launch: "Your own launch, 12 sign-ups", and its pack instead of a link.
+const fmtOwn = r => (typeof r.signups === 'number'
+  ? `${r.brand || 'Your own launch'}, ${new Intl.NumberFormat().format(r.signups)} ${r.signups === 1 ? 'sign-up' : 'sign-ups'}`
+  : null)
 const plural = (n, one) => `${n} ${n === 1 ? one : `${one}s`}`
 
 function fmtWhen(iso) {
@@ -165,8 +169,11 @@ function References({ ctx, refs }) {
         children: [
           WEB_LINK.test(r.url || '')
             ? jsx(Button, { variant: 'link', size: 'inline', 'data-link': r.url, onClick: () => void openLink(ctx, r.url), children: r.brand || r.url })
-            : jsx('span', { 'data-plain-reference': true, children: r.brand }),
-          fmtViews(r.views) && jsx('span', { style: muted, children: fmtViews(r.views) })
+            : fmtOwn(r)
+              ? jsx('span', { 'data-plain-reference': true, 'data-own-reference': true, children: fmtOwn(r) })
+              : jsx('span', { 'data-plain-reference': true, children: r.brand }),
+          fmtViews(r.views) && jsx('span', { style: muted, children: fmtViews(r.views) }),
+          fmtOwn(r) && r.pack && jsx('span', { style: muted, children: `pack ${r.pack}` })
         ]
       }, i)
     )

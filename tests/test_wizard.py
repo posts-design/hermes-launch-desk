@@ -1256,3 +1256,88 @@ def test_founder_words_replacing_the_only_line_that_says_what_shipped_fail_says_
     assert [c.ok for c in p.checks() if "use-case-missing" in c.rules] == [False]
     resume(host, "hook", "2")
     assert not [c for c in wizard._Pending(pending(host)).checks() if "use-case-missing" in c.rules]
+
+
+
+# ------------------------------------------------------------------ Task 20 fix round 2
+
+def old_kit(host, **extra):
+    """A brand kit as a version before Task 20 stored it: no font_face, a light background."""
+    kit = {"name": "pawr.link", "url": URL, "tagline": "", "bg": "#F5F5F5", "ink": "#111111",
+           "accent": "#E8590C", "font_family": "Inter", "logo_path": None, "voice_samples": ["An old post."]}
+    kit.update(extra)
+    host.state_set("brand", kit)
+
+
+def test_a_kit_stored_before_faces_is_read_again_once():
+    host = make_host(["feature", "x", "keep", "1"], llm=(CLEAN, CLEAN))
+    old_kit(host)
+    calls = []
+    start(host, args="dark mode for pet pages", get=fake_get(calls))
+    assert calls and calls[0] == URL
+    stored = host.state_get("brand")
+    assert stored["font_face"] in ("serif", "rounded", "sans")
+    assert stored["voice_samples"] == ["An old post."]
+    assert pending(host)["brand"]["font_face"] == stored["font_face"]
+    host.choices.extend(["feature", "x", "1"])
+    start(host, args="another launch", get=no_get)  # read once: no site read the second time
+    assert len(questions(host, "keep")) == 1
+
+
+def test_an_old_kit_whose_site_cannot_be_read_keeps_its_colours_and_is_not_read_again():
+    host = make_host(["feature", "x", "1"], llm=(CLEAN, CLEAN))
+    old_kit(host)
+
+    def down(url):
+        raise TimeoutError("slow")
+
+    start(host, args="dark mode for pet pages", get=down)
+    stored = host.state_get("brand")
+    assert stored["bg"] == "#F5F5F5" and stored["accent"] == "#E8590C" and stored["font_face"] == "sans"
+    assert questions(host, "keep") == []
+    host.choices.extend(["feature", "x", "1"])
+    start(host, args="another launch", get=no_get)
+
+
+def test_a_current_kit_is_not_read_again():
+    host = make_host(["feature", "x", "1"])
+    old_kit(host, font_face="sans")
+    start(host, args="dark mode for pet pages", get=no_get)
+
+
+def _fallback_logs(caplog):
+    return [r.getMessage() for r in caplog.records if "sample pack" in r.getMessage()]
+
+
+def test_the_sample_pack_fallback_logs_a_setup_issue(caplog):
+    caplog.set_level(logging.INFO)
+    host = make_host(PHASE1, access=PermissionError("not in mcp_allowlist"))
+    start(host)
+    [line] = _fallback_logs(caplog)
+    assert "setup" in line and "allowlist" in line
+
+
+def test_the_sample_pack_fallback_logs_the_source_error_without_secrets(caplog):
+    caplog.set_level(logging.INFO)
+    secret = "sk_live_" + "a1B2c3D4e5F6g7H8i9J0k1L2m3N4o5P6"
+    host = make_host(PHASE1, search=SourceUnavailable(f"timed out; Authorization: Bearer {secret} token={secret}",
+                                                      kind="timeout"))
+    start(host)
+    [line] = _fallback_logs(caplog)
+    assert "timeout" in line and "timed out" in line
+    assert secret not in line and secret[:12] not in line
+
+
+def test_the_sample_pack_fallback_logs_too_few_matches_with_the_count(caplog):
+    caplog.set_level(logging.INFO)
+    one = {"items": [SEARCH["items"][0]]} if SEARCH.get("items") else {"items": []}
+    host = make_host(PHASE1, search=one)
+    start(host)
+    [line] = _fallback_logs(caplog)
+    assert "fewer than 3" in line and "1" in line.split("fewer than 3", 1)[1]
+
+
+def test_live_references_log_no_fallback(caplog):
+    caplog.set_level(logging.INFO)
+    start(make_host(PHASE1))
+    assert _fallback_logs(caplog) == []

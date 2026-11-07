@@ -50,7 +50,7 @@ class PastLaunch:
     signups: int  # the total over channels
     channels: tuple[tuple[str, int], ...]  # (channel, sign-ups), most first
     shipped: str = ""
-    latest: bool = False  # True when no pack with results is more recent
+    latest: bool = False  # True when no newer pack of the same site has a post, whatever its results
 
 
 @dataclass(frozen=True)

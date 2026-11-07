@@ -25,7 +25,7 @@ from pathlib import Path
 from typing import Any, Callable
 
 from . import followup
-from .brand import NEUTRAL, PRESET_ACCENTS, fetch_brand, http_get
+from .brand import NEUTRAL, PRESET_ACCENTS, fetch_brand, font_face, http_get
 from .draft import UNSUPPORTED, DraftError, checklist, draft_post, hook_options, post_failures, quote_phrases
 from .hooks import pick_hook_shapes
 from .host import Host, SourceUnavailable
@@ -294,11 +294,28 @@ def _store_brand(host: Host, kit: BrandKit) -> BrandKit:
     return kit
 
 
-def _read_brand(host: Host, url: str, get: Callable[[str], bytes], out: Path) -> BrandKit:
-    """Read the site, then let the founder keep its accent or pick a preset."""
+def _refresh_brand(host: Host, stored: BrandKit, get: Callable[[str], bytes], out: Path) -> BrandKit:
+    """A kit saved before Task 20 (no face, and maybe a light background for a dark site):
+    read the site once more and keep the result, with the founder's voice samples. If the
+    site cannot be read, keep the stored colours and fill in the face from its font family,
+    so it is not read again."""
+    host.say(f"Reading {_hostname(stored.url)} again for its colours, dark or light, and its type.")
+    fresh = fetch_brand(stored.url, get, out)
+    if not fresh.font_face:  # the read failed: fetch_brand fell back to neutral colours
+        kit = replace(stored, font_face=font_face(stored.font_family))
+    else:
+        kit = replace(_read_brand(host, stored.url, get, out, kit=fresh), voice_samples=stored.voice_samples)
+    return _store_brand(host, kit)
+
+
+def _read_brand(host: Host, url: str, get: Callable[[str], bytes], out: Path,
+                kit: BrandKit | None = None) -> BrandKit:
+    """Read the site (unless `kit` is that read), then let the founder keep its accent or
+    pick a preset."""
     site = _hostname(url)
-    host.say(f"Reading {site} for its colours and logo.")
-    kit = fetch_brand(url, get, out)
+    if kit is None:
+        host.say(f"Reading {site} for its colours and logo.")
+        kit = fetch_brand(url, get, out)
     presets = [{"value": hex_, "label": f"{name} {hex_}"} for name, hex_ in zip(ACCENT_NAMES, PRESET_ACCENTS)]
     if kit.accent != NEUTRAL.accent:
         question = (f"Colours from {site}: background {kit.bg}, text {kit.ink}, accent {kit.accent}.\n"
@@ -317,18 +334,38 @@ def _read_brand(host: Host, url: str, get: Callable[[str], bytes], out: Path) ->
 
 # ------------------------------------------------------------------ references
 
-def _search(host: Host, brief: Brief, offline: bool) -> tuple[list[dict], str]:
-    """The candidate items for this draft, and a note when they come from the sample pack."""
+_SECRET_RE = re.compile(
+    r"(?i)\b(bearer|basic|token|access_token|api[_-]?key|key|secret|password|authorization)(\s*[:=]\s*|\s+)\S+")
+_LONG_TOKEN_RE = re.compile(r"[A-Za-z0-9_\-.~+/=]{24,}")
+REASON_MAX = 200
+
+
+def _redact(text: str) -> str:
+    """An error message for the log: credentials and long opaque tokens out, one line, short."""
+    text = _SECRET_RE.sub(lambda m: f"{m.group(1)}{m.group(2)}[redacted]", " ".join(str(text).split()))
+    text = _LONG_TOKEN_RE.sub("[redacted]", text)
+    return text[:REASON_MAX]
+
+
+def _search(host: Host, brief: Brief, offline: bool, setup_issue: str = "") -> tuple[list[dict], str]:
+    """The candidate items for this draft, and a note when they come from the sample pack.
+    A fallback is logged with its reason (R39): the setup issue, the source error's kind and
+    message (secrets removed), or how few distinct-brand matches came back."""
     args = build_search_args(brief)
     note = PACK_UNAVAILABLE
-    if not offline:
+    if offline:
+        reason = f"setup issue ({setup_issue or 'unknown'})"
+    else:
         try:
             items = McpSource(host).search(args)
-            if len(rank_references(items, brief)) >= 3:
+            found = len(rank_references(items, brief))
+            if found >= 3:
                 return items, ""
             note = PACK_TOO_FEW
-        except SourceUnavailable:
-            pass
+            reason = f"fewer than 3 distinct-brand matches ({found} from {len(items)} items)"
+        except SourceUnavailable as exc:
+            reason = f"posts.design unavailable ({getattr(exc, 'kind', 'error')}: {_redact(str(exc)) or 'no message'})"
+    logger.warning("launch-desk: sample pack used: %s", reason)
     return SamplePackSource().search(args), note
 
 
@@ -559,7 +596,12 @@ def _phase1(host: Host, args: Args, stored: BrandKit | None, get: Callable[[str]
         _tell(host, notes, LINKEDIN_LATER)
 
     brand_new = bool(args.url) and (stored is None or _hostname(args.url) != _hostname(stored.url))
-    brand = _read_brand(host, args.url, get, folder / "brand") if brand_new else stored
+    if brand_new:
+        brand = _read_brand(host, args.url, get, folder / "brand")
+    elif not stored.font_face:  # saved before dark sites and faces were read: read it again, once
+        brand = _refresh_brand(host, stored, get, folder / "brand")
+    else:
+        brand = stored
     brief = Brief(shipped, "x", args.what, args.url or brand.url, detail=args.detail)
 
     issues = [i for i in check_setup(lambda: host.mcp("get_my_access", {})) if i.code != "unreachable"]
@@ -579,7 +621,7 @@ def _phase1(host: Host, args: Args, stored: BrandKit | None, get: Callable[[str]
         line += f" {used}."
         notes.append(f"{used}.")
     host.say(line)
-    items, pack_note = _search(host, brief, offline=bool(issues))
+    items, pack_note = _search(host, brief, offline=bool(issues), setup_issue=issues[0].code if issues else "")
     if pack_note:
         host.say(pack_note)
         if not any(i.get("category") == CATEGORY[brief.shipped] for i in items):

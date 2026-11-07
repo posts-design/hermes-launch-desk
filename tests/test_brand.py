@@ -580,3 +580,39 @@ def test_escaped_quotes_in_a_selector_do_not_open_a_string():
            ":root{--accent:#e8590c}.a{color:#2f9e44}.b{color:#2f9e44}")
     kit, _ = parse_brand("https://x.test", "", [css])
     assert kit.accent == "#E8590C"
+
+
+# --- one colour-scan budget per read (Task 20 fix round 2) --------------------
+
+_COLOURS_60 = "#abc #abd #abe #abf #ab0 #ab1 #ab2 #ab3 #ab4 #ab5 #ab6 #ab7"  # 59 characters
+
+
+@pytest.mark.parametrize("rule", ["button{background:var(--t)}", "html{background:var(--t)}"])
+def test_many_rules_sharing_a_large_token_read_within_two_seconds(rule):
+    token = ":root{--u:" + _COLOURS_60 + ";--t:" + " ".join(["var(--u)"] * 32) + "}"
+    kit, took = _timed(PAGE, [token + rule * 20_000])
+    assert took < 2.0
+    assert kit.name == "Acme"
+
+
+def test_many_distinct_large_tokens_read_within_two_seconds():
+    css = ":root{--u:" + _COLOURS_60 + ";" + "".join(
+        f"--t{i}:" + " ".join(["var(--u)"] * 32) + ";" for i in range(2_000)) + "}"
+    css += "".join(f"button.b{i}{{background:var(--t{i % 2_000}) #{i % 4096:03x}}}" for i in range(20_000))
+    kit, took = _timed(PAGE, [css])
+    assert took < 2.0
+    assert kit.name == "Acme"
+
+
+def test_many_accent_named_tokens_read_within_two_seconds():
+    css = ":root{" + "".join(f"--accent{'-color' * (i % 50)}:{_COLOURS_60};" for i in range(3_600)) + "}"
+    kit, took = _timed(PAGE, [css])
+    assert took < 2.0
+    assert kit.name == "Acme"
+
+
+def test_the_scan_budget_keeps_ordinary_reads_whole():
+    for name, html in (("brookhour.html", _fix("brookhour.html")), ("fernlight.html", _fix("fernlight.html"))):
+        kit, _ = parse_brand("http://127.0.0.1:8731/", html, [])
+        assert kit.accent in ("#FF5B2E", "#17A34A"), name
+    assert _posts_design().bg == "#101010"

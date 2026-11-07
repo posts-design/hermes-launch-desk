@@ -183,9 +183,23 @@ def _created(folder: Path) -> float:
     return min(times) if times else 0.0
 
 
+_PACK_NAME_RE = re.compile(r"[A-Za-z0-9][A-Za-z0-9._-]{0,159}")
+
+
+def _reference(ref: dict) -> dict:
+    """brand, views and a web link; the founder's own launch also has its sign-ups and its
+    pack's name (its "url" is that name, never a link)."""
+    out = {"brand": _str(ref.get("brand")) or "", "views": _int(ref.get("views")), "url": _https(ref.get("url"))}
+    signups = _int(ref.get("signups"))
+    if signups is not None and signups >= 0:
+        name = _str(ref.get("url")) or ""
+        out["signups"] = signups
+        out["pack"] = name if _PACK_NAME_RE.fullmatch(name) and ".." not in name else ""
+    return out
+
+
 def _references(value: Any) -> list:
-    return [{"brand": _str(ref.get("brand")) or "", "views": _int(ref.get("views")), "url": _https(ref.get("url"))}
-            for ref in _dicts(value)]
+    return [_reference(ref) for ref in _dicts(value)]
 
 
 def _checks(value: Any) -> Optional[list]:

@@ -205,6 +205,7 @@ if (args.react) {
     emptyOrError: count(loaded, /data-sdk="(EmptyState|ErrorState)"/g),
     webLinks: count(loaded, /data-link="/g),
     plainReferences: count(loaded, /data-plain-reference="true"/g),
+    ownReferences: count(loaded, /data-own-reference="true"/g),
     missed: count(loaded, /data-checkin="missed"/g)
   }
   const expect = (name, got, want) => got !== want && fail(`loaded page: ${name} ${got}, expected ${want}`)
@@ -221,6 +222,10 @@ if (args.react) {
   const refs = packs.flatMap(p => p.references)
   expect('reference links', report.loaded.webLinks, refs.filter(r => /^https:\/\//i.test(r.url || '')).length)
   expect('plain references', report.loaded.plainReferences, refs.filter(r => !/^https:\/\//i.test(r.url || '')).length)
+  expect('own launches', report.loaded.ownReferences, refs.filter(r => typeof r.signups === 'number').length)
+  for (const r of refs) {
+    if (typeof r.signups === 'number' && !loaded.includes(`${r.signups} sign-up`)) fail(`own launch without its sign-ups: ${r.pack}`)
+  }
   expect('missed check-ins', report.loaded.missed, packs.reduce((n, p) => n + p.checkins.filter(c => c.missed).length, 0))
   if (!events.includes('cron.changed')) fail('does not refresh on cron.changed')
   if (plugin.defaultEnabled !== false) fail('the Desktop half must ship off (defaultEnabled: false)')
