@@ -26,8 +26,8 @@ from typing import Any, Callable
 
 from . import followup
 from .brand import NEUTRAL, PRESET_ACCENTS, fetch_brand, font_face, http_get
-from .draft import (UNSUPPORTED, DraftError, checklist, draft_post, hook_options, post_failures, quote_phrases,
-                    site_details)
+from .draft import (UNSUPPORTED, DraftError, card_line, checklist, draft_post, hook_options, post_failures,
+                    quote_phrases, site_details)
 from .hooks import pick_hook_shapes
 from .host import Host, SourceUnavailable
 from .models import BrandKit, Brief, CheckLine, Draft, HookOption, Reference
@@ -183,7 +183,7 @@ def _cap(text: str) -> str:
     return text[:1].upper() + text[1:]
 
 
-def card_headline(hook: str, what: str) -> str:
+def card_headline(hook: str, what: str) -> str:  # tools/render_assets.py; /launch uses draft.card_line
     """The hook when it fits on the card (70 characters), else what shipped, cut at a word."""
     hook = " ".join(hook.split())
     return _cap(hook if hook and len(hook) <= HEADLINE_MAX else _cut(what, HEADLINE_MAX))
@@ -475,7 +475,12 @@ class _Pending:
         self.data.update(hooks=[o.text for o in options], sources=[o.source for o in options],
                          posts=[o.post for o in options], dropped=[list(o.dropped) for o in options],
                          flagged=[o.flagged for o in options], caption=draft.caption,
-                         use_case=draft.use_case)
+                         use_case=draft.use_case, card_draft=draft.card_line)
+
+    def card(self) -> str:
+        """The card headline for the picked hook: what shipped, never line 1 (draft.card_line)."""
+        return card_line(str(self.data.get("card_draft") or ""), self.text, self.brief, self.brand,
+                         str(self.data.get("use_case") or ""))
 
     @property
     def option(self) -> HookOption:
@@ -515,14 +520,14 @@ class _Pending:
         n = int(self.data.get("round") or 0) + 1
         out = self.dir / f"r{n}"
         shots = [Path(p) for p in _screenshots(_used_screenshots(self.data))]
-        headline = card_headline(self.data["hook"], self.brief.what)
+        headline = self.card()
         layout = choose_layout(shots, headline)  # again on each render: a new hook can change it
         card = render_card(self.brand, shots, headline, X_CARD, out / "card-x.png", layout=layout)
         preview = render_feed_preview(self.brand, self.text, card, out / "preview-x.png")
         old = self.dir / f"r{n - 1}"
         if n > 1 and old.is_dir():
             shutil.rmtree(old, ignore_errors=True)
-        self.data.update(round=n, card=str(card), preview=str(preview), layout=layout)
+        self.data.update(round=n, card=str(card), preview=str(preview), layout=layout, card_line=headline)
 
     def reply(self, host: Host, notes: list[str]) -> str:
         lines = [*notes, ""] if notes else []
@@ -743,7 +748,7 @@ def _approve(host: Host, p: _Pending) -> str:
                       {"x": Path(p.data["card"])}, p.refs,
                       has_screenshot=bool(_screenshots(_used_screenshots(p.data))),
                       preview=Path(p.data["preview"]),
-                      headline=card_headline(p.data["hook"], p.brief.what), more_refs=more,
+                      headline=p.data.get("card_line") or p.card(), more_refs=more,
                       layout=p.data.get("layout"), hook_source=p.option.source,
                       checks=[asdict(c) for c in p.checks()])
     if p.data.get("brand_new"):

@@ -34,8 +34,9 @@ DRAFT_SCHEMA: dict = {
         "use_case": {"type": "string"},
         "hooks": {"type": "array", "items": {"type": "string"}, "minItems": 3, "maxItems": 3},
         "caption": {"type": "string"},
+        "card_line": {"type": "string"},
     },
-    "required": ["use_case", "hooks", "caption"],
+    "required": ["use_case", "hooks", "caption", "card_line"],
 }
 
 # Rules that make sense for a single first line.
@@ -230,10 +231,10 @@ def _instructions(brief: Brief, relaxed: set[str], refs: Sequence[Reference] | N
     network = _NETWORK.get(brief.network, brief.network)
     rules = [
         "Write like the founder talking to one friend: plain words, short sentences, first person (I or we).",
-        "Open on the reader's side: what they wanted, or what they can do now. Then make it concrete "
-        "with the use case. One line may say why it matters or how it feels, if it adds no new fact.",
-        "Every detail must come from FACTS. Never describe what the founder or a user did beyond what FACTS says. "
-        "Never add pets, people, names, times, steps, counts, results or UI actions that are not in FACTS.",
+        "Say what the reader can do now; make it concrete with the use case. One line may say why it "
+        "matters, if it adds no new fact.",
+        "Every detail comes from FACTS: never add pets, people, names, times, steps, counts, results or "
+        "UI actions it lacks, nor what anyone did beyond it.",
         "No exclamation marks. No questions to the reader unless a hook pattern asks for one. No \"it's not just X, it's Y\" lines.",
         _borrow(refs),
         *_rule_lines(brief, relaxed),
@@ -247,13 +248,14 @@ def _instructions(brief: Brief, relaxed: set[str], refs: Sequence[Reference] | N
         f"Rules:\n{numbered}\n\n"
         "Reply with JSON only, no other text:\n"
         '{"use_case": "one concrete use", "hooks": ["first line A", "first line B", "first line C"], '
-        '"caption": "the whole post"}\n'
+        '"caption": "the whole post", "card_line": "..."}\n'
         "- use_case: one concrete use that names what shipped, from FACTS only, never the founder's detail. "
         "Nothing beyond FACTS. A later line says it, never the words \"use case\".\n"
         "- hooks: three first lines, each built differently: hook 1 on pattern A, hook 2 on pattern B, "
         "hook 3 your own. One \"we built\" at most.\n"
         "- caption: the whole post, starting with your best hook as its first line. "
-        "Use \\n for line breaks."
+        "Use \\n for line breaks.\n"
+        "- card_line: the product name and what shipped, 9 words at most, from FACTS. Not a post line."
     )
 
 
@@ -352,10 +354,11 @@ def _loads(text: str) -> Any:
     return None
 
 
-def parse_draft(reply: dict | str | None) -> tuple[list[str], str, str] | None:
-    """(hooks, caption, use_case) from a dict, a JSON string, or JSON in a ``` fence; None
-    if the shape is wrong (hooks not exactly 3 non-empty strings, caption or use_case
-    missing or empty)."""
+def parse_draft(reply: dict | str | None) -> tuple[list[str], str, str, str] | None:
+    """(hooks, caption, use_case, card_line) from a dict, a JSON string, or JSON in a ```
+    fence; None if the shape is wrong (hooks not exactly 3 non-empty strings, caption or
+    use_case missing or empty). A missing or non-string card_line is "": card_line() then
+    falls back."""
     data = _loads(reply) if isinstance(reply, str) else reply
     if not isinstance(data, dict):
         return None
@@ -369,7 +372,9 @@ def parse_draft(reply: dict | str | None) -> tuple[list[str], str, str] | None:
     use_case = data.get("use_case")
     if not isinstance(use_case, str) or not use_case.strip():
         return None
-    return [h.strip() for h in hooks], caption.strip(), use_case.strip()
+    card = data.get("card_line")
+    card = " ".join(card.split()) if isinstance(card, str) else ""
+    return [h.strip() for h in hooks], caption.strip(), use_case.strip(), card
 
 
 # Errors a model call can raise at runtime (provider, network, decoding). Anything
@@ -382,7 +387,7 @@ class _Asker:
         self.host = host
         self.last_error: BaseException | None = None
 
-    def __call__(self, instructions: str, text: str) -> tuple[list[str], str, str] | None:
+    def __call__(self, instructions: str, text: str) -> tuple[list[str], str, str, str] | None:
         try:
             reply = self.host.complete_json(instructions, text, DRAFT_SCHEMA)
         except _CALL_ERRORS as exc:
@@ -441,19 +446,79 @@ def draft_post(host: Host, brief: Brief, brand: BrandKit, refs: Sequence[Referen
     first = ask(instructions, text) or ask(instructions, text)
     if first is None:
         raise DraftError() from ask.last_error
-    hooks, caption, use_case = first
+    hooks, caption, use_case, card = first
     failures = _failures(hooks, caption, use_case, brief, refs, voice, facts, brand.name)
     if not failures:
-        return Draft(tuple(hooks), caption, (), False, use_case)
+        return Draft(tuple(hooks), caption, (), False, use_case, card_line=card)
     r_instructions, r_text = build_redraft_prompt(brief, brand, refs, shapes, relaxed,
                                                   hooks, caption, failures, use_case)
     second = ask(r_instructions, r_text)
     if second is not None:
-        hooks2, caption2, use_case2 = second
+        hooks2, caption2, use_case2, card2 = second
         failures2 = _failures(hooks2, caption2, use_case2, brief, refs, voice, facts, brand.name)
         if len(failures2) <= len(failures):
-            return Draft(tuple(hooks2), caption2, tuple(failures2), True, use_case2, tuple(failures))
-    return Draft(tuple(hooks), caption, tuple(failures), False, use_case, tuple(failures))
+            return Draft(tuple(hooks2), caption2, tuple(failures2), True, use_case2, tuple(failures), card2)
+    return Draft(tuple(hooks), caption, tuple(failures), False, use_case, tuple(failures), card)
+
+
+# ------------------------------------------------------------------ the card line
+
+CARD_LINE_WORDS = 9
+_CARD_RULES = frozenset({"stock-phrase", "template-opener", "placeholder", "link-first-line", "private-link"})
+_CLAUSE_RE = re.compile(r"(?<=[:;,.!?])\s+|\s+[\u2013\u2014-]\s+")
+
+
+def _card_ok(line: str, first: str, facts: str) -> bool:
+    """A card line that is short, plain, from the facts and not a restatement of line 1."""
+    if not line or first_line_words(line) > CARD_LINE_WORDS or _same(line, first):
+        return False
+    if {f.rule_id for f in check(line, network="x")} & _CARD_RULES or unsupported_details(line, facts):
+        return False
+    a, b = _stems(first), _stems(line)
+    return not (a and b and len(a & b) >= 0.6 * min(len(a), len(b)))
+
+
+def _cap_first(text: str) -> str:
+    first = text.split(" ", 1)[0]
+    if any(c.isupper() for c in first[1:]) or "." in first.rstrip("."):
+        return text  # iOS, posts.design stay as written
+    return text[:1].upper() + text[1:]
+
+
+def _product_line(brief: Brief, brand: BrandKit) -> str:
+    """The product name and what shipped, from the brief: "Fernlight: photo diagnosis". When
+    the first clause is only the name ("Brookhour 2.0:"), the next clause follows it. At most
+    CARD_LINE_WORDS words, cut at a word and never on a small word."""
+    name = " ".join((brand.name or "").split())
+    clauses = [c.strip(" :;,.") for c in _CLAUSE_RE.split(" ".join((brief.what or "").split())) if c.strip(" :;,.")]
+    if not clauses:
+        return name
+    named = bool(name) and name.lower() in clauses[0].lower()
+    line = clauses[0] if named else (f"{name}: {clauses[0]}" if name else clauses[0])
+    if named and len(clauses[0].split()) <= 2 and len(clauses) > 1:
+        line += ": " + clauses[1]
+    words = line.split()[:CARD_LINE_WORDS]
+    while len(words) > 1 and words[-1].lower().strip(":;,.") in STOPWORDS:
+        words.pop()
+    return _cap_first(" ".join(words).rstrip(" :;,"))
+
+
+def card_line(candidate: str, post: str, brief: Brief, brand: BrandKit, use_case: str = "") -> str:
+    """The card headline: the model's card line when it passes (9 words or fewer, no stock
+    phrase, template opener, placeholder or link, no detail outside FACTS, not mostly the
+    words of line 1), else the post's what-shipped line (a line after the first that says the
+    use case) when it passes the same, else the product name and what shipped from the brief.
+    Never the same sentence as line 1."""
+    facts = facts_text(brief, brand)
+    lines = [ln.strip() for ln in post.strip().split("\n")]
+    first = lines[0] if lines else ""
+    body = [ln for ln in lines[1:] if ln and not _URL_RE.fullmatch(ln)]
+    shipped = [ln for ln in body if use_case and use_case_carried(use_case, ln)] or body
+    for line in [" ".join((candidate or "").split()), *shipped]:
+        if _card_ok(line, first, facts):
+            return line
+    fallback = _product_line(brief, brand)
+    return fallback if fallback and not _same(fallback, first) else " ".join((brand.name or "").split())
 
 
 # ------------------------------------------------------------------ the hooks offered

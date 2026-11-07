@@ -143,7 +143,7 @@ def test_junk_twice_raises_draft_error():
     CLEAN,
 ])
 def test_parse_accepts_fenced_json(reply):
-    assert parse_draft(reply) == (CLEAN["hooks"], CLEAN["caption"], USE)
+    assert parse_draft(reply) == (CLEAN["hooks"], CLEAN["caption"], USE, "")
 
 
 @pytest.mark.parametrize("reply", [
@@ -759,3 +759,65 @@ def test_checklist_fails_each_line_says_something_new_on_a_repeated_phrase():
     fails = post_failures(text, BRIEF, BRAND, REFS)
     [line] = [c for c in checklist(text, fails, "x") if "repeated-phrase" in c.rules]
     assert not line.ok and "colour theme" in line.text
+
+
+# ------------------------------------------------------------------ the card line (Task 22)
+
+from launch_desk.draft import card_line  # noqa: E402
+
+K3_POST = ("Most of our support emails were blurry photos of sad leaves.\n\nFernlight reads a leaf photo and "
+           "names the cause.\n\nhttps://fernlight.app")
+K3_USE = "Fernlight reads a leaf photo and names the cause."
+
+
+def k3_line(candidate, post=K3_POST, use_case=K3_USE):
+    return card_line(candidate, post, K3_BRIEF, K3_BRAND, use_case)
+
+
+def test_parse_keeps_the_card_line():
+    assert parse_draft({**CLEAN, "card_line": "  Pet pages take themes now. "})[3] == "Pet pages take themes now."
+    assert parse_draft({**CLEAN, "card_line": 7})[3] == ""
+
+
+def test_draft_carries_the_model_card_line():
+    _, d = draft([{**CLEAN, "card_line": "Pet pages take custom themes now."}])
+    assert d.card_line == "Pet pages take custom themes now."
+    assert "card_line" in DRAFT_SCHEMA["properties"]
+
+
+def test_a_good_card_line_is_kept():
+    good = "Fernlight now names what is wrong with a leaf."
+    assert k3_line(good) == good
+
+
+@pytest.mark.parametrize("bad", [
+    "Fernlight now names what is wrong with your sad houseplant leaf.",  # 11 words
+    "Say hello to leaf photo diagnosis in Fernlight.",  # stock phrase
+    "Your plants should get a straight answer.",  # template opener
+    "Fernlight reads [the photo] for you.",  # placeholder
+    "Fernlight diagnoses a leaf in three seconds.",  # unsupported detail
+    "Our support emails were blurry photos of sad leaves.",  # too close to line 1
+    "",
+])
+def test_a_failing_card_line_falls_back_to_the_posts_what_shipped_line(bad):
+    assert k3_line(bad) == "Fernlight reads a leaf photo and names the cause."
+
+
+def test_without_a_usable_line_the_card_names_the_product_and_what_shipped():
+    post = ("Most of our support emails were blurry photos of sad leaves.\n\nFernlight now reads every photo you "
+            "send and names the likely cause right away.\n\nhttps://fernlight.app")
+    line = k3_line("", post, use_case="")
+    assert line.startswith("Fernlight") and "photo diagnosis" in line
+    assert len(line.split()) <= 9
+    assert not unsupported_details(line, facts_text(K3_BRIEF, K3_BRAND))
+
+
+def test_the_card_line_is_never_line_one():
+    post = "Fernlight reads a leaf photo.\n\nhttps://fernlight.app"
+    for candidate in ("Fernlight reads a leaf photo.", ""):
+        assert card_line(candidate, post, K3_BRIEF, K3_BRAND, "Fernlight reads a leaf photo.") != "Fernlight reads a leaf photo."
+
+
+def test_the_prompt_asks_for_a_card_line_and_stays_short():
+    instructions = build_brief_prompt(K3_BRIEF, K3_BRAND, REFS, SHAPES, set())[0]
+    assert '"card_line"' in instructions

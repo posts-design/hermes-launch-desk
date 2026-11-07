@@ -32,7 +32,9 @@ CLEAN = {
               "Biscuit's page is green now."],
     "caption": "Pet pages can wear your colours now.\n\nPick a theme in settings and the whole page follows."
                "\n\nhttps://pawr.link",
+    "card_line": "Pet pages now take custom themes.",
 }
+CARD = CLEAN["card_line"]
 OTHER = {
     "use_case": "Match the page to your own site.",
     "hooks": ["Themes for pet pages are live.", "Pet pages now wear your colours.",
@@ -318,28 +320,47 @@ def test_screenshot_from_state_is_used_only_if_file_exists(tmp_path, monkeypatch
     host.state_set("screenshot", str(shot))
     start(host)
     assert len(seen) == 1
-    assert bool(seen[0][0]) == exists and seen[0][1] == FOUNDER
+    assert bool(seen[0][0]) == exists and seen[0][1] == CARD
 
 
-def test_long_hook_falls_back_to_what_for_card_headline(monkeypatch):
-    long = "people kept asking to match their pet's page to the colours of their own site"
-    assert len(founder_hook(long)) > wizard.HEADLINE_MAX
-    seen = []
-    real = wizard.render_card
-
-    def spy(brand, screenshot, headline, size, out, **kw):
-        seen.append(headline)
-        return real(brand, screenshot, headline, size, out, **kw)
-
-    monkeypatch.setattr(wizard, "render_card", spy)
+def test_the_card_says_what_shipped_never_line_one(monkeypatch):
+    seen = _render_spy(monkeypatch)
     host = make_host(PHASE1)
-    start(host, args=f"{URL} custom themes for pet profile pages -- {long}")
-    assert pending(host)["hook"] == founder_hook(long)
-    assert seen == ["Custom themes for pet profile pages"]
+    start(host)
+    p = pending(host)
+    assert seen[-1]["headline"] == CARD == p["card_line"]
+    assert seen[-1]["headline"] != p["hook"]
+    resume(host, "hook", "2")
+    assert seen[-1]["headline"] == CARD
+    resume(host, "approve", "no")
+    data = pack_data(host)
+    assert data["card_line"] == CARD and data["hook"] == CLEAN["hooks"][0]
+    assert CARD in (packs(host)[0].parent / "alt-text.txt").read_text()
 
 
-def test_card_headline_capitalises_the_fallback():
-    assert wizard.card_headline("", "dark mode for pet pages") == "Dark mode for pet pages"
+def test_a_card_line_that_is_line_one_is_replaced(monkeypatch):
+    seen = _render_spy(monkeypatch)
+    same = {**CLEAN, "card_line": CLEAN["hooks"][0]}
+    host = make_host(["feature", "x", "keep", "2"], llm=(same,))
+    start(host)
+    assert pending(host)["hook"] == CLEAN["hooks"][0]
+    assert seen[-1]["headline"] != CLEAN["hooks"][0] and seen[-1]["headline"]
+
+
+def test_without_a_card_line_the_card_names_the_product_and_what_shipped(monkeypatch):
+    seen = _render_spy(monkeypatch)
+    plain_draft = {k: v for k, v in CLEAN.items() if k != "card_line"}
+    host = make_host(PHASE1, llm=(plain_draft,))
+    start(host)
+    headline = seen[-1]["headline"]
+    assert "custom themes for pet profile pages" in headline.lower() and headline != FOUNDER
+
+
+def test_the_statement_card_sets_the_card_line(monkeypatch):
+    seen = _render_spy(monkeypatch)
+    host = make_host(PHASE1)
+    start(host)  # no screenshot: a statement card
+    assert seen[-1]["layout"] == "statement" and seen[-1]["headline"] == CARD
 
 
 def test_unreadable_site_offers_the_five_presets_and_continues():
@@ -375,7 +396,7 @@ def test_phase2_approve_writes_pack_and_clears_pending():
     assert stored["url"] == URL and stored["accent"] == data["brand"]["accent"]
     assert Path(stored["logo_path"]).parent == host.data_dir() / "brand"
     assert Path(stored["logo_path"]).is_file()
-    assert FOUNDER in (pack_json.parent / "alt-text.txt").read_text()
+    assert CARD in (pack_json.parent / "alt-text.txt").read_text()
 
 
 @pytest.mark.parametrize("surface", ["cli", "tui", "local", "desktop", "acp"])
@@ -775,20 +796,20 @@ def test_missing_screenshot_files_are_skipped(tmp_path, monkeypatch):
     assert seen[0]["shots"] == [a] and seen[0]["layout"] == "hero"
 
 
-def test_change_hook_rerenders_with_the_layout_the_new_hook_gets(tmp_path, monkeypatch):
+def test_change_hook_rerenders_with_the_card_line_for_its_layout(tmp_path, monkeypatch):
     seen = _render_spy(monkeypatch)
     asked = []
 
-    def choose(shots, hook):
-        asked.append(hook)
-        return "statement" if hook == FOUNDER else "hero"
+    def choose(shots, headline):
+        asked.append(headline)
+        return "statement" if len(asked) == 1 else "hero"
 
     monkeypatch.setattr(wizard, "choose_layout", choose)
     host = make_host(PHASE1)
     host.state_set("screenshot", [_shot(tmp_path, "a.png")])
     start(host)
     resume(host, "hook", "3")
-    assert asked == [FOUNDER, CLEAN["hooks"][1]]
+    assert asked == [CARD, CARD]
     assert [s["layout"] for s in seen] == ["statement", "hero"]
     assert pending(host)["layout"] == "hero"
 

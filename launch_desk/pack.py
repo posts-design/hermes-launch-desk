@@ -148,6 +148,7 @@ def write_pack(out_dir: Path, brief: Brief, brand: BrandKit, draft: Draft, hook:
                   "accent": brand.accent},
         "hook": hook,
         "hook_source": hook_source,
+        "card_line": headline or "",
         "hooks": list(draft.hooks),
         "caption": text,
         "card": card_contents(layout, has_screenshot),

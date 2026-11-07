@@ -77,6 +77,7 @@ class Draft:
     redrafted: bool
     use_case: str = ""  # one concrete use of what shipped, from the facts; the caption carries it
     first_failures: tuple[Failure, ...] = ()  # the first draft's failures, when a redraft was asked for
+    card_line: str = ""  # the model's card headline, as written; card_line() checks it
 
 
 @dataclass(frozen=True)
