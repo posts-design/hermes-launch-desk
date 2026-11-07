@@ -362,3 +362,68 @@ def test_split_with_one_undecodable_file_falls_back_to_hero_at_the_exact_size(tm
     with Image.open(split) as a, Image.open(hero) as b:
         assert a.size == b.size == size
         assert a.convert("RGB").tobytes() == b.convert("RGB").tobytes()
+
+
+# --- the headline face (Task 20) ---------------------------------------------
+
+from dataclasses import replace  # noqa: E402
+
+from launch_desk.render import FACE_FONTS, head_font_path  # noqa: E402
+
+
+@pytest.mark.parametrize("face", ["serif", "rounded", "sans"])
+def test_each_face_is_a_bundled_variable_font_with_its_licence(face):
+    path = FACE_FONTS[face]
+    assert path.is_file()
+    licences = list(path.parent.glob("*OFL*.txt"))
+    assert any(path.stem.split("[")[0].lower() in p.name.lower() for p in licences) or (
+        face == "sans" and (path.parent / "OFL.txt").is_file())
+    axes = load_font(str(path), 64, 700).get_variation_axes()
+    weight = next(a for a in axes if str(a.get("name", b"")).lower().find("weight") >= 0)
+    assert weight["minimum"] <= 700 <= weight["maximum"]
+
+
+def test_bundled_faces_stay_under_one_and_a_half_megabytes():
+    added = sum(FACE_FONTS[f].stat().st_size for f in ("serif", "rounded"))
+    assert added < 1.5 * 1024 * 1024
+
+
+@pytest.mark.parametrize("face,family,expected", [
+    ("serif", None, "serif"), ("rounded", None, "rounded"), ("sans", "Georgia", "sans"),
+    ("", "Iowan Old Style", "serif"), ("", "SF Pro Rounded", "rounded"), ("", "Inter", "sans"),
+    ("", None, "sans"), ("bogus", None, "sans"),
+])
+def test_headline_font_follows_the_brand_face(face, family, expected):
+    kit = replace(KIT, font_face=face, font_family=family)
+    assert head_font_path(kit) == FACE_FONTS[expected]
+
+
+@pytest.mark.parametrize("face", ["serif", "rounded"])
+@pytest.mark.parametrize("shots", [0, 1, 2])
+@pytest.mark.parametrize("size", [(1200, 675), (1080, 1350)])
+def test_card_in_each_face_and_layout_has_exact_size(tmp_path, face, shots, size):
+    paths = [_shot(tmp_path, name=f"s{i}.png") for i in range(shots)]
+    kit = replace(KIT, font_face=face)
+    out = render_card(kit, paths, HEADLINE_60, size, tmp_path / "card.png")
+    with Image.open(out) as im:
+        assert im.size == size
+
+
+def test_serif_face_changes_the_headline_pixels(tmp_path):
+    a = render_card(replace(KIT, font_face="sans"), None, "Focus sessions now land on your calendar",
+                    (1200, 675), tmp_path / "a.png")
+    b = render_card(replace(KIT, font_face="serif"), None, "Focus sessions now land on your calendar",
+                    (1200, 675), tmp_path / "b.png")
+    with Image.open(a) as ia, Image.open(b) as ib:
+        assert ia.tobytes() != ib.tobytes()
+
+
+def test_only_the_headline_changes_face(tmp_path):
+    """The brand name in the footer is drawn the same in every face."""
+    kits = [replace(KIT, font_face=f) for f in ("sans", "serif")]
+    crops = []
+    for i, kit in enumerate(kits):
+        out = render_card(kit, None, "Short", (1200, 675), tmp_path / f"c{i}.png")
+        with Image.open(out) as im:
+            crops.append(im.crop((0, 675 - 140, 1200, 675)).tobytes())
+    assert crops[0] == crops[1]

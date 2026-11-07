@@ -1,7 +1,9 @@
 """Share card and feed preview, drawn with Pillow from the founder's own assets.
 
 Nothing here generates imagery: the card is the founder's screenshot, brand colours,
-logo and headline set in bundled Inter. The feed preview is a light, phone-width mock.
+logo and headline. The headline is set in the bundled face nearest the brand's (Newsreader
+for a serif brand, Nunito for a rounded one, else Inter); all smaller text is Inter. The
+feed preview is a light, phone-width mock.
 """
 from __future__ import annotations
 
@@ -13,9 +15,13 @@ from typing import Sequence
 
 from PIL import Image, ImageDraw, ImageFilter, ImageFont, ImageOps, ImageStat
 
+from .brand import FACES, font_face
 from .models import BrandKit
 
-FONT_PATH = Path(__file__).resolve().parent / "fonts" / "Inter.ttf"
+FONT_DIR = Path(__file__).resolve().parent / "fonts"
+FONT_PATH = FONT_DIR / "Inter.ttf"
+# The headline faces, all SIL OFL (each licence beside its font in fonts/).
+FACE_FONTS = {"serif": FONT_DIR / "Newsreader.ttf", "rounded": FONT_DIR / "Nunito.ttf", "sans": FONT_PATH}
 
 MARGIN = 72
 HEAD_MAX, HEAD_MIN = 64, 36
@@ -205,25 +211,33 @@ def _draw_lines(draw: ImageDraw.ImageDraw, lines: list[str], font, x: int, top: 
     return base + (len(lines) - 1) * lh + round(size * 0.24) if lines else top
 
 
-@lru_cache(maxsize=1024)
-def _has_glyph(ch: str) -> bool:
-    """False for characters the bundled font would draw as an empty box (emoji, mostly)."""
-    if ord(ch) < 0x2000 or ch.isspace():
+def head_font_path(brand: BrandKit) -> Path:
+    """The headline font for a brand: its face, or for a kit saved without one, the face of
+    its font family. Inter when the face is unknown or its file is missing."""
+    face = brand.font_face if brand.font_face in FACES else font_face(brand.font_family)
+    path = FACE_FONTS.get(face, FONT_PATH)
+    return path if path.is_file() else FONT_PATH
+
+
+@lru_cache(maxsize=2048)
+def _has_glyph(ch: str, font_path: str = str(FONT_PATH)) -> bool:
+    """False for characters the font would draw as an empty box (emoji, mostly)."""
+    if ord(ch) < 0x80 or ch.isspace():
         return True
-    return _glyph_bitmap(ch) != _glyph_bitmap("\U000F0000")
+    return _glyph_bitmap(ch, font_path) != _glyph_bitmap("\U000F0000", font_path)
 
 
-@lru_cache(maxsize=1024)
-def _glyph_bitmap(ch: str) -> bytes:
-    font = load_font(str(FONT_PATH), 32, 400)
+@lru_cache(maxsize=2048)
+def _glyph_bitmap(ch: str, font_path: str) -> bytes:
+    font = load_font(font_path, 32, 400)
     im = Image.new("L", (64, 64), 0)
     ImageDraw.Draw(im).text((8, 8), ch, font=font, fill=255)
     return im.tobytes()
 
 
-def _drop_missing(text: str) -> str:
-    """Drop characters Inter cannot draw, so no empty boxes reach the image."""
-    out = "".join(ch for ch in text if _has_glyph(ch))
+def _drop_missing(text: str, font_path: str = str(FONT_PATH)) -> str:
+    """Drop characters the font cannot draw, so no empty boxes reach the image."""
+    out = "".join(ch for ch in text if _has_glyph(ch, font_path))
     return re.sub(r"[ \t]{2,}", " ", out).strip() if out != text else text
 
 
@@ -427,6 +441,7 @@ class _Card:
         self.canvas = Image.new("RGB", (self.W, self.H), self.bg)
         self.draw = ImageDraw.Draw(self.canvas)
         self.font_path = str(FONT_PATH)
+        self.head_path = str(head_font_path(brand))  # the headline only; smaller text stays Inter
 
     def px(self, v: float) -> int:
         return round(v * self.s)
@@ -434,9 +449,9 @@ class _Card:
     # -- type
     def headline(self, text: str, x: int, top: int, box: tuple[int, int], hmax: int | None = None,
                  max_lines: int = 3) -> int:
-        lines, size = fit_text(text, self.font_path, box, hmax or self.hmax, self.hmin, HEAD_WEIGHT,
+        lines, size = fit_text(text, self.head_path, box, hmax or self.hmax, self.hmin, HEAD_WEIGHT,
                                max_lines=max_lines)
-        return _draw_lines(self.draw, lines, load_font(self.font_path, size, HEAD_WEIGHT), x, top,
+        return _draw_lines(self.draw, lines, load_font(self.head_path, size, HEAD_WEIGHT), x, top,
                            size, self.ink)
 
     def tagline(self, text: str, x: int, top: int, box: tuple[int, int], max_lines: int,
@@ -575,7 +590,7 @@ def render_card(brand: BrandKit, screenshots: Sequence[Path | str | None] | Path
               if (im := _open_image(p)) is not None][-2:]
     logo_raw = _open_image(brand.logo_path)
     card = _Card(brand, (int(size[0]), int(size[1])), logo_raw.convert("RGBA") if logo_raw else None)
-    headline = _drop_missing(" ".join(headline.split())) or _display_name(brand)
+    headline = _drop_missing(" ".join(headline.split()), card.head_path) or _display_name(brand)
     shots = [_flatten(im, card.bg) for im, _ in opened]
     fits = _layout_for(len(shots))
     if layout not in LAYOUTS or (layout == "split" and len(shots) < 2) or (layout == "hero" and not shots):
@@ -622,7 +637,7 @@ class _StatementGrid:
 
     def __init__(self, c: _Card) -> None:
         portrait = c.H > c.W
-        self.quote_font = load_font(c.font_path, c.px(220 if portrait else 180), 800)
+        self.quote_font = load_font(c.head_path, c.px(220 if portrait else 180), 800)
         qb = self.quote_font.getbbox(QUOTE_MARK, anchor="ls")
         self.quote_box = qb
         self.quote_h, self.quote_gap = qb[3] - qb[1], c.px(30 if portrait else 24)
@@ -638,7 +653,7 @@ class _StatementGrid:
 def _statement_text(c: _Card, headline: str) -> tuple[list[str], int]:
     """The lines and size the statement card sets the hook in."""
     g = _StatementGrid(c)
-    return fit_text(headline, c.font_path, g.box, g.hmax, c.hmin, STATEMENT_WEIGHT, max_lines=g.max_lines)
+    return fit_text(headline, c.head_path, g.box, g.hmax, c.hmin, STATEMENT_WEIGHT, max_lines=g.max_lines)
 
 
 def _statement(c: _Card, headline: str) -> None:
@@ -647,7 +662,7 @@ def _statement(c: _Card, headline: str) -> None:
     _glow(c)
     g = _StatementGrid(c)
     lines, size = _statement_text(c, headline)
-    font = load_font(c.font_path, size, STATEMENT_WEIGHT)
+    font = load_font(c.head_path, size, STATEMENT_WEIGHT)
     lh = _line_height(size)
     cap = _cap_height(font)
     group = g.quote_h + g.quote_gap + cap + (len(lines) - 1) * lh + g.rule_gap + g.rule_h
@@ -737,7 +752,7 @@ def _split(c: _Card, shots: list[Image.Image], headline: str, labels: list[str])
         top = m - c.px(8)
         end = c.headline(headline, m, top, (text_w, 2 * _line_height(c.px(52)) + 4),
                          hmax=c.px(52), max_lines=2)
-        cap = _cap_height(load_font(c.font_path, c.px(52), HEAD_WEIGHT))
+        cap = _cap_height(load_font(c.head_path, c.px(52), HEAD_WEIGHT))
         c.brand_row(W - m - brand_w, top + cap // 2 - c.px(22), brand_w, d=c.px(44))
         stage = (inset, end + c.px(44), W - inset, H - inset)
         sizes = _pair(shots, max_w, stage[3] - stage[1] - 2 * pad - label_h, gap, stacked=False)
@@ -757,7 +772,7 @@ def _split(c: _Card, shots: list[Image.Image], headline: str, labels: list[str])
     head_top, head_bottom = m + d + c.px(48), stage[1] - c.px(48)
     hmax = round(c.hmax * 1.5)
     box = (W - 2 * m, head_bottom - head_top)
-    block = _block_height(headline, c.font_path, box, hmax, c.hmin, HEAD_WEIGHT, 4)
+    block = _block_height(headline, c.head_path, box, hmax, c.hmin, HEAD_WEIGHT, 4)
     c.headline(headline, m, head_top + max(0, (box[1] - block) // 2), box, hmax=hmax, max_lines=4)
     _place_pair(c, shots, sizes, stacked, stage, labels, gap)
 
