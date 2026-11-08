@@ -26,7 +26,7 @@ from .host import Host
 from .models import BrandKit, Brief, CheckLine, Draft, Failure, HookOption, HookShape, Reference
 from .references import BRAND_CHARS, STOPWORDS, shape_note
 from .rules import (RULES, STOCK_PHRASES, check, first_line_words, has_link, is_private_link, relaxed_rules,
-                    echo_lines, repeating_lines, style_counts, x_length)
+                    echo_lines, style_counts, x_length)
 
 DRAFT_SCHEMA: dict = {
     "type": "object",
@@ -41,7 +41,7 @@ DRAFT_SCHEMA: dict = {
 
 # Rules that make sense for a single first line.
 HOOK_RULES: frozenset[str] = frozenset({
-    "first-line-short", "stock-phrase", "template-opener", "em-dash", "emoji", "placeholder",
+    "first-line-short", "stock-phrase", "template-opener", "lower-start", "em-dash", "emoji", "placeholder",
     "link-first-line", "copied-run",
 })
 
@@ -188,7 +188,7 @@ def _rule_lines(brief: Brief, relaxed: set[str]) -> list[str]:
     """The scroll test as plain instructions, one per non-relaxed rule."""
     url = brief.product_url
     words = {
-        "first-line-short": "Every hook, and the first line of the caption, is 12 words or fewer. Count them.",
+        "first-line-short": "Every hook and the caption's first line: 12 words or fewer. Count them.",
         "stock-phrase": "No hype words. Never write: " + ", ".join(
             p for p in STOCK_PHRASES + _ALSO_AVOID if p not in _SAME_AS_LISTED) + ".",
         "template-opener": "Never open with \"Your ... should\".",
@@ -198,10 +198,11 @@ def _rule_lines(brief: Brief, relaxed: set[str]) -> list[str]:
         "hashtags": "No hashtags.",
         "placeholder": "No brackets [ ] { } or TODO; fill every gap with real words.",
         "link-first-line": f"Put the link {_one_line(url, 120)} once, on the last line. Never in the first line.",
-        "length": "The whole caption is 280 characters or fewer, the link counting as 23. Aim for about 200.",
+        "length": "The caption is 280 characters or fewer, the link counting as 23; aim for 200.",
         "repeats-first-line": "Each line says something new, no phrase twice. Don't restate the first line.",
         "repeated-phrase": None,  # said in the repeats-first-line line
-        "copied-run": "Never copy from the example posts. Not even 5 words in a row.",
+        "lower-start": None,  # said in rule 1
+        "copied-run": "Never copy 5 words in a row from the example posts.",
     }
     lines = []
     for rule in RULES:
@@ -230,7 +231,8 @@ def _borrow(refs: Sequence[Reference] | None) -> str:
 def _instructions(brief: Brief, relaxed: set[str], refs: Sequence[Reference] | None = ()) -> str:
     network = _NETWORK.get(brief.network, brief.network)
     rules = [
-        "Write like the founder talking to one friend: plain words, short sentences, first person (I or we).",
+        "Write like the founder talking to a friend: plain short sentences, I or we"
+        + ("." if "lower-start" in relaxed else ", a capital at each line start."),
         "Say what the reader can do now; make it concrete with the use case. One line may say why it "
         "matters, if it adds no new fact.",
         "Every detail comes from FACTS: never add pets, people, names, times, steps, counts, results or "
@@ -668,7 +670,9 @@ def checklist(text: str, failures: Sequence[Failure], network: str,
         line(("template-opener",), "Doesn't open with \"Your X should\"",
              lambda f: f"Opens with the \"Your X should\" template: {_quoted(f)}".rstrip(": ")),
         line(("em-dash", "emoji", "hashtags"), style[:1].upper() + style[1:], lambda f: f"Too many: {style}"),
-        line(("placeholder",), "No placeholders", lambda f: f"Placeholder: {_quoted(f)}".rstrip(": ")),
+        line(("placeholder", "lower-start"), "No placeholders; every line starts with a capital",
+             lambda f: f"Placeholder: {_quoted(f)}".rstrip(": ") if f.rule_id == "placeholder"
+             else f"Line starts lower case: {_quoted(f)}".rstrip(": ")),
         line(("link-first-line",), "No link in the first line", lambda f: "Link in the first line"),
         line(("private-link",), "Link is public" if has_link(text) else "No private links",
              lambda f: f"Link only opens on your own machine or network: {f.found}".rstrip(": ")),

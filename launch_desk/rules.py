@@ -45,6 +45,8 @@ RULES: tuple[Rule, ...] = (
          "Reword the passage so it shares no five-word run with the references.", False),
     Rule("repeats-first-line", "A later line repeats most of the first line.",
          "Make every line after the first say something new; don't restate the first line.", False),
+    Rule("lower-start", "A line starts with a lower-case letter.",
+         "Start each line with a capital.", True),
     Rule("repeated-phrase", "Two lines say the same thing.",
          "Say the repeated phrase once; give every line something new.", False),
 )
@@ -268,6 +270,28 @@ def echo_lines(text: str, product: str = "") -> list[int]:
     return sorted(echoed | set(repeating_lines(text)))
 
 
+_LEAD_RE = re.compile(r"^[\s\-\u2022*>\"'\u201c\u2018(\[]+")
+
+
+def _find_lower_start(text: str, product: str = "") -> str:
+    """The start of the first line that begins with a lower-case letter ("so we shipped"); "" if
+    none. A link, a handle or hashtag, a domain ("fernlight.app"), a word with a capital inside
+    ("iPhone") and the product's name as the brand writes it ("pawr.link") may start lower case."""
+    for raw in text.split("\n"):
+        line = _LEAD_RE.sub("", raw.strip())
+        if not line or _URL_RE.match(line) or line.startswith(("@", "#")):
+            continue
+        if product.strip() and line.startswith(product.strip()):
+            continue
+        first = line.split()[0]
+        if not first[0].isalpha() or not first[0].islower() or any(c.isupper() for c in first[1:]):
+            continue
+        if re.fullmatch(r"[a-z0-9-]+(?:\.[a-z0-9-]+)+[.,;:!?]?", first) and not first.endswith("."):
+            continue  # a domain
+        return " ".join(line.split()[:3]).rstrip(".,;:!?")
+    return ""
+
+
 def _find_repeated_phrase(text: str, product: str = "") -> str:
     """What lines repeat: a phrase of two content words that two lines after the first both have
     ("next ... meeting"), a phrase of three content words of line 1 that a later line says again
@@ -324,6 +348,7 @@ _PREDICATES: dict[str, Callable[[str], bool]] = {
     "placeholder": _placeholder,
     "link-first-line": _link_first,
     "private-link": lambda t: bool(_find_private_link(t)),
+    "lower-start": lambda t: bool(_find_lower_start(t)),
     "repeats-first-line": _repeats_first,
 }
 
@@ -394,6 +419,9 @@ def check(text: str, *, network: str, reference_captions: Sequence[str] = (),
             hit = network == "x" and x_length(text) > 280
         elif rule.id == "copied-run":
             found = _find_copied_run(text, reference_captions, own_words)
+            hit = bool(found)
+        elif rule.id == "lower-start":
+            found = _find_lower_start(text, product)
             hit = bool(found)
         elif rule.id == "repeated-phrase":
             found = _find_repeated_phrase(text, product)

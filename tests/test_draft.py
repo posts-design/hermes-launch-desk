@@ -841,3 +841,17 @@ def test_the_founder_option_drops_a_line_that_echoes_three_of_its_words():
     [founder, *_] = hook_options(d, brief, brand, REFS)
     assert founder.dropped and "deep work" in founder.dropped[0]
     assert not {"repeated-phrase", "repeats-first-line"} & {f.rule_id for f in post_failures(founder.post, brief, brand, REFS)}
+
+
+def test_a_lower_case_line_triggers_the_redraft():
+    from dataclasses import replace
+    lower = {**CLEAN, "caption": CLEAN["caption"].replace("Pick a theme", "pick a theme")}
+    host, d = draft([lower, CLEAN], brand=replace(BRAND, voice_samples=()))
+    assert len(host.llm_calls) == 2 and "lower-start" in prompt_of(host.llm_calls[1])
+    assert d.failures == ()
+
+
+def test_a_lower_case_voice_drops_the_capitals_rule_from_the_prompt():
+    strict = build_brief_prompt(BRIEF, BRAND, REFS, SHAPES, set())[0]
+    relaxed = build_brief_prompt(BRIEF, BRAND, REFS, SHAPES, {"lower-start"})[0]
+    assert len(relaxed) < len(strict)

@@ -301,3 +301,34 @@ def test_a_later_line_echoing_three_words_of_line_one_repeats(text, product, phr
 
 def test_two_words_shared_with_line_one_are_fine():
     assert "repeated-phrase" not in ids("Deep work next to meetings.\n\nYour calendar shows deep work now.")
+
+
+# ------------------------------------------------------------------ lower-case line starts (R42)
+
+K3_RUN3 = ("Most of our support emails were blurry photos of sad leaves.\n\nso we shipped photo diagnosis. snap a leaf."
+           "\n\nyou get the likely cause and three things to do today.\n\nhttp://127.0.0.1:8731/k3/")
+
+
+def test_a_line_starting_lower_case_fails_and_is_named():
+    [f] = [f for f in check(K3_RUN3, network="x", product="Fernlight") if f.rule_id == "lower-start"]
+    assert f.found == "so we shipped"
+    assert "lower-start" in ids("themes are here.\n\nPick one.")
+
+
+@pytest.mark.parametrize("text,product", [
+    ("Themes are live.\n\nhttps://pawr.link", ""),
+    ("Themes are live.\n\n@biscuit asked first.", ""),
+    ("pawr.link pages take themes now.\n\nPick one.", "pawr.link"),
+    ("posts.design MCP is live.", "posts.design"),
+    ("iPhone owners asked first.", ""),
+    ("Themes are live.\n\n- Pick one in settings.\n\n3 themes to start.", ""),
+    ("Themes are live.\n\nfernlight.app has the rest.", ""),
+])
+def test_links_handles_and_brands_may_start_lower_case(text, product):
+    assert "lower-start" not in ids(text, product=product)
+
+
+def test_lower_case_voice_relaxes_the_rule():
+    voice = ["shipped a small thing today. pet pages load faster."]
+    assert "lower-start" not in ids("themes are here.", voice_samples=voice)
+    assert next(r for r in RULES if r.id == "lower-start").relaxable
