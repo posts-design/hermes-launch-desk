@@ -41,7 +41,6 @@ from .setup_check import check_setup
 logger = logging.getLogger(__name__)
 
 X_CARD = (1200, 675)
-HEADLINE_MAX = 70
 PENDING_KEY = "pending"
 PENDING_TTL_S = 24 * 60 * 60
 VOICE_MAX = 3
@@ -178,16 +177,6 @@ def _cut(text: str, limit: int) -> str:
     head = text[: limit + 1]
     cut = head.rsplit(" ", 1)[0] if " " in head else text[:limit]
     return cut.rstrip(" ,;:-–—")
-
-
-def _cap(text: str) -> str:
-    return text[:1].upper() + text[1:]
-
-
-def card_headline(hook: str, what: str) -> str:  # tools/render_assets.py; /launch uses draft.card_line
-    """The hook when it fits on the card (70 characters), else what shipped, cut at a word."""
-    hook = " ".join(hook.split())
-    return _cap(hook if hook and len(hook) <= HEADLINE_MAX else _cut(what, HEADLINE_MAX))
 
 
 # ------------------------------------------------------------------ host helpers

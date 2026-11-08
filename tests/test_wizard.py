@@ -1389,3 +1389,7 @@ def test_caught_line_names_a_repeated_phrase():
     reply = start(make_host(PHASE1, llm=(rep, CLEAN)))
     [line] = [ln for ln in plain(reply) if ln and ln not in plain(clean_reply)]
     assert '"colour theme"' in line
+
+
+def test_the_wizard_has_one_card_headline_source():
+    assert not hasattr(wizard, "card_headline")

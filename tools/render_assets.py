@@ -27,11 +27,10 @@ from PIL import Image, ImageDraw, ImageFilter, ImageFont
 ROOT = Path(__file__).resolve().parent.parent
 sys.path.insert(0, str(ROOT))
 
-from launch_desk.draft import facts_text, unsupported_details  # noqa: E402
+from launch_desk.draft import card_line, facts_text, unsupported_details  # noqa: E402
 from launch_desk.models import BrandKit, Brief  # noqa: E402
 from launch_desk.render import FONT_PATH, choose_layout, load_font, render_card, render_feed_preview  # noqa: E402
 from launch_desk.rules import check, x_length  # noqa: E402
-from launch_desk.wizard import card_headline  # noqa: E402
 
 X = (1200, 675)
 INTER = str(FONT_PATH)
@@ -541,7 +540,7 @@ def main(argv: list[str]) -> int:
     pawr, posts = pawr_kit(inp), posts_kit(inp)
 
     scroll_test(pawr, RUN_HOOK, RUN_CAPTION)  # the post on the cards passes the plugin's checks
-    headline = card_headline(RUN_HOOK, PAWR_BRIEF.what)
+    headline = card_line("", RUN_CAPTION, PAWR_BRIEF, pawr)  # the card line /launch draws
     og, page = inp / "pawr-og.png", inp / "pawr-page.png"
     # Each layout as the wizard picks it: one screenshot, none, two.
     for name, used in (("card-x.png", [og]), ("card-statement.png", []), ("card-split.png", [og, page])):
@@ -550,7 +549,7 @@ def main(argv: list[str]) -> int:
     preview = render_feed_preview(pawr, RUN_CAPTION, shots / "card-x.png", shots / "feed-preview.png", scale=2)
     frame_preview(preview)
     if with_banner:
-        card = render_card(pawr, og, card_headline(PAWR_HOOK, PAWR_BRIEF.what), X, out / "_banner-card.png")
+        card = render_card(pawr, og, card_line("", PAWR_CAPTION, PAWR_BRIEF, pawr), X, out / "_banner-card.png")
         banner(card, pawr, posts, out / "banner.png")
         card.unlink()
     if (inp / "cli.ansi").exists():
