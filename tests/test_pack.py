@@ -186,9 +186,3 @@ def test_pack_records_the_card_layout_and_its_screenshot_count(tmp_path, layout,
                       has_screenshot=shots > 0, layout=layout)
     data = json.loads((pack / "pack.json").read_text())
     assert data["card"] == {"layout": layout, "screenshots": shots}
-
-
-def test_statement_alt_text_calls_it_a_quote_only_when_it_is_one():
-    plain = alt_text(_brief(), _brand(), False, "Pet pages take themes", layout="statement")
-    quoted = alt_text(_brief(), _brand(), False, "Pet pages take themes", layout="statement", quoted=True)
-    assert plain != quoted and len(plain) < len(quoted)

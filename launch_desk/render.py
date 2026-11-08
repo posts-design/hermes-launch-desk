@@ -576,14 +576,13 @@ def choose_layout(screenshots: Sequence[Path | str], hook: str) -> str:
 
 def render_card(brand: BrandKit, screenshots: Sequence[Path | str | None] | Path | str | None,
                 headline: str, size: tuple[int, int], out: Path, layout: str | None = None,
-                labels: Sequence[str] | None = None, quote: bool = False) -> Path:
+                labels: Sequence[str] | None = None) -> Path:
     """Compose the launch card at exactly `size` and save it as PNG to `out`.
 
     `screenshots` is a list (oldest first) or a single path. `layout` is one of LAYOUTS and
     defaults to what choose_layout() picks; a layout the screenshots cannot fill (split with
     one, hero with none) falls back to the one they can. `labels`, one per screenshot, are
-    small captions for the split card; without them it has none. `quote` puts a quote mark over
-    the statement card's headline: only when that headline is the founder's own words (R49).
+    small captions for the split card; without them it has none.
     """
     paths = _as_list(screenshots)
     texts = list(labels or [])
@@ -600,7 +599,7 @@ def render_card(brand: BrandKit, screenshots: Sequence[Path | str | None] | Path
     if layout not in LAYOUTS or (layout == "split" and len(shots) < 2) or (layout == "hero" and not shots):
         layout = fits
     if layout == "statement":
-        _statement(card, headline, quote)
+        _statement(card, headline)
     elif layout == "split":
         _split(card, shots, headline, [_drop_missing(" ".join(t.split())) for _, t in opened])
     else:
@@ -616,7 +615,6 @@ def render_card(brand: BrandKit, screenshots: Sequence[Path | str | None] | Path
 
 # -- statement: the headline set large
 
-QUOTE_MARK = "\u201c"
 
 
 def _glow(c: _Card) -> None:
@@ -639,43 +637,35 @@ STATEMENT_WEIGHT = 760
 class _StatementGrid:
     """The statement card's fixed parts, so the hook gets exactly the room that is left."""
 
-    def __init__(self, c: _Card, quote: bool = False) -> None:
+    def __init__(self, c: _Card) -> None:
         portrait = c.H > c.W
-        self.quote_font = load_font(c.head_path, c.px(220 if portrait else 180), 800)
-        qb = self.quote_font.getbbox(QUOTE_MARK, anchor="ls")
-        self.quote_box = qb
-        self.quote_h, self.quote_gap = (qb[3] - qb[1], c.px(30 if portrait else 24)) if quote else (0, 0)
         self.rule_gap, self.rule_h, self.rule_w = c.px(44 if portrait else 34), c.px(6), c.px(72)
         self.top = c.m
         self.bottom = c.H - c.m - c.footer_h - c.gap  # above the brand
-        fixed = self.quote_h + self.quote_gap + self.rule_gap + self.rule_h
+        fixed = self.rule_gap + self.rule_h
         self.box = (c.W - 2 * c.m - c.px(40 if portrait else 120), self.bottom - self.top - fixed)
         self.hmax = c.px(104 if portrait else 96)
         self.max_lines = 5 if portrait else 4
 
 
-def _statement_text(c: _Card, headline: str, quote: bool = False) -> tuple[list[str], int]:
+def _statement_text(c: _Card, headline: str) -> tuple[list[str], int]:
     """The lines and size the statement card sets the headline in."""
-    g = _StatementGrid(c, quote)
+    g = _StatementGrid(c)
     return fit_text(headline, c.head_path, g.box, g.hmax, c.hmin, STATEMENT_WEIGHT, max_lines=g.max_lines)
 
 
-def _statement(c: _Card, headline: str, quote: bool = False) -> None:
-    """Centred: the headline set large (under a quiet accent quote mark when it is the founder's
-    words), one accent rule, then the brand; a soft accent light rises from the bottom-right."""
+def _statement(c: _Card, headline: str) -> None:
+    """Centred: the headline set large, one accent rule, then the brand; a soft accent light rises
+    from the bottom-right corner."""
     _glow(c)
-    g = _StatementGrid(c, quote)
-    lines, size = _statement_text(c, headline, quote)
+    g = _StatementGrid(c)
+    lines, size = _statement_text(c, headline)
     font = load_font(c.head_path, size, STATEMENT_WEIGHT)
     lh = _line_height(size)
     cap = _cap_height(font)
-    group = g.quote_h + g.quote_gap + cap + (len(lines) - 1) * lh + g.rule_gap + g.rule_h
-    q_top = g.top + max(0, (g.bottom - g.top - group) // 2)
-    qb = g.quote_box
-    if quote:
-        c.draw.text(((c.W - (qb[2] - qb[0])) / 2 - qb[0], q_top - qb[1]), QUOTE_MARK, font=g.quote_font,
-                    fill=_mix(c.bg, c.accent, 0.55 if c.dark else 0.30), anchor="ls")
-    base = q_top + g.quote_h + g.quote_gap + cap
+    group = cap + (len(lines) - 1) * lh + g.rule_gap + g.rule_h
+    top = g.top + max(0, (g.bottom - g.top - group) // 2)
+    base = top + cap
     for i, line in enumerate(lines):
         c.draw.text((c.W / 2, base + i * lh), line, font=font, fill=c.ink, anchor="ms")
     rule_y = base + (len(lines) - 1) * lh + g.rule_gap

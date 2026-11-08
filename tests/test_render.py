@@ -452,10 +452,8 @@ def test_vietnamese_stays_in_the_brand_face(tmp_path):
         assert ia.tobytes() != ib.tobytes()
 
 
-def test_the_statement_card_draws_a_quote_mark_only_for_the_founders_words(tmp_path):
-    from PIL import ImageChops
-    plain = render_card(KIT, [], "Ship it", (1200, 675), tmp_path / "plain.png", layout="statement")
-    quoted = render_card(KIT, [], "Ship it", (1200, 675), tmp_path / "quoted.png", layout="statement", quote=True)
-    assert ImageChops.difference(Image.open(plain).convert("RGB"), Image.open(quoted).convert("RGB")).getbbox()
-    default = render_card(KIT, [], "Ship it", (1200, 675), tmp_path / "default.png", layout="statement")
-    assert not ImageChops.difference(Image.open(plain).convert("RGB"), Image.open(default).convert("RGB")).getbbox()
+def test_the_statement_card_has_no_quote_mark_option():
+    import inspect
+    from launch_desk import render
+    assert "quote" not in inspect.signature(render.render_card).parameters  # R52
+    assert not hasattr(render, "QUOTE_MARK")
