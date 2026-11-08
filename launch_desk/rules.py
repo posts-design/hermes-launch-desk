@@ -235,10 +235,22 @@ def _content_words(line: str) -> set[str]:
     return set(_content_seq(line))
 
 
+def _content_pairs(line: str, skip: frozenset[str] | set[str] = frozenset()) -> list[tuple[str, str]]:
+    """The line's content words in order, each as (stem, word): matched on the stem (lowercase,
+    stopwords out, a plural "s" dropped), quoted as the word the post wrote ("sessions")."""
+    out = []
+    for word in re.findall(r"[a-z0-9]+", line.lower().replace("'", "").replace("\u2019", "")):
+        if word in STOPWORDS:
+            continue
+        stem = _stem(word)
+        if stem not in skip:
+            out.append((stem, word))
+    return out
+
+
 def _content_seq(line: str, skip: frozenset[str] | set[str] = frozenset()) -> list[str]:
     """The line's content words in order: lowercase, stopwords out, a plural "s" dropped."""
-    words = re.findall(r"[a-z0-9]+", line.lower().replace("'", "").replace("\u2019", ""))
-    return [s for s in (_stem(w) for w in words if w not in STOPWORDS) if s not in skip]
+    return [stem for stem, _ in _content_pairs(line, skip)]
 
 
 # Words too common to count as a repeat on their own ("you can", "get", "one").
@@ -249,15 +261,23 @@ _FILLER = frozenset(
 )
 
 
-def _triples(seq: list[str]) -> list[tuple[str, str, str]]:
+def _triples(seq: list) -> list[tuple]:
     """Ordered triples of content words that sit within four words of each other ("deep work
     sits next" holds "deep work next"), in reading order."""
-    out: dict[tuple[str, str, str], None] = {}
+    out: dict[tuple, None] = {}
     for i in range(len(seq)):
         for j in range(i + 1, min(i + 3, len(seq))):
             for k in range(j + 1, min(i + 4, len(seq))):
                 out.setdefault((seq[i], seq[j], seq[k]))
     return list(out)
+
+
+def _phrase_triples(pairs: list[tuple[str, str]]) -> dict[tuple[str, ...], str]:
+    """The line's triples (_triples) keyed by their stems, each with its first words as written."""
+    out: dict[tuple[str, ...], str] = {}
+    for t in _triples(pairs):
+        out.setdefault(tuple(stem for stem, _ in t), " ".join(word for _, word in t))
+    return out
 
 
 def echo_lines(text: str, product: str = "") -> list[int]:
@@ -299,23 +319,25 @@ def _find_repeated_phrase(text: str, product: str = "") -> str:
     product's own name never counts, and link-only lines are skipped. "" if nothing repeats."""
     skip = set(_content_seq(product)) | _FILLER
     lines = [_URL_RE.sub(" ", ln).strip() for ln in text.split("\n")]
-    seqs = [_content_seq(ln, skip) for ln in lines if ln]
-    first_seen: dict[tuple[str, str], int] = {}
+    seqs = [_content_pairs(ln, skip) for ln in lines if ln]
+    first_seen: dict[tuple[str, str], tuple[int, str]] = {}
     for i, seq in enumerate(seqs[1:], 1):
-        for pair in dict.fromkeys(zip(seq, seq[1:])):
-            if first_seen.setdefault(pair, i) != i:
-                return " ".join(pair)
+        for (s1, w1), (s2, w2) in zip(seq, seq[1:]):
+            seen = first_seen.setdefault((s1, s2), (i, f"{w1} {w2}"))
+            if seen[0] != i:
+                return seen[1]
     if seqs:
-        first = _triples(seqs[0])
+        first = _phrase_triples(seqs[0])
         for seq in seqs[1:]:
-            shared = set(first) & set(_triples(seq))
+            later = _phrase_triples(seq)
+            shared = next((t for t in first if t in later), None)
             if shared:
-                return " ".join(next(t for t in first if t in shared))
+                return first[shared]
     lines_with: dict[str, int] = {}
     for seq in seqs:
-        for w in dict.fromkeys(seq):
-            lines_with[w] = lines_with.get(w, 0) + 1
-    return next((w for seq in seqs for w in seq if lines_with[w] >= 3), "")
+        for stem in dict.fromkeys(s for s, _ in seq):
+            lines_with[stem] = lines_with.get(stem, 0) + 1
+    return next((w for seq in seqs for s, w in seq if lines_with[s] >= 3), "")
 
 
 def repeating_lines(text: str) -> list[int]:

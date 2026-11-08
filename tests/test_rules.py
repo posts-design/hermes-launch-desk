@@ -278,7 +278,7 @@ def test_the_good_live_posts_repeat_nothing(text, product):
 def test_a_word_in_three_lines_repeats():
     text = "Themes are here.\n\nPick a colour theme.\n\nEvery theme follows your site."
     [f] = [f for f in check(text, network="x") if f.rule_id == "repeated-phrase"]
-    assert f.found == "theme"
+    assert f.found == "themes"
 
 
 def test_the_product_name_may_appear_in_every_line():
@@ -332,3 +332,15 @@ def test_lower_case_voice_relaxes_the_rule():
     voice = ["shipped a small thing today. pet pages load faster."]
     assert "lower-start" not in ids("themes are here.", voice_samples=voice)
     assert next(r for r in RULES if r.id == "lower-start").relaxable
+
+
+# ------------------------------------------------------------------ the post's own words (I1)
+
+@pytest.mark.parametrize("text,phrase", [
+    ("Brookhour 2.0 is out.\n\nStart a focus session from the menu bar.\n\nEach focus session lands on your calendar.",
+     "focus session"),
+    ("Status pages are live.\n\nOur status pages load fast.\n\nShare status pages with anyone.", "status pages"),
+])
+def test_the_repeated_phrase_is_quoted_in_the_posts_own_words(text, phrase):
+    [f] = [f for f in check(text, network="x", product="Brookhour") if f.rule_id == "repeated-phrase"]
+    assert f.found == phrase and f"\"{phrase}\"" in f.fix
