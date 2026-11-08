@@ -610,17 +610,27 @@ def _keep_what_shipped(post: str, draft: Draft, brief: Brief, brand: BrandKit,
     that said what shipped. Then the model's own first line (checked with the draft) goes back in
     as line 2, if the post then says what shipped and fails nothing it did not fail before."""
     lines = post.strip().split("\n")
-    if not draft.use_case or use_case_carried(draft.use_case, "\n".join(lines[1:])):
+    if not draft.use_case or says_what_shipped("\n".join(lines[1:]), draft.use_case, brief.what):
         return post
     model_first = draft.caption.strip().split("\n")[0].strip()
     if not model_first or _same(model_first, lines[0]):
         return post
     candidate = re.sub(r"\n{3,}", "\n\n", "\n".join([lines[0], "", model_first, "", *lines[1:]])).strip()
-    if not use_case_carried(draft.use_case, "\n".join(candidate.split("\n")[1:])):
+    if not says_what_shipped("\n".join(candidate.split("\n")[1:]), draft.use_case, brief.what):
         return post
     before = {(f.rule_id, f.found) for f in post_failures(post, brief, brand, refs)}
     after = {(f.rule_id, f.found) for f in post_failures(candidate, brief, brand, refs)}
     return candidate if after <= before else post
+
+
+def says_what_shipped(body: str, use_case: str, what: str = "") -> bool:
+    """True when the body carries the draft's use case (use_case_carried), or at least two and 40%
+    of the content words of the founder's own words for what shipped."""
+    if use_case_carried(use_case, body):
+        return True
+    words = _stems(what)
+    shared = len(words & _stems(body))
+    return shared >= 2 and shared >= _CARRIED * len(words)
 
 
 def kept_from_style(text: str, brief: Brief, brand: BrandKit) -> set[str]:
@@ -695,7 +705,8 @@ def quote_phrases(f: Failure) -> str:
 
 
 def checklist(text: str, failures: Sequence[Failure], network: str,
-              use_case: str = "", from_site: Sequence[str] = (), kept: Iterable[str] = ()) -> list[CheckLine]:
+              use_case: str = "", from_site: Sequence[str] = (), kept: Iterable[str] = (),
+              what: str = "") -> list[CheckLine]:
     """The post's checks as lines for the founder, one per rule (the three style rules share
     one), pass or fail, from the failures post_failures() found. Given the draft's use case (the
     wizard passes it when the founder's words lead, since they replace the caption's first line),
@@ -741,6 +752,6 @@ def checklist(text: str, failures: Sequence[Failure], network: str,
             " or your site says (" + ", ".join(f'"{p}"' for p in from_site) + ")" if from_site else ""),
              lambda f: f"Details you didn't give: {quote_phrases(f)}".rstrip(": ")),
     ]
-    if use_case and not use_case_carried(use_case, "\n".join(text.split("\n")[1:])):
+    if use_case and not says_what_shipped("\n".join(text.split("\n")[1:]), use_case, what):
         out.append(CheckLine((USE_CASE_MISSING,), False, "Says what shipped: no line says it now"))
     return out

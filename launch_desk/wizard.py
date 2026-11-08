@@ -26,8 +26,8 @@ from typing import Any, Callable
 
 from . import followup
 from .brand import NEUTRAL, PRESET_ACCENTS, fetch_brand, font_face, http_get
-from .draft import (UNSUPPORTED, DraftError, card_line, checklist, draft_post, hook_options, kept_from_style,
-                    post_failures, quote_phrases, site_details)
+from .draft import (PHRASE_SEP, UNSUPPORTED, DraftError, card_line, checklist, draft_post, hook_options,
+                    kept_from_style, post_failures, site_details)
 from .hooks import pick_hook_shapes
 from .host import Host, SourceUnavailable
 from .models import BrandKit, Brief, CheckLine, Draft, HookOption, Reference
@@ -405,9 +405,10 @@ def caught_line(draft: Draft) -> str:
         if f.rule_id in still or base not in CAUGHT:
             continue
         found = groups.setdefault(base, [])
-        if f.found:
-            cut = replace(f, found=_cut(f.found, FOUND_MAX))  # cut before quoting: no quote left open
-            shown = quote_phrases(cut) if base in _QUOTE or base == UNSUPPORTED else cut.found
+        phrases = f.found.split(PHRASE_SEP) if base == UNSUPPORTED else [f.found]
+        for phrase in filter(None, phrases):  # each phrase once, cut before quoting
+            phrase = _cut(phrase, FOUND_MAX)
+            shown = f'"{phrase}"' if base in _QUOTE or base == UNSUPPORTED else phrase
             if shown.lower() not in (x.lower() for x in found):
                 found.append(shown)
     if not groups:
@@ -491,6 +492,7 @@ class _Pending:
         text = self.text
         return checklist(text, post_failures(text, self.brief, self.brand, self.refs), self.brief.network,
                          use_case=str(self.data.get("use_case") or "") if self.option.source == "founder" else "",
+                         what=self.brief.what,
                          from_site=site_details(text, self.brief, self.brand),
                          kept=kept_from_style(text, self.brief, self.brand))
 

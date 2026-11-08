@@ -942,3 +942,13 @@ def test_a_relaxed_rule_says_it_was_kept_from_your_style():
     for rules in (("em-dash", "emoji", "hashtags"), ("placeholder", "lower-start")):
         assert lines[rules].ok and lines[rules].text != plain[rules].text
     assert kept_from_style("Pet pages take themes now.", BRIEF, brand) == set()
+
+
+def test_says_what_shipped_also_counts_the_founders_own_words_for_what_shipped():
+    post = ("People kept asking to see their deep work next to their meetings.\n\nBrookhour 2.0 is out. Focus "
+            "sessions now show up in your calendar.\n\nhttps://posts-design.github.io/launch-desk-samples/brookhour/")
+    use = "Seeing each focus session in your Mac calendar, next to your meetings."
+    fails = post_failures(post, K2_BRIEF, K2_BRAND, REFS)
+    assert [c for c in checklist(post, fails, "x", use_case=use) if "use-case-missing" in c.rules]
+    assert not [c for c in checklist(post, fails, "x", use_case=use, what=K2_BRIEF.what)
+                if "use-case-missing" in c.rules]

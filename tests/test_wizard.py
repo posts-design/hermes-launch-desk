@@ -1393,3 +1393,13 @@ def test_caught_line_names_a_repeated_phrase():
 
 def test_the_wizard_has_one_card_headline_source():
     assert not hasattr(wizard, "card_headline")
+
+
+def test_caught_line_names_each_invented_detail_once():
+    from launch_desk.models import Draft, Failure
+    d = Draft(("a", "b", "c"), "x", (), True, "", (
+        Failure("unsupported-detail", "m", "f", "day, one"),
+        Failure("use-case:unsupported-detail", "m", "f", "day"),
+        Failure("hook2:unsupported-detail", "m", "f", "one, week")))
+    line = wizard.caught_line(d)
+    assert line.count('"day"') == 1 and line.count('"one"') == 1 and line.count('"week"') == 1
