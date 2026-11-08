@@ -855,3 +855,35 @@ def test_a_lower_case_voice_drops_the_capitals_rule_from_the_prompt():
     strict = build_brief_prompt(BRIEF, BRAND, REFS, SHAPES, set())[0]
     relaxed = build_brief_prompt(BRIEF, BRAND, REFS, SHAPES, {"lower-start"})[0]
     assert len(relaxed) < len(strict)
+
+
+# ------------------------------------------------------------------ fallback card lines end cleanly (R43)
+
+from launch_desk.draft import _product_line  # noqa: E402
+
+_BAD_END = {"a", "an", "the", "and", "or", "but", "so", "to", "of", "in", "on", "at", "for", "with", "from", "by"}
+
+
+def product_line(name, what):
+    return _product_line(Brief("feature", "x", what, "https://x.app"),
+                         BrandKit(name, "https://x.app", "", "#fff", "#111", "#f60", None, None))
+
+
+@pytest.mark.parametrize("name,what,expected", [
+    ("posts.design", "posts.design MCP: your agent can now search 5,000+ real launch posts, OG images and Headers",
+     "posts.design MCP is live."),
+    ("Brookhour", "Brookhour 2.0: focus sessions now show up in your calendar", "Brookhour 2.0 is live."),
+    ("Fernlight", "photo diagnosis: snap a leaf, get what is wrong and what to do", "Fernlight: photo diagnosis, snap a leaf"),
+    ("Inkwell", "dark mode for the editor", "Inkwell: dark mode for the editor"),
+    ("Pawr", "a much faster way to share every single pet page with your friends and family", "Pawr is live."),
+])
+def test_the_fallback_card_line_ends_at_a_natural_break(name, what, expected):
+    assert product_line(name, what) == expected
+
+
+@pytest.mark.parametrize("what", ["search for 5,000+ launch posts", "themes for the", "faster pages and",
+                                  "pages that load in 3", "custom themes: now in"])
+def test_the_fallback_never_ends_on_a_number_or_small_word(what):
+    line = product_line("Pawr", what)
+    last = line.rstrip(".").split()[-1].lower()
+    assert last not in _BAD_END and not last[0].isdigit() and len(line.split()) <= 9

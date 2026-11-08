@@ -466,15 +466,17 @@ def draft_post(host: Host, brief: Brief, brand: BrandKit, refs: Sequence[Referen
 # ------------------------------------------------------------------ the card line
 
 CARD_LINE_WORDS = 9
-_CARD_RULES = frozenset({"stock-phrase", "template-opener", "placeholder", "link-first-line", "private-link"})
+_CARD_RULES = frozenset({"stock-phrase", "template-opener", "placeholder", "link-first-line", "private-link",
+                         "lower-start"})
 _CLAUSE_RE = re.compile(r"(?<=[:;,.!?])\s+|\s+[\u2013\u2014-]\s+")
 
 
-def _card_ok(line: str, first: str, facts: str) -> bool:
+def _card_ok(line: str, first: str, facts: str, product: str = "") -> bool:
     """A card line that is short, plain, from the facts and not a restatement of line 1."""
     if not line or first_line_words(line) > CARD_LINE_WORDS or _same(line, first):
         return False
-    if {f.rule_id for f in check(line, network="x")} & _CARD_RULES or unsupported_details(line, facts):
+    if ({f.rule_id for f in check(line, network="x", product=product)} & _CARD_RULES
+            or unsupported_details(line, facts)):
         return False
     a, b = _stems(first), _stems(line)
     return not (a and b and len(a & b) >= 0.6 * min(len(a), len(b)))
@@ -487,22 +489,41 @@ def _cap_first(text: str) -> str:
     return text[:1].upper() + text[1:]
 
 
+# A card line never ends on one of these, or on a number: it would stop mid-phrase.
+_BAD_END = frozenset(
+    "a an the and or but nor so yet to of in on at for with from by into onto about over under via per "
+    "as than then your our their its my".split()
+)
+
+
+def _ends_well(text: str) -> bool:
+    last = text.split()[-1].lower().strip(":;,.!?") if text.split() else ""
+    return bool(last) and last not in _BAD_END and last not in _NUMBER_WORDS and not last[0].isdigit()
+
+
 def _product_line(brief: Brief, brand: BrandKit) -> str:
-    """The product name and what shipped, from the brief: "Fernlight: photo diagnosis". When
-    the first clause is only the name ("Brookhour 2.0:"), the next clause follows it. At most
-    CARD_LINE_WORDS words, cut at a word and never on a small word."""
+    """The product name and what shipped, from the brief, ending at a natural break: whole
+    clauses only ("Fernlight: photo diagnosis, snap a leaf"), at most CARD_LINE_WORDS words,
+    never ending on a number or a small word. When only the name fits ("Brookhour 2.0:" then a
+    long clause), or nothing ends well, a short "<name> is live." line."""
     name = " ".join((brand.name or "").split())
     clauses = [c.strip(" :;,.") for c in _CLAUSE_RE.split(" ".join((brief.what or "").split())) if c.strip(" :;,.")]
+    live = f"{name} is live." if name else ""
     if not clauses:
-        return name
+        return live
     named = bool(name) and name.lower() in clauses[0].lower()
-    line = clauses[0] if named else (f"{name}: {clauses[0]}" if name else clauses[0])
-    if named and len(clauses[0].split()) <= 2 and len(clauses) > 1:
-        line += ": " + clauses[1]
-    words = line.split()[:CARD_LINE_WORDS]
-    while len(words) > 1 and words[-1].lower().strip(":;,.") in STOPWORDS:
-        words.pop()
-    return _cap_first(" ".join(words).rstrip(" :;,"))
+    text = clauses[0] if named or not name else f"{name}: {clauses[0]}"
+    only_name = named and len(clauses[0].split()) <= 2  # "Brookhour 2.0": its version may end it
+    if len(text.split()) > CARD_LINE_WORDS or not (only_name or _ends_well(text)):
+        return live or ""
+    for clause in clauses[1:]:
+        candidate = text + (": " if only_name and text == clauses[0] else ", ") + clause
+        if len(candidate.split()) > CARD_LINE_WORDS or not _ends_well(candidate):
+            break
+        text = candidate
+    if only_name and text == clauses[0]:
+        return f"{text} is live."
+    return _cap_first(text)
 
 
 def card_line(candidate: str, post: str, brief: Brief, brand: BrandKit, use_case: str = "") -> str:
@@ -517,7 +538,7 @@ def card_line(candidate: str, post: str, brief: Brief, brand: BrandKit, use_case
     body = [ln for ln in lines[1:] if ln and not _URL_RE.fullmatch(ln)]
     shipped = [ln for ln in body if use_case and use_case_carried(use_case, ln)] or body
     for line in [" ".join((candidate or "").split()), *shipped]:
-        if _card_ok(line, first, facts):
+        if _card_ok(line, first, facts, brand.name):
             return line
     fallback = _product_line(brief, brand)
     return fallback if fallback and not _same(fallback, first) else " ".join((brand.name or "").split())
