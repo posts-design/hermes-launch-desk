@@ -2,17 +2,21 @@
 
 Usage: python tools/render_assets.py INPUT_DIR [OUT_DIR] [--banner]
 
-INPUT_DIR holds files fetched once by hand (not committed):
-  pawr-og.png     pawr.link's og:image, used as the card's screenshot
-  pawr-page.png   a pawr.link profile page (a phone-shaped crop of pawr.link's own
-                  landing-screenshot-max.webp), the split card's second screenshot
-  pawr-logo.png   the logo fetch_brand() saved for https://pawr.link
-  posts-logo.png  the logo fetch_brand() saved for https://posts.design
-  cli.ansi        `tmux capture-pane -p -e` of a live `hermes chat` run of /launch
-OUT_DIR defaults to the repo's assets/. The three cards (hero, statement, split) and the feed
-preview carry the post from a live /launch run on 2026-11-06, the run cli.ansi captures. The
-banner keeps the card and post of the 2026-11-05 run. The brand colours are what fetch_brand()
-read from each site on 2026-11-05.
+INPUT_DIR holds files gathered once by hand (not committed):
+  posts-shot.png          the posts.design screenshot attached to the K1 run
+  posts-logo.png          the logo fetch_brand() saved for https://posts.design
+  brookhour-desktop.png   the two Brookhour sample-app screenshots attached to the K2 run
+  brookhour-phone.png
+  brookhour-logo.png      the logo fetch_brand() saved for the Brookhour sample site
+  fernlight-phone.png     the two Fernlight sample-app screenshots attached to the K3 run
+  fernlight-desktop.png
+  fernlight-logo.png      the logo fetch_brand() saved for the Fernlight sample site
+  cli.ansi                (optional) `tmux capture-pane -p -e` of a live `hermes chat` run of /launch
+OUT_DIR defaults to the repo's assets/. Each card carries the post and card line of a live /launch
+run (hook 1, the founder's words): the hero card and the feed preview are K1 (posts.design MCP,
+2026-11-07), the statement card is K2 (Brookhour, 2026-11-08) and the split card is K3 (Fernlight,
+2026-11-08). Brookhour and Fernlight are sample apps made for this demo, on public sample sites. The
+brand values are what fetch_brand() read from each site on 2026-11-08. Every post passes every check.
 """
 from __future__ import annotations
 
@@ -27,48 +31,68 @@ from PIL import Image, ImageDraw, ImageFilter, ImageFont
 ROOT = Path(__file__).resolve().parent.parent
 sys.path.insert(0, str(ROOT))
 
-from launch_desk.draft import card_line, facts_text, unsupported_details  # noqa: E402
+from launch_desk.draft import card_line, checklist, post_failures  # noqa: E402
 from launch_desk.models import BrandKit, Brief  # noqa: E402
 from launch_desk.render import FONT_PATH, choose_layout, load_font, render_card, render_feed_preview  # noqa: E402
-from launch_desk.rules import check, x_length  # noqa: E402
+from launch_desk.rules import x_length  # noqa: E402
 
 X = (1200, 675)
 INTER = str(FONT_PATH)
 
 # ------------------------------------------------------------------ the live runs
 
-PAWR_BRIEF = Brief("feature", "x", "custom themes for pet profile pages", "https://pawr.link",
-                   detail="people kept asking to match their pet page to their own site")
-# The 2026-11-06 run (cli.ansi): the cards and the feed preview.
-RUN_HOOK = "Your pet page should match your own site."
-RUN_CAPTION = (
-    "Your pet page should match your own site.\n\n"
-    "Custom themes are live for pet profile pages on pawr.link.\n\n"
-    "One page for everything you are, do, and care about.\n\n"
-    "https://pawr.link"
+SAMPLES_URL = "https://posts-design.github.io/launch-desk-samples"
+POSTS_BRIEF = Brief("feature", "x", "posts.design MCP: your agent can now search 5,000+ real launch posts, OG images "
+                    "and Headers", "https://posts.design/mcp",
+                    detail="we kept pasting our own launch posts into Claude by hand")
+POSTS_POST = (
+    "We kept pasting our own launch posts into Claude by hand.\n\n"
+    "Now your agent can search 5,000+ real launch posts, OG images and Headers.\n\n"
+    "Ask it for directions, examples and breakdowns for your next post design.\n\n"
+    "https://posts.design/mcp"
 )
-# The 2026-11-05 run: the banner's card and its scroll test.
-PAWR_HOOK = "Check this out: pet pages can now use custom themes."
-PAWR_CAPTION = (
-    "Check this out: pet pages can now use custom themes.\n\n"
-    "People kept asking to match their pet page to their own site. So we built themes.\n\n"
-    "One change, but it means your pet's page can sit next to your work without looking out of place.\n\n"
-    "https://pawr.link"
+POSTS_CARD = "posts.design MCP: search 5,000+ launch posts, OG images, Headers"
+BROOKHOUR_BRIEF = Brief("feature", "x", "Brookhour 2.0: focus sessions now show up in your calendar",
+                        f"{SAMPLES_URL}/brookhour/",
+                        detail="people kept asking to see their deep work next to their meetings")
+BROOKHOUR_POST = (
+    "People kept asking to see their deep work next to their meetings.\n\n"
+    "Brookhour 2.0 adds focus sessions to your calendar.\n\n"
+    "See a session sit beside a meeting on your Mac.\n\n"
+    f"{SAMPLES_URL}/brookhour/"
 )
-
-
-def pawr_kit(inp: Path) -> BrandKit:
-    return BrandKit(name="pawr.link", url="https://pawr.link",
-                    tagline="one pawrful page for everything you are, do, and care about.",
-                    bg="#FAFAFA", ink="#111111", accent="#6A3CFF", font_family="Inter",
-                    logo_path=str(inp / "pawr-logo.png"))
+BROOKHOUR_CARD = "Brookhour 2.0: focus sessions in your calendar"
+FERNLIGHT_BRIEF = Brief("feature", "x", "photo diagnosis: snap a leaf, get what is wrong and what to do",
+                        f"{SAMPLES_URL}/fernlight/",
+                        detail="most of our support emails were blurry photos of sad leaves")
+FERNLIGHT_POST = (
+    "Most of our support emails were blurry photos of sad leaves.\n\n"
+    "We shipped photo diagnosis in Fernlight.\n\n"
+    "Snap a leaf. Get the likely cause and three things to do today.\n\n"
+    f"{SAMPLES_URL}/fernlight/"
+)
+FERNLIGHT_CARD = "Fernlight ships photo diagnosis for houseplants"
 
 
 def posts_kit(inp: Path) -> BrandKit:
     return BrandKit(name="posts.design", url="https://posts.design",
-                    tagline="Social media post design inspiration: 4,400+ real posts from 1,060+ brands",
-                    bg="#F5F5F5", ink="#111111", accent="#FF9602", font_family="Inter",
-                    logo_path=str(inp / "posts-logo.png"))
+                    tagline="Social media post design inspiration: 4,400+ real posts from 1,080+ brands",
+                    bg="#101010", ink="#FAFAFA", accent="#FF9602", font_family="Inter",
+                    logo_path=str(inp / "posts-logo.png"), font_face="sans")
+
+
+def brookhour_kit(inp: Path) -> BrandKit:
+    return BrandKit(name="Brookhour", url=f"{SAMPLES_URL}/brookhour/",
+                    tagline="A calm focus timer for Mac. Your deep work, right next to your meetings.",
+                    bg="#FFF6EC", ink="#111111", accent="#FF5B2E", font_family="Iowan Old Style",
+                    logo_path=str(inp / "brookhour-logo.png"), font_face="serif")
+
+
+def fernlight_kit(inp: Path) -> BrandKit:
+    return BrandKit(name="Fernlight", url=f"{SAMPLES_URL}/fernlight/",
+                    tagline="Photo diagnosis for your houseplants: the likely cause and three things to do today.",
+                    bg="#F1F6E9", ink="#111111", accent="#17A34A", font_family="SF Pro Rounded",
+                    logo_path=str(inp / "fernlight-logo.png"), font_face="rounded")
 
 
 # ------------------------------------------------------------------ helpers
@@ -145,13 +169,15 @@ def save(im: Image.Image, path: Path, colors: int | None = None) -> Path:
 
 # ------------------------------------------------------------------ scroll test (real values)
 
-def scroll_test(kit: BrandKit, hook: str = PAWR_HOOK, caption: str = PAWR_CAPTION) -> list[str]:
-    """The checks the plugin runs on the post, as banner rows. Fails loudly if the post fails."""
-    failures = check(caption, network="x") + unsupported_details(caption, facts_text(PAWR_BRIEF, kit))
+def scroll_test(kit: BrandKit, brief: Brief, post: str, card: str) -> list[str]:
+    """The checks the plugin runs on the post, as banner rows. Fails loudly if the post fails any
+    check, or if the card line is not the one /launch would draw."""
+    failures = post_failures(post, brief, kit, [])
     assert not failures, [f.rule_id for f in failures]
-    words = len(hook.split())
-    return [f"First line: {words} words", "No stock launch phrases", "No details you didn’t give",
-            f"{x_length(caption)} of 280 characters"]
+    assert card_line(card, post, brief, kit) == card, card
+    lines = {c.rules[0]: c.text for c in checklist(post, failures, "x")}
+    return [lines["first-line-short"], lines["stock-phrase"], "No details you didn\u2019t give",
+            f"{x_length(post)} of 280 characters"]
 
 
 # ------------------------------------------------------------------ feed preview frame
@@ -189,7 +215,7 @@ BG = (14, 15, 18)
 ORANGE = (255, 150, 2)
 
 
-def banner(card: Path, kit: BrandKit, posts: BrandKit, out: Path) -> Path:
+def banner(card: Path, posts: BrandKit, brief: Brief, post: str, card_text: str, out: Path) -> Path:
     W, H = 1200, 600
     im = Image.new("RGBA", (W, H), BG + (255,))
 
@@ -207,7 +233,7 @@ def banner(card: Path, kit: BrandKit, posts: BrandKit, out: Path) -> Path:
     cx, cy = W - 64 - cw, 92
     paste_round(im, c, (cx, cy), 14, ring=(255, 255, 255, 30), shade=((24, 40, 160), (4, 8, 90)))
 
-    rows = scroll_test(kit)
+    rows = scroll_test(posts, brief, post, card_text)
     pw, row_h = 300, 33
     ph = 62 + row_h * len(rows) + 12
     px, py = W - 36 - pw, cy + c.height - 84
@@ -537,20 +563,22 @@ def main(argv: list[str]) -> int:
     out = Path(argv[2]) if len(argv) > 2 else ROOT / "assets"
     shots = out / "screenshots"
     shots.mkdir(parents=True, exist_ok=True)
-    pawr, posts = pawr_kit(inp), posts_kit(inp)
-
-    scroll_test(pawr, RUN_HOOK, RUN_CAPTION)  # the post on the cards passes the plugin's checks
-    headline = card_line("", RUN_CAPTION, PAWR_BRIEF, pawr)  # the card line /launch draws
-    og, page = inp / "pawr-og.png", inp / "pawr-page.png"
-    # Each layout as the wizard picks it: one screenshot, none, two.
-    for name, used in (("card-x.png", [og]), ("card-statement.png", []), ("card-split.png", [og, page])):
-        layout = choose_layout(used, headline)
-        render_card(pawr, used, headline, X, shots / name, layout=layout)
-    preview = render_feed_preview(pawr, RUN_CAPTION, shots / "card-x.png", shots / "feed-preview.png", scale=2)
+    posts, brookhour, fernlight = posts_kit(inp), brookhour_kit(inp), fernlight_kit(inp)
+    runs = ((posts, POSTS_BRIEF, POSTS_POST, POSTS_CARD), (brookhour, BROOKHOUR_BRIEF, BROOKHOUR_POST, BROOKHOUR_CARD),
+            (fernlight, FERNLIGHT_BRIEF, FERNLIGHT_POST, FERNLIGHT_CARD))
+    for kit, brief, post, card in runs:  # every post on a card passes the plugin's checks
+        scroll_test(kit, brief, post, card)
+    # Each layout as the wizard draws it: one screenshot (K1), none (K2), two (K3).
+    for name, kit, used, card in (
+            ("card-x.png", posts, [inp / "posts-shot.png"], POSTS_CARD),
+            ("card-statement.png", brookhour, [], BROOKHOUR_CARD),
+            ("card-split.png", fernlight, [inp / "fernlight-phone.png", inp / "fernlight-desktop.png"], FERNLIGHT_CARD)):
+        render_card(kit, used, card, X, shots / name, layout=choose_layout(used, card))
+    preview = render_feed_preview(posts, POSTS_POST, shots / "card-x.png", shots / "feed-preview.png", scale=2)
     frame_preview(preview)
     if with_banner:
-        card = render_card(pawr, og, card_line("", PAWR_CAPTION, PAWR_BRIEF, pawr), X, out / "_banner-card.png")
-        banner(card, pawr, posts, out / "banner.png")
+        card = render_card(posts, [inp / "posts-shot.png"], POSTS_CARD, X, out / "_banner-card.png")
+        banner(card, posts, POSTS_BRIEF, POSTS_POST, POSTS_CARD, out / "banner.png")
         card.unlink()
     if (inp / "cli.ansi").exists():
         terminal(inp / "cli.ansi", shots / "cli-flow.png", start="/launch https", end="to select")
