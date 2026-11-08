@@ -439,7 +439,7 @@ def test_use_case_is_carried_at_forty_percent_of_its_words():
 
 
 @pytest.mark.parametrize("detail,shape_id", [("", "audience-call-out"),
-                                             ("people kept asking to match their own site", "you-asked")])
+                                             ("people kept asking to match their own site", "audience-call-out")])
 def test_prompt_carries_the_picked_hook_shapes(detail, shape_id):
     from launch_desk.hooks import HOOK_SHAPES
     brief = Brief("feature", "x", "custom themes for pet profile pages", "https://pawr.link", detail=detail)
@@ -636,16 +636,12 @@ PAWR_LIVE = Draft(("Pet pages look the same. We built themes to match your site.
                   (), False, "Match your pet page to your own site.")
 
 
-def test_a_founder_post_that_lost_what_shipped_fails_a_says_what_shipped_line():
-    [founder, *_] = hook_options(PAWR_LIVE, PAWR_BRIEF, PAWR_BRAND, REFS)
-    assert founder.dropped
-    lines = checklist(founder.post, post_failures(founder.post, PAWR_BRIEF, PAWR_BRAND, REFS), "x",
-                      use_case=PAWR_LIVE.use_case)
+def test_a_founder_post_that_never_says_what_shipped_fails_a_says_what_shipped_line():
+    post = ("Most of our support emails were blurry photos of sad leaves.\n\nA small thing, but it helps."
+            "\n\nhttps://fernlight.app")
+    lines = checklist(post, post_failures(post, K3_BRIEF, K3_BRAND, REFS), "x", use_case=K3_USE, what=K3_BRIEF.what)
     missing = [line for line in lines if "use-case-missing" in line.rules]
     assert len(lines) <= 12 and len(missing) == 1 and not missing[0].ok
-    kept = PAWR_LIVE.caption
-    lines = checklist(kept, post_failures(kept, PAWR_BRIEF, PAWR_BRAND, REFS), "x", use_case=PAWR_LIVE.use_case)
-    assert not [line for line in lines if "use-case-missing" in line.rules]
 
 
 def test_the_prompt_tells_the_model_the_founder_words_lead():
@@ -974,3 +970,62 @@ def test_a_lower_case_brand_leading_a_hook_is_not_a_failure():
     host = FakeHost(llm_replies=[reply])
     d = draft_post(host, brief, brand, REFS, SHAPES)
     assert len(host.llm_calls) == 1 and d.failures == ()
+
+
+# ------------------------------------------------------------------ I4 and R47: naming what shipped is no echo
+
+JOT_BRIEF = Brief("feature", "x", "offline mode for notes", "https://jotter.app",
+                  detail="we finally shipped offline mode for notes")
+JOT_BRAND = BrandKit("Jotter", "https://jotter.app", "", "#fff", "#111", "#f60", None, None)
+
+
+def jot_draft(caption, hooks=("Jotter notes now work offline.", "Every notes app needs a signal. Jotter does not.",
+                              "Are you on a plane a lot? Stop losing notes."),
+              use_case="Offline mode keeps every note on your device."):
+    return Draft(tuple(hooks), caption, (), False, use_case)
+
+
+def test_a_line_naming_what_shipped_is_not_an_echo_of_the_founder_line():
+    caption = ("Jotter notes now work offline.\n\nOffline mode keeps every note on your device until you "
+               "reconnect.\n\nhttps://jotter.app")
+    [founder, *_] = hook_options(jot_draft(caption), JOT_BRIEF, JOT_BRAND, REFS)
+    assert not founder.dropped
+    assert founder.post.splitlines()[2].startswith("Offline mode keeps every note")
+    assert "Jotter notes now work offline." not in founder.post
+    assert post_failures(founder.post, JOT_BRIEF, JOT_BRAND, REFS) == []
+
+
+def test_the_founder_line_counts_toward_says_what_shipped():
+    caption = "Jotter notes now work offline.\n\nNo signal needed.\n\nhttps://jotter.app"
+    [founder, *_] = hook_options(jot_draft(caption), JOT_BRIEF, JOT_BRAND, REFS)
+    lines = checklist(founder.post, post_failures(founder.post, JOT_BRIEF, JOT_BRAND, REFS), "x",
+                      use_case="Offline mode keeps every note on your device.", what=JOT_BRIEF.what)
+    assert not [c for c in lines if "use-case-missing" in c.rules]
+
+
+def test_a_model_hook_echoing_the_founder_words_is_not_offered():
+    d = Draft(("Brookhour 2.0 adds focus sessions to your calendar.",
+               "You asked for deep work next to meetings. It's here.",
+               "Are you a maker? Stop guessing."),
+              "Brookhour 2.0 adds focus sessions to your calendar.\n\nSee a session sit beside a meeting on your "
+              "Mac.\n\nhttps://brookhour.app", (), False, "Focus sessions show up in your calendar.")
+    texts = [o.text for o in hook_options(d, K2_BRIEF, K2_BRAND, REFS)]
+    assert "You asked for deep work next to meetings. It's here." not in texts
+    assert texts[0] == founder_hook(K2_BRIEF.detail)
+
+
+def test_a_model_hook_sharing_half_the_founder_words_is_not_offered():
+    d = jot_draft("Jotter notes now work offline.\n\nNo signal needed.\n\nhttps://jotter.app",
+                  hooks=("We finally shipped it, at last.", "Every notes app needs a signal. Jotter does not.",
+                         "Jotter notes now work offline."))
+    texts = [o.text for o in hook_options(d, JOT_BRIEF, JOT_BRAND, REFS)]
+    assert "We finally shipped it, at last." not in texts
+
+
+def test_with_every_model_hook_echoing_only_the_founder_option_is_left():
+    d = Draft(("You asked for deep work next to meetings. It's here.",
+               "People asked for deep work next to meetings.", "Deep work sits next to your meetings now."),
+              "You asked for deep work next to meetings. It's here.\n\nBrookhour 2.0 adds focus sessions to your "
+              "calendar.\n\nhttps://brookhour.app", (), False, "Focus sessions show up in your calendar.")
+    opts = hook_options(d, K2_BRIEF, K2_BRAND, REFS)
+    assert [o.source for o in opts] == ["founder"]

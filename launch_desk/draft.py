@@ -26,7 +26,7 @@ from .host import Host
 from .models import BrandKit, Brief, CheckLine, Draft, Failure, HookOption, HookShape, Reference
 from .references import BRAND_CHARS, STOPWORDS, shape_note
 from .rules import (RULES, STOCK_PHRASES, check, first_line_words, has_link, is_private_link, relaxed_rules,
-                    echo_lines, style_counts, x_length)
+                    echo_lines, echoes, style_counts, x_length)
 
 DRAFT_SCHEMA: dict = {
     "type": "object",
@@ -415,7 +415,7 @@ def _failures(hooks: Sequence[str], caption: str, use_case: str, brief: Brief,
     left out: the model only copies it, and the checklist shows it."""
     captions = outside_captions(refs)
     found = list(check(caption, network=brief.network, reference_captions=captions, voice_samples=voice,
-                       own_words=own_words(brief), product=product))
+                       own_words=own_words(brief), product=product, what=brief.what))
     if is_private_link(brief.product_url):
         found = [f for f in found if f.rule_id != "private-link"]
     found += unsupported_details(caption, facts)
@@ -570,7 +570,8 @@ def founder_hook(detail: str) -> str:
 def post_failures(text: str, brief: Brief, brand: BrandKit, refs: Sequence[Reference]) -> list[Failure]:
     """The scroll test and unsupported_details() for a post as it will be posted."""
     found = check(text, network=brief.network, reference_captions=outside_captions(refs),
-                  voice_samples=brand.voice_samples, own_words=own_words(brief), product=brand.name)
+                  voice_samples=brand.voice_samples, own_words=own_words(brief), product=brand.name,
+                  what=brief.what)
     return found + unsupported_details(text, facts_text(brief, brand))
 
 
@@ -581,10 +582,10 @@ def with_first_line(caption: str, hook: str) -> str:
     return "\n".join(lines).strip()
 
 
-def _drop_repeats(post: str, product: str = "") -> tuple[str, tuple[str, ...]]:
+def _drop_repeats(post: str, product: str = "", what: str = "") -> tuple[str, tuple[str, ...]]:
     """Take out the body lines that repeat the first line (most of it, or three of its words);
     a link on such a line stays, alone."""
-    gone = set(echo_lines(post, product))
+    gone = set(echo_lines(post, product, what))
     if not gone:
         return post, ()
     kept, dropped = [], []
@@ -616,27 +617,29 @@ def _keep_what_shipped(post: str, draft: Draft, brief: Brief, brand: BrandKit,
     that said what shipped. Then the model's own first line (checked with the draft) goes back in
     as line 2, if the post then says what shipped and fails nothing it did not fail before."""
     lines = post.strip().split("\n")
-    if not draft.use_case or says_what_shipped("\n".join(lines[1:]), draft.use_case, brief.what):
-        return post
+    if not draft.use_case or says_what_shipped("\n".join(lines[1:]), draft.use_case, brief.what, lines[0]):
+        return post  # the founder's line 1 is fixed, so it counts
     model_first = draft.caption.strip().split("\n")[0].strip()
     if not model_first or _same(model_first, lines[0]):
         return post
     candidate = re.sub(r"\n{3,}", "\n\n", "\n".join([lines[0], "", model_first, "", *lines[1:]])).strip()
-    if not says_what_shipped("\n".join(candidate.split("\n")[1:]), draft.use_case, brief.what):
+    rest = candidate.split("\n")
+    if not says_what_shipped("\n".join(rest[1:]), draft.use_case, brief.what, rest[0]):
         return post
     before = {(f.rule_id, f.found) for f in post_failures(post, brief, brand, refs)}
     after = {(f.rule_id, f.found) for f in post_failures(candidate, brief, brand, refs)}
     return candidate if after <= before else post
 
 
-def says_what_shipped(body: str, use_case: str, what: str = "") -> bool:
-    """True when the body carries the draft's use case (use_case_carried), or at least two and 40%
-    of the content words of the founder's own words for what shipped."""
+def says_what_shipped(body: str, use_case: str, what: str = "", first: str = "") -> bool:
+    """True when the body (the lines after the first) carries the draft's use case
+    (use_case_carried), or the body or a fixed first line (the founder's words) carries at least
+    two and more than half of the content words of the founder's own words for what shipped."""
     if use_case_carried(use_case, body):
         return True
     words = _stems(what)
-    shared = len(words & _stems(body))
-    return shared >= 2 and shared >= _CARRIED * len(words)
+    shared = len(words & _stems(first + "\n" + body))
+    return shared >= 2 and shared > 0.5 * len(words)
 
 
 def kept_from_style(text: str, brief: Brief, brand: BrandKit) -> set[str]:
@@ -657,7 +660,7 @@ def hook_options(draft: Draft, brief: Brief, brand: BrandKit, refs: Sequence[Ref
     options: list[HookOption] = []
     words = founder_hook(brief.detail)
     if words:
-        post, dropped = _drop_repeats(with_first_line(draft.caption, words), brand.name)
+        post, dropped = _drop_repeats(with_first_line(draft.caption, words), brand.name, brief.what)
         post = _keep_what_shipped(post, draft, brief, brand, refs)
         options.append(HookOption(words, "founder", post, dropped))
     lines = draft.caption.strip().split("\n")
@@ -666,6 +669,8 @@ def hook_options(draft: Draft, brief: Brief, brand: BrandKit, refs: Sequence[Ref
     for hook in draft.hooks:
         if any(_same(hook, o.text) for o in options) or any(_same(hook, h) for _, h, _ in scored):
             continue
+        if words and echoes(hook, words, brand.name, brief.what):
+            continue  # R47: a model hook that echoes the founder's words is not a second choice
         post = with_first_line(draft.caption, hook)
         extra = {(f.rule_id, f.found) for f in post_failures(post, brief, brand, refs)} - body
         scored.append((len(extra), hook, post))
@@ -758,6 +763,7 @@ def checklist(text: str, failures: Sequence[Failure], network: str,
             " or your site says (" + ", ".join(f'"{p}"' for p in from_site) + ")" if from_site else ""),
              lambda f: f"Details you didn't give: {quote_phrases(f)}".rstrip(": ")),
     ]
-    if use_case and not says_what_shipped("\n".join(text.split("\n")[1:]), use_case, what):
+    lines = text.split("\n")
+    if use_case and not says_what_shipped("\n".join(lines[1:]), use_case, what, lines[0]):  # line 1 counts
         out.append(CheckLine((USE_CASE_MISSING,), False, "Says what shipped: no line says it now"))
     return out

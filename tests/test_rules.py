@@ -356,3 +356,33 @@ def test_a_voice_sample_opening_with_the_lower_case_brand_does_not_relax_capital
     assert "lower-start" in relaxed_rules(voice)
     assert "lower-start" not in relaxed_rules(voice, product="tldraw")
     assert "lower-start" not in ids("pick a theme.", voice_samples=["we shipped a thing."], product="pawr.link")
+
+
+# ------------------------------------------------------------------ echoes (R47)
+
+from launch_desk.rules import echoes  # noqa: E402
+
+
+def test_echoes_finds_a_shared_three_word_phrase_in_the_references_words():
+    founder = "People kept asking to see their deep work next to their meetings."
+    assert echoes("You asked for deep work next to meetings. It's here.", founder) == "deep work next"
+
+
+def test_echoes_finds_half_the_content_words():
+    assert echoes("Deep focus beats meetings, finally.", "Finally, deep focus.")
+
+
+def test_naming_what_shipped_is_never_an_echo():
+    founder = "We finally shipped offline mode for notes."
+    line = "Offline mode keeps every note on your device until you reconnect."
+    assert echoes(line, founder)
+    assert echoes(line, founder, product="Jotter", what="offline mode for notes") == ""
+
+
+def test_pawr_and_k2_echoes_still_fail_with_what_shipped_left_out():
+    assert [f.found for f in check(PAWR_ECHO, network="x", product="pawr.link",
+                                   what="custom themes for pet profile pages") if f.rule_id == "repeated-phrase"] \
+        == ["people kept asking"]
+    assert [f.found for f in check(K2_RUN3, network="x", product="Brookhour",
+                                   what="Brookhour 2.0: focus sessions now show up in your calendar")
+            if f.rule_id == "repeated-phrase"] == ["deep work next"]

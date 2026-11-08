@@ -192,16 +192,6 @@ def test_hook_question_lists_each_reference_with_its_shape():
     assert shape_note(p["refs"][0]["caption"]) in host.llm_calls[0][0]
 
 
-def test_feature_detail_about_asking_picks_the_you_asked_hook():
-    from launch_desk.hooks import HOOK_SHAPES
-    host = make_host(PHASE1)
-    start(host)  # ARGS carries "people kept asking ..."
-    assert HOOK_SHAPES["you-asked"].shape in host.llm_calls[0][1]
-    quiet = make_host(PHASE1)
-    start(quiet, args=f"{URL} custom themes for pet profile pages")
-    assert HOOK_SHAPES["you-asked"].shape not in quiet.llm_calls[0][1]
-
-
 def test_remaining_failures_are_shown_in_the_phase1_reply():
     bad = {"use_case": "Pick a theme.", "hooks": ["Pet pages are here.", "Themes.", "Your theme."],
            "caption": "Pet pages are here.\n\nPick a theme — any theme — and go.\n\nhttps://pawr.link"}
@@ -1265,6 +1255,7 @@ def test_caught_line_quotes_each_invented_detail_whole():
 
 
 def test_founder_words_replacing_the_only_line_that_says_what_shipped_fail_says_what_shipped():
+    # R44 cannot bring the line back here: "page" would then be in three lines
     first_only = {"use_case": "Custom themes for pet pages.",
                   "hooks": ["Custom themes for pet pages are live.", "Every pet page looked alike until now.",
                             "Are you a pet owner? Stop settling."],

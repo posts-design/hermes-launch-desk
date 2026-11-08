@@ -280,14 +280,40 @@ def _phrase_triples(pairs: list[tuple[str, str]]) -> dict[tuple[str, ...], str]:
     return out
 
 
-def echo_lines(text: str, product: str = "") -> list[int]:
+def _skip(product: str = "", what: str = "") -> set[str]:
+    """Words that never make an echo: the product's name, the words of what shipped, filler."""
+    return set(_content_seq(product)) | set(_content_seq(what)) | _FILLER
+
+
+def echoes(line: str, reference: str, product: str = "", what: str = "", half: bool = True) -> str:
+    """What `line` repeats of `reference`, in the reference's words: a three-word phrase of it
+    (near each other: "deep work ... next"), else half or more of its content words (two at
+    least; not with half=False). The product's name and the words of what shipped never count:
+    naming what shipped is not an echo. "" when it repeats nothing."""
+    skip = _skip(product, what)
+    ref = _content_pairs(_URL_RE.sub(" ", reference), skip)
+    other = _content_pairs(_URL_RE.sub(" ", line), skip)
+    ref_t, other_t = _phrase_triples(ref), _phrase_triples(other)
+    shared_t = next((t for t in ref_t if t in other_t), None)
+    if shared_t:
+        return ref_t[shared_t]
+    words: dict[str, str] = {}
+    for stem, word in ref:
+        words.setdefault(stem, word)
+    other_stems = {stem for stem, _ in other}
+    shared = [stem for stem in words if stem in other_stems]
+    if half and len(shared) >= 2 and len(shared) >= 0.5 * len(words):
+        return " ".join(words[stem] for stem in shared[:4])
+    return ""
+
+
+def echo_lines(text: str, product: str = "", what: str = "") -> list[int]:
     """Indexes of the lines after the first that repeat it: most of its words (repeating_lines)
-    or a three-word phrase of it."""
-    lines = [_URL_RE.sub(" ", ln).strip() for ln in text.split("\n")]
-    skip = set(_content_seq(product)) | _FILLER
-    first = set(_triples(_content_seq(lines[0], skip))) if lines else set()
-    echoed = {i for i, ln in enumerate(lines[1:], 1) if ln and first & set(_triples(_content_seq(ln, skip)))}
-    return sorted(echoed | set(repeating_lines(text)))
+    or what echoes() finds."""
+    lines = [ln.strip() for ln in text.split("\n")]
+    echoed = {i for i, ln in enumerate(lines[1:], 1)
+              if ln and not _URL_RE.fullmatch(ln) and echoes(ln, lines[0], product, what)}
+    return sorted(echoed | set(repeating_lines(text, product, what)))
 
 
 _LEAD_RE = re.compile(r"^[\s>\"'\u201c\u2018(\[]+")
@@ -313,11 +339,12 @@ def _find_lower_start(text: str, product: str = "") -> str:
     return ""
 
 
-def _find_repeated_phrase(text: str, product: str = "") -> str:
+def _find_repeated_phrase(text: str, product: str = "", what: str = "") -> str:
     """What lines repeat: a phrase of two content words that two lines after the first both have
     ("next ... meeting"), a phrase of three content words of line 1 that a later line says again
     (near each other: "deep work ... next"), else a content word in three or more lines. The
-    product's own name never counts, and link-only lines are skipped. "" if nothing repeats."""
+    product's own name never counts (nor, for line 1, the words of what shipped), and link-only
+    lines are skipped. "" if nothing repeats."""
     skip = set(_content_seq(product)) | _FILLER
     lines = [_URL_RE.sub(" ", ln).strip() for ln in text.split("\n")]
     seqs = [_content_pairs(ln, skip) for ln in lines if ln]
@@ -327,13 +354,11 @@ def _find_repeated_phrase(text: str, product: str = "") -> str:
             seen = first_seen.setdefault((s1, s2), (i, f"{w1} {w2}"))
             if seen[0] != i:
                 return seen[1]
-    if seqs:
-        first = _phrase_triples(seqs[0])
-        for seq in seqs[1:]:
-            later = _phrase_triples(seq)
-            shared = next((t for t in first if t in later), None)
-            if shared:
-                return first[shared]
+    texts = [ln for ln in lines if ln]
+    for later in texts[1:]:
+        echoed = echoes(later, texts[0], product, what, half=False)  # most of line 1: repeats-first-line
+        if echoed:
+            return echoed
     lines_with: dict[str, int] = {}
     for seq in seqs:
         for stem in dict.fromkeys(s for s, _ in seq):
@@ -341,11 +366,13 @@ def _find_repeated_phrase(text: str, product: str = "") -> str:
     return next((w for seq in seqs for s, w in seq if lines_with[s] >= 3), "")
 
 
-def repeating_lines(text: str) -> list[int]:
+def repeating_lines(text: str, product: str = "", what: str = "") -> list[int]:
     """Indexes of the lines after the first that repeat most of the first line (60% of its
-    content words); none when the first line has fewer than three."""
+    content words, the product's name and the words of what shipped left out); none when the
+    first line has fewer than three."""
+    skip = set(_content_seq(product)) | set(_content_seq(what))
     lines = [ln.strip() for ln in text.split("\n")]
-    first = _content_words(lines[0]) if lines else set()
+    first = _content_words(lines[0]) - skip if lines else set()
     if len(first) < 3:
         return []
     found = []
@@ -434,7 +461,7 @@ _FINDERS: dict[str, Callable[[str], str]] = {
 
 def check(text: str, *, network: str, reference_captions: Sequence[str] = (),
           voice_samples: Sequence[str] = (), own_words: Sequence[str] = (),
-          product: str = "") -> list[Failure]:
+          product: str = "", what: str = "") -> list[Failure]:
     relaxed = relaxed_rules(voice_samples, product)
     failed: list[Failure] = []
     for rule in RULES:
@@ -449,8 +476,10 @@ def check(text: str, *, network: str, reference_captions: Sequence[str] = (),
         elif rule.id == "lower-start":
             found = _find_lower_start(text, product)
             hit = bool(found)
+        elif rule.id == "repeats-first-line":
+            hit = bool(repeating_lines(text, product, what))
         elif rule.id == "repeated-phrase":
-            found = _find_repeated_phrase(text, product)
+            found = _find_repeated_phrase(text, product, what)
             hit = bool(found)
             if hit:
                 failed.append(Failure(rule.id, f'Two lines repeat "{found}".',
