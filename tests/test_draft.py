@@ -455,7 +455,7 @@ def test_redraft_prompt_shows_the_last_use_case():
 
 # ------------------------------------------------------------------ hook 1 is the founder's words
 
-from launch_desk.draft import checklist, founder_hook, hook_options, post_failures, site_details  # noqa: E402
+from launch_desk.draft import checklist, founder_hook, hook_options, kept_from_style, post_failures, site_details  # noqa: E402
 from launch_desk.models import Draft  # noqa: E402
 
 LEAVES = "most of our support emails were blurry photos of sad leaves"
@@ -887,3 +887,58 @@ def test_the_fallback_never_ends_on_a_number_or_small_word(what):
     line = product_line("Pawr", what)
     last = line.rstrip(".").split()[-1].lower()
     assert last not in _BAD_END and not last[0].isdigit() and len(line.split()) <= 9
+
+
+# ------------------------------------------------------------------ R44: the founder option keeps what shipped
+
+K2_BRIEF = Brief("feature", "x", "Brookhour 2.0: focus sessions now show up in your calendar",
+                 "https://posts-design.github.io/launch-desk-samples/brookhour/",
+                 detail="people kept asking to see their deep work next to their meetings")
+K2_BRAND = BrandKit("Brookhour", "https://posts-design.github.io/launch-desk-samples/brookhour/",
+                    "A calm focus timer for Mac.", "#fff", "#111", "#ff5b2e", None, None)
+K2B = Draft(("See focus sessions in your calendar with Brookhour 2.0.", "Are you a maker? Stop guessing.",
+             "Brookhour 2.0 is out."),
+            "See focus sessions in your calendar with Brookhour 2.0.\n\nYou asked to see deep work next to "
+            "meetings.\n\nhttps://posts-design.github.io/launch-desk-samples/brookhour/",
+            (), False, "See focus sessions in your calendar next to meetings.")
+
+
+def test_the_founder_option_gets_the_models_line_one_back_when_nothing_says_what_shipped():
+    [founder, *_] = hook_options(K2B, K2_BRIEF, K2_BRAND, REFS)
+    lines = [ln for ln in founder.post.splitlines() if ln]
+    assert lines == [founder_hook(K2_BRIEF.detail), K2B.caption.splitlines()[0],
+                     "https://posts-design.github.io/launch-desk-samples/brookhour/"]
+    fails = post_failures(founder.post, K2_BRIEF, K2_BRAND, REFS)
+    assert fails == []
+    shipped = [c for c in checklist(founder.post, fails, "x", use_case=K2B.use_case) if "use-case-missing" in c.rules]
+    assert shipped == []
+
+
+def test_a_founder_option_that_still_says_what_shipped_is_left_alone():
+    d = Draft(LEAF_HOOKS, LEAF_CAPTION, (), False, "Now the photo itself gets you an answer.")
+    [founder, *_] = hook_options(d, LEAF_BRIEF, LEAF_BRAND, REFS)
+    assert LEAF_CAPTION.splitlines()[0] not in founder.post
+
+
+def test_the_leaf_founder_option_gets_the_snap_line_back():
+    [founder, *_] = hook_options(leaf_draft(), LEAF_BRIEF, LEAF_BRAND, REFS)
+    assert founder.post.splitlines()[2] == LEAF_CAPTION.splitlines()[0]
+    assert post_failures(founder.post, LEAF_BRIEF, LEAF_BRAND, REFS) == []
+
+
+# ------------------------------------------------------------------ R45: rules kept from your style
+
+def test_a_relaxed_rule_says_it_was_kept_from_your_style():
+    from dataclasses import replace
+    text = "Pet pages take themes now.\n\nthemes follow your site — every page — too.\n\nhttps://pawr.link"
+    voice = ("shipped a thing — small — but nice.",)
+    brand = replace(BRAND, voice_samples=voice)
+    fails = post_failures(text, BRIEF, brand, REFS)
+    assert not {"em-dash", "lower-start"} & {f.rule_id for f in fails}
+    kept = kept_from_style(text, BRIEF, brand)
+    assert kept == {"em-dash", "lower-start"}
+    lines = {c.rules: c for c in checklist(text, fails, "x", kept=kept)}
+    plain = {c.rules: c for c in checklist(text, fails, "x")}
+    for rules in (("em-dash", "emoji", "hashtags"), ("placeholder", "lower-start")):
+        assert lines[rules].ok and lines[rules].text != plain[rules].text
+    assert kept_from_style("Pet pages take themes now.", BRIEF, brand) == set()

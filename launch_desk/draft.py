@@ -20,7 +20,7 @@ from __future__ import annotations
 
 import json
 import re
-from typing import Any, Callable, Sequence
+from typing import Any, Callable, Iterable, Sequence
 
 from .host import Host
 from .models import BrandKit, Brief, CheckLine, Draft, Failure, HookOption, HookShape, Reference
@@ -604,6 +604,32 @@ def _same(a: str, b: str) -> bool:
     return key(a) == key(b)
 
 
+def _keep_what_shipped(post: str, draft: Draft, brief: Brief, brand: BrandKit,
+                       refs: Sequence[Reference]) -> str:
+    """The founder's words replace the caption's first line, and that line can be the only one
+    that said what shipped. Then the model's own first line (checked with the draft) goes back in
+    as line 2, if the post then says what shipped and fails nothing it did not fail before."""
+    lines = post.strip().split("\n")
+    if not draft.use_case or use_case_carried(draft.use_case, "\n".join(lines[1:])):
+        return post
+    model_first = draft.caption.strip().split("\n")[0].strip()
+    if not model_first or _same(model_first, lines[0]):
+        return post
+    candidate = re.sub(r"\n{3,}", "\n\n", "\n".join([lines[0], "", model_first, "", *lines[1:]])).strip()
+    if not use_case_carried(draft.use_case, "\n".join(candidate.split("\n")[1:])):
+        return post
+    before = {(f.rule_id, f.found) for f in post_failures(post, brief, brand, refs)}
+    after = {(f.rule_id, f.found) for f in post_failures(candidate, brief, brand, refs)}
+    return candidate if after <= before else post
+
+
+def kept_from_style(text: str, brief: Brief, brand: BrandKit) -> set[str]:
+    """The relaxed rules (from the founder's voice samples) that this post actually breaks: the
+    checklist says these were kept from their style."""
+    fired = {f.rule_id for f in check(text, network=brief.network, product=brand.name)}
+    return relaxed_rules(brand.voice_samples) & fired
+
+
 def hook_options(draft: Draft, brief: Brief, brand: BrandKit, refs: Sequence[Reference]) -> list[HookOption]:
     """The hooks to offer, each with the post it makes. With a founder's detail, option 1 is
     their words (always offered; a body line that would repeat them is dropped) and the model's
@@ -616,6 +642,7 @@ def hook_options(draft: Draft, brief: Brief, brand: BrandKit, refs: Sequence[Ref
     words = founder_hook(brief.detail)
     if words:
         post, dropped = _drop_repeats(with_first_line(draft.caption, words), brand.name)
+        post = _keep_what_shipped(post, draft, brief, brand, refs)
         options.append(HookOption(words, "founder", post, dropped))
     lines = draft.caption.strip().split("\n")
     body = {(f.rule_id, f.found) for f in post_failures("\n" + "\n".join(lines[1:]), brief, brand, refs)}
@@ -668,11 +695,14 @@ def quote_phrases(f: Failure) -> str:
 
 
 def checklist(text: str, failures: Sequence[Failure], network: str,
-              use_case: str = "", from_site: Sequence[str] = ()) -> list[CheckLine]:
+              use_case: str = "", from_site: Sequence[str] = (), kept: Iterable[str] = ()) -> list[CheckLine]:
     """The post's checks as lines for the founder, one per rule (the three style rules share
     one), pass or fail, from the failures post_failures() found. Given the draft's use case (the
-    wizard passes it when the founder's words lead, since they replace the caption's first line), a post whose lines after the
-    first no longer say it gets one more, failing line. Composed here, never by the model."""
+    wizard passes it when the founder's words lead, since they replace the caption's first line),
+    a post whose lines after the first no longer say it gets one more, failing line. `kept` are
+    relaxed rules the post breaks (kept_from_style()); their lines say so. Composed here, never by
+    the model."""
+    kept = set(kept)
     by_id: dict[str, Failure] = {}
     for f in failures:
         by_id.setdefault(f.rule_id, f)
@@ -690,8 +720,11 @@ def checklist(text: str, failures: Sequence[Failure], network: str,
         line(("stock-phrase",), "No stock launch phrases", lambda f: f"Stock phrase: {_quoted(f)}".rstrip(": ")),
         line(("template-opener",), "Doesn't open with \"Your X should\"",
              lambda f: f"Opens with the \"Your X should\" template: {_quoted(f)}".rstrip(": ")),
-        line(("em-dash", "emoji", "hashtags"), style[:1].upper() + style[1:], lambda f: f"Too many: {style}"),
-        line(("placeholder", "lower-start"), "No placeholders; every line starts with a capital",
+        line(("em-dash", "emoji", "hashtags"), style[:1].upper() + style[1:]
+             + (" (kept from your style)" if kept & {"em-dash", "emoji", "hashtags"} else ""),
+             lambda f: f"Too many: {style}"),
+        line(("placeholder", "lower-start"), "No placeholders; " + (
+            "lower-case starts kept from your style" if "lower-start" in kept else "every line starts with a capital"),
              lambda f: f"Placeholder: {_quoted(f)}".rstrip(": ") if f.rule_id == "placeholder"
              else f"Line starts lower case: {_quoted(f)}".rstrip(": ")),
         line(("link-first-line",), "No link in the first line", lambda f: "Link in the first line"),
