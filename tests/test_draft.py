@@ -952,3 +952,16 @@ def test_says_what_shipped_also_counts_the_founders_own_words_for_what_shipped()
     assert [c for c in checklist(post, fails, "x", use_case=use) if "use-case-missing" in c.rules]
     assert not [c for c in checklist(post, fails, "x", use_case=use, what=K2_BRIEF.what)
                 if "use-case-missing" in c.rules]
+
+
+def test_a_lower_case_brand_leading_a_hook_is_not_a_failure():
+    brand = BrandKit("tldraw", "https://tldraw.com", "", "#fff", "#111", "#f60", None, None)
+    brief = Brief("feature", "x", "video export", "https://tldraw.com")
+    reply = {"use_case": "Pick a board and export it from the menu.",
+             "hooks": ["tldraw now exports to video.", "Every whiteboard stops at PNG. Boards here play back.",
+                       "Are you a teacher? Stop screen recording."],
+             "caption": "tldraw now exports to video.\n\nPick a board and export it from the menu.\n\nhttps://tldraw.com",
+             "card_line": "tldraw now exports boards to video"}
+    host = FakeHost(llm_replies=[reply])
+    d = draft_post(host, brief, brand, REFS, SHAPES)
+    assert len(host.llm_calls) == 1 and d.failures == ()

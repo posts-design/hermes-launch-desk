@@ -344,3 +344,15 @@ def test_lower_case_voice_relaxes_the_rule():
 def test_the_repeated_phrase_is_quoted_in_the_posts_own_words(text, phrase):
     [f] = [f for f in check(text, network="x", product="Brookhour") if f.rule_id == "repeated-phrase"]
     assert f.found == phrase and f"\"{phrase}\"" in f.fix
+
+
+def test_bullet_items_may_start_lower_case():
+    assert "lower-start" not in ids("Themes are live.\n\n- faster search\n- pick a theme\n• dark mode too")
+
+
+def test_a_voice_sample_opening_with_the_lower_case_brand_does_not_relax_capitals():
+    from launch_desk.rules import relaxed_rules
+    voice = ["tldraw now exports to video."]
+    assert "lower-start" in relaxed_rules(voice)
+    assert "lower-start" not in relaxed_rules(voice, product="tldraw")
+    assert "lower-start" not in ids("pick a theme.", voice_samples=["we shipped a thing."], product="pawr.link")

@@ -426,7 +426,7 @@ def _failures(hooks: Sequence[str], caption: str, use_case: str, brief: Brief,
               for f in unsupported_details(use_case, facts)]
     for n, hook in enumerate(hooks, 1):
         hook_fails = [f for f in check(hook, network=brief.network, reference_captions=captions,
-                                       voice_samples=voice, own_words=own_words(brief))
+                                       voice_samples=voice, own_words=own_words(brief), product=product)
                       if f.rule_id in HOOK_RULES]
         hook_fails += unsupported_details(hook, facts)
         found += [Failure(f"hook{n}:{f.rule_id}", f"Hook {n}: {f.message}", f.fix, f.found) for f in hook_fails]
@@ -441,7 +441,7 @@ def draft_post(host: Host, brief: Brief, brand: BrandKit, refs: Sequence[Referen
     unparseable redraft keeps the first draft. Draft.redrafted is True when the
     returned text is the redraft. Failures include unsupported_details()."""
     voice = tuple(brand.voice_samples)
-    relaxed = relaxed_rules(voice)
+    relaxed = relaxed_rules(voice, brand.name)
     facts = facts_text(brief, brand)
     ask = _Asker(host)
     instructions, text = build_brief_prompt(brief, brand, refs, shapes, relaxed)
@@ -637,7 +637,7 @@ def kept_from_style(text: str, brief: Brief, brand: BrandKit) -> set[str]:
     """The relaxed rules (from the founder's voice samples) that this post actually breaks: the
     checklist says these were kept from their style."""
     fired = {f.rule_id for f in check(text, network=brief.network, product=brand.name)}
-    return relaxed_rules(brand.voice_samples) & fired
+    return relaxed_rules(brand.voice_samples, brand.name) & fired
 
 
 def hook_options(draft: Draft, brief: Brief, brand: BrandKit, refs: Sequence[Reference]) -> list[HookOption]:
@@ -735,7 +735,7 @@ def checklist(text: str, failures: Sequence[Failure], network: str,
              + (" (kept from your style)" if kept & {"em-dash", "emoji", "hashtags"} else ""),
              lambda f: f"Too many: {style}"),
         line(("placeholder", "lower-start"), "No placeholders; " + (
-            "lower-case starts kept from your style" if "lower-start" in kept else "every line starts with a capital"),
+            "lower-case starts kept from your style" if "lower-start" in kept else "no line starts lower case"),
              lambda f: f"Placeholder: {_quoted(f)}".rstrip(": ") if f.rule_id == "placeholder"
              else f"Line starts lower case: {_quoted(f)}".rstrip(": ")),
         line(("link-first-line",), "No link in the first line", lambda f: "Link in the first line"),

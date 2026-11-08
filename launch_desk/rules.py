@@ -290,7 +290,8 @@ def echo_lines(text: str, product: str = "") -> list[int]:
     return sorted(echoed | set(repeating_lines(text)))
 
 
-_LEAD_RE = re.compile(r"^[\s\-\u2022*>\"'\u201c\u2018(\[]+")
+_LEAD_RE = re.compile(r"^[\s>\"'\u201c\u2018(\[]+")
+_BULLET_RE = re.compile(r"^(?:[-\u2022*\u2013]|\d+[.)])\s")  # "- faster search", "1. pick a theme"
 
 
 def _find_lower_start(text: str, product: str = "") -> str:
@@ -299,8 +300,8 @@ def _find_lower_start(text: str, product: str = "") -> str:
     ("iPhone") and the product's name as the brand writes it ("pawr.link") may start lower case."""
     for raw in text.split("\n"):
         line = _LEAD_RE.sub("", raw.strip())
-        if not line or _URL_RE.match(line) or line.startswith(("@", "#")):
-            continue
+        if not line or _URL_RE.match(line) or line.startswith(("@", "#")) or _BULLET_RE.match(line):
+            continue  # a link, a handle or hashtag, or a list item
         if product.strip() and line.startswith(product.strip()):
             continue
         first = line.split()[0]
@@ -375,13 +376,16 @@ _PREDICATES: dict[str, Callable[[str], bool]] = {
 }
 
 
-def relaxed_rules(voice_samples: Sequence[str]) -> set[str]:
-    """Relaxable rules that at least one voice sample breaks on its own."""
+def relaxed_rules(voice_samples: Sequence[str], product: str = "") -> set[str]:
+    """Relaxable rules that at least one voice sample breaks on its own. A sample opening with
+    the product's lower-case name ("pawr.link pages…") says nothing about capitals."""
     relaxed: set[str] = set()
     for rule in RULES:
         if not rule.relaxable:
             continue
         pred = _PREDICATES[rule.id]
+        if rule.id == "lower-start":
+            pred = lambda s: bool(_find_lower_start(s, product))  # noqa: E731
         if any(pred(s) for s in voice_samples):
             relaxed.add(rule.id)
     return relaxed
@@ -431,7 +435,7 @@ _FINDERS: dict[str, Callable[[str], str]] = {
 def check(text: str, *, network: str, reference_captions: Sequence[str] = (),
           voice_samples: Sequence[str] = (), own_words: Sequence[str] = (),
           product: str = "") -> list[Failure]:
-    relaxed = relaxed_rules(voice_samples)
+    relaxed = relaxed_rules(voice_samples, product)
     failed: list[Failure] = []
     for rule in RULES:
         if rule.id in relaxed:
