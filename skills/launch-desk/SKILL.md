@@ -19,14 +19,14 @@ For example: `/launch https://yoursite.com dark mode for the editor -- people ke
 
 - Add the site link the first time. It is remembered after that.
 - The part after ` -- ` is one true detail, like who asked for it or what it replaced. The draft treats it as a fact and uses nothing it cannot find. Ask for one in the founder's own words if they have none; a real detail is the best thing a launch post can have.
-- Hook 1 is always that detail, word for word, marked "(your words)". The model's hooks come after it, each offered only if it adds no failure of its own to the post, and no two built the same way. If no model hook passes, the least bad one is offered marked "(has issues)". Encourage the founder to lead with their own line.
+- Hook 1 is always that detail, word for word, marked "(your words)". The model's hooks come after it, each offered only if it adds no failure of its own to the post, does not echo your words, and is built unlike the others. If no model hook passes, the least bad one is offered marked "(has issues)". Encourage the founder to lead with their own line.
 - `/launch` always takes two steps. The first run ends with the draft, the card and a feed preview. Sending `/launch` again lets them approve, change the hook, swap references or discard.
 - `/launch brand <url>` reads the site's colours and logo again. `/launch help` shows the usage.
 - `/launch voice: <a past post>` keeps one of the founder's own posts as a voice sample (the last three are kept); drafts follow its style. `/launch voice: clear` forgets them. The colon is required; `/launch voice mode ...` is a normal launch. It needs a saved brand first: `/launch brand <url>`, or one approved launch.
 
 ## Screenshots
 
-A card made from the real product beats any generated image. If the user wants a card with their product on it, ask for a screenshot. When they send one, call `launch_desk_attach_screenshot` with the image's file path (PNG, JPEG or WebP), then tell them to run `/launch`. Two screenshots make a side-by-side card; a third replaces the oldest. Without a screenshot the card sets the hook large as a quote, which still works.
+A card made from the real product beats any generated image. If the user wants a card with their product on it, ask for a screenshot. When they send one, call `launch_desk_attach_screenshot` with the image's file path (PNG, JPEG or WebP), then tell them to run `/launch`. Two screenshots make a side-by-side card; a third replaces the oldest. Without a screenshot the card sets its headline (the product and what shipped) large, which still works.
 
 Never generate or invent an image for the card.
 

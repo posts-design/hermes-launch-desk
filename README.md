@@ -9,10 +9,10 @@ You get a pack with the text, the card, a feed preview and a link to post on X. 
 
 The model writes about 20% of this. The rest is code and your own material:
 
-- Your words lead. The detail you give after ` -- ` is offered as the first line, word for word, marked as yours. The model's hooks come after it, each offered only if it adds no failure of its own to the post, and no two built the same way.
+- Your words lead. The detail you give after ` -- ` is offered as the first line, word for word, marked as yours. The model's hooks come after it, each offered only if it adds no failure of its own to the post, does not echo your words, and is built unlike the others.
 - References are real launch posts from posts.design, chosen in code by what you shipped.
 - The draft is checked in code against AI-sounding copy and against details you never gave it, and is redrafted when it fails. You see the checks: a line says what the first draft was caught on, and the draft comes with a checklist of the post, one line per check.
-- The card is composed from your screenshot, colours and logo. It is never generated. Its headline names your product and what shipped (9 words at most, checked like the post), so it never repeats the first line of your post. It reads your site the way a visitor sees it: dark if the site is dark, the accent your site names or puts on its buttons, and a headline face close to yours (a serif, a rounded sans, or Inter).
+- The card is composed from your screenshot, colours and logo. It is never generated. Its headline names your product and what shipped: the model's card line (9 words at most, checked like the post, never restating a line of it), else your product's name and what shipped from your brief. So the feed never shows the same sentence twice. It reads your site the way a visitor sees it: dark if the site is dark, the accent your site names or puts on its buttons, and a headline face close to yours (a serif, a rounded sans, or Inter).
 - Your results feed the next launch. Once you record sign-ups for a pack, the next `/launch` opens with one line on your best launch so far, and that post is reference 1: the draft borrows its shape, never its words.
 
 Because the checks and the design do the heavy lifting, it works on small models.
@@ -54,7 +54,7 @@ After you approve, `/launch` asks whether to check in tomorrow and in 3 days. Sa
 
 The next `/launch` reads those numbers back. Of the packs for the same site, the one with the most sign-ups (the most recent one on a tie) gives one line, such as: Your last launch brought 12 sign-ups on X with "Pet pages can wear your colours now." Its post is listed first among the references as your own launch, with its sign-ups and pack name, and the draft borrows its shape. It is yours, so the check for five copied words leaves it out, and your detail for this launch never counts as copied either. A later answer for a channel replaces the earlier one, since each check-in asks for the count so far. Packs without results, and packs for another site, change nothing.
 
-To put your product on the card, send a screenshot and the agent attaches it with `launch_desk_attach_screenshot`. Send two and the card shows them side by side; with none, the card sets your hook large as a quote. The plugin also ships a skill, `launch-desk:launch-desk`, that teaches the agent the launch workflow, so it steers you well even when you do not type the command.
+To put your product on the card, send a screenshot and the agent attaches it with `launch_desk_attach_screenshot`. Send two and the card shows them side by side; with none, the card sets its headline large. The plugin also ships a skill, `launch-desk:launch-desk`, that teaches the agent the launch workflow, so it steers you well even when you do not type the command.
 
 ## Hermes Desktop
 
@@ -76,9 +76,9 @@ The page only reads. Its backend (`dashboard/plugin_api.py`, loaded when the plu
 - No run of five words copied from a reference (your own past post and your own detail don't count).
 - No line that just restates the first, and no phrase said twice: a later line saying three words of the first again, two lines sharing a phrase ("next to meetings"), or a word other than your product's name in three lines.
 - Every line starts with a capital letter, unless it starts with a link, a handle or your product's name as you write it. If your own past posts start lower case, this is relaxed.
-- No numbers, counts or time and effort claims ("three things", "today", "in seconds") that are not in your facts. Ones that only your site's description gives are named in the checklist as from your site.
+- No numbers, counts or time and effort claims ("three things", "today", "in seconds") that are not in your facts. Ones that only your site's description gives are named in the checklist as from your site. If it is true that it is out today (or took a week), put that in your detail after ` -- `, and the post may say it.
 
-The reply shows this list for your post, each line marked pass or fail, and the pack keeps it in `pack.json` and `checklist.md`. A hook the model wrote is offered only if it adds no failure of its own; if none does, the least bad one is offered marked "(has issues)". Your own words are always offered, and if they break a rule (say, over 12 words) the checklist says so. If your words replace the only line that said what shipped, the draft's own first line comes back as the second; if no line says it, the checklist says so. A rule your own past posts relax (em-dashes, emoji, hashtags, lower-case starts) shows on the checklist as kept from your style.
+The reply shows this list for your post, each line marked pass or fail, and the pack keeps it in `pack.json` and `checklist.md`. A hook the model wrote is offered only if it adds no failure of its own and does not echo your words; if none qualifies and you gave no detail, the least bad one is offered marked "(has issues)". Your own words are always offered, and if they break a rule (say, over 12 words) the checklist says so. If your words replace the only line that said what shipped, the draft's own first line comes back as the second; if no line says it, the checklist says so. A rule your own past posts relax (em-dashes, emoji, hashtags, lower-case starts) shows on the checklist as kept from your style.
 
 ## What goes where
 
