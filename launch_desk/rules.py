@@ -247,10 +247,32 @@ _FILLER = frozenset(
 )
 
 
+def _triples(seq: list[str]) -> list[tuple[str, str, str]]:
+    """Ordered triples of content words that sit within four words of each other ("deep work
+    sits next" holds "deep work next"), in reading order."""
+    out: dict[tuple[str, str, str], None] = {}
+    for i in range(len(seq)):
+        for j in range(i + 1, min(i + 3, len(seq))):
+            for k in range(j + 1, min(i + 4, len(seq))):
+                out.setdefault((seq[i], seq[j], seq[k]))
+    return list(out)
+
+
+def echo_lines(text: str, product: str = "") -> list[int]:
+    """Indexes of the lines after the first that repeat it: most of its words (repeating_lines)
+    or a three-word phrase of it."""
+    lines = [_URL_RE.sub(" ", ln).strip() for ln in text.split("\n")]
+    skip = set(_content_seq(product)) | _FILLER
+    first = set(_triples(_content_seq(lines[0], skip))) if lines else set()
+    echoed = {i for i, ln in enumerate(lines[1:], 1) if ln and first & set(_triples(_content_seq(ln, skip)))}
+    return sorted(echoed | set(repeating_lines(text)))
+
+
 def _find_repeated_phrase(text: str, product: str = "") -> str:
-    """What two lines repeat: a phrase of two content words that two lines after the first both
-    have ("next ... meeting"), else a content word in three or more lines. The product's own
-    name never counts, and link-only lines are skipped. "" if nothing repeats."""
+    """What lines repeat: a phrase of two content words that two lines after the first both have
+    ("next ... meeting"), a phrase of three content words of line 1 that a later line says again
+    (near each other: "deep work ... next"), else a content word in three or more lines. The
+    product's own name never counts, and link-only lines are skipped. "" if nothing repeats."""
     skip = set(_content_seq(product)) | _FILLER
     lines = [_URL_RE.sub(" ", ln).strip() for ln in text.split("\n")]
     seqs = [_content_seq(ln, skip) for ln in lines if ln]
@@ -259,6 +281,12 @@ def _find_repeated_phrase(text: str, product: str = "") -> str:
         for pair in dict.fromkeys(zip(seq, seq[1:])):
             if first_seen.setdefault(pair, i) != i:
                 return " ".join(pair)
+    if seqs:
+        first = _triples(seqs[0])
+        for seq in seqs[1:]:
+            shared = set(first) & set(_triples(seq))
+            if shared:
+                return " ".join(next(t for t in first if t in shared))
     lines_with: dict[str, int] = {}
     for seq in seqs:
         for w in dict.fromkeys(seq):

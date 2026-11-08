@@ -828,3 +828,16 @@ def test_a_use_case_detail_failure_names_its_phrases():
     _, d = draft([invented, invented])
     [f] = [f for f in d.failures if f.rule_id == "use-case:unsupported-detail"]
     assert f.found == "one tap"
+
+
+def test_the_founder_option_drops_a_line_that_echoes_three_of_its_words():
+    brief = Brief("feature", "x", "Brookhour 2.0: focus sessions now show up in your calendar", "https://brookhour.app",
+                  detail="people kept asking to see their deep work next to their meetings")
+    brand = BrandKit("Brookhour", "https://brookhour.app", "", "#fff", "#111", "#ff5b2e", None, None)
+    d = Draft(("Brookhour 2.0 is out.", "Focus sessions land on your calendar.", "Are you a maker? Stop guessing."),
+              "Brookhour 2.0 is out.\n\nFocus sessions now show up in your calendar.\n\n"
+              "A calm focus timer for Mac, so deep work sits next to your meetings.\n\nhttps://brookhour.app",
+              (), False, "Focus sessions now show up in your calendar.")
+    [founder, *_] = hook_options(d, brief, brand, REFS)
+    assert founder.dropped and "deep work" in founder.dropped[0]
+    assert not {"repeated-phrase", "repeats-first-line"} & {f.rule_id for f in post_failures(founder.post, brief, brand, REFS)}

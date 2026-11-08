@@ -26,7 +26,7 @@ from .host import Host
 from .models import BrandKit, Brief, CheckLine, Draft, Failure, HookOption, HookShape, Reference
 from .references import BRAND_CHARS, STOPWORDS, shape_note
 from .rules import (RULES, STOCK_PHRASES, check, first_line_words, has_link, is_private_link, relaxed_rules,
-                    repeating_lines, style_counts, x_length)
+                    echo_lines, repeating_lines, style_counts, x_length)
 
 DRAFT_SCHEMA: dict = {
     "type": "object",
@@ -552,9 +552,10 @@ def with_first_line(caption: str, hook: str) -> str:
     return "\n".join(lines).strip()
 
 
-def _drop_repeats(post: str) -> tuple[str, tuple[str, ...]]:
-    """Take out the body lines that repeat the first line; a link on such a line stays, alone."""
-    gone = set(repeating_lines(post))
+def _drop_repeats(post: str, product: str = "") -> tuple[str, tuple[str, ...]]:
+    """Take out the body lines that repeat the first line (most of it, or three of its words);
+    a link on such a line stays, alone."""
+    gone = set(echo_lines(post, product))
     if not gone:
         return post, ()
     kept, dropped = [], []
@@ -591,7 +592,7 @@ def hook_options(draft: Draft, brief: Brief, brand: BrandKit, refs: Sequence[Ref
     options: list[HookOption] = []
     words = founder_hook(brief.detail)
     if words:
-        post, dropped = _drop_repeats(with_first_line(draft.caption, words))
+        post, dropped = _drop_repeats(with_first_line(draft.caption, words), brand.name)
         options.append(HookOption(words, "founder", post, dropped))
     lines = draft.caption.strip().split("\n")
     body = {(f.rule_id, f.found) for f in post_failures("\n" + "\n".join(lines[1:]), brief, brand, refs)}

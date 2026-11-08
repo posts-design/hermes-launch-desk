@@ -250,14 +250,19 @@ def test_the_founders_words_do_not_excuse_other_copied_runs():
 BROOKHOUR = ("People kept asking to see their deep work next to their meetings.\n\n"
              "A focus session sits next to a meeting in your calendar.\n\n"
              "We put your deep work next to meetings in Brookhour 2.0.\n\nhttp://127.0.0.1:8731/k2/")
-GOOD_POSTS = [  # live runs the judges read as fine: K1 j3k1, K3 j2k3, pawr at 2aa92ac
+GOOD_POSTS = [  # live runs the judges read as fine: K1 j3k1, K3 j2k3, and a pawr post with no echo
     ("We kept pasting our own launch posts into Claude by hand.\n\nWe shipped posts.design MCP. Your agent can "
      "search 5,000+ real launch posts, OG images and Headers.\n\nhttps://posts.design/mcp", "posts.design"),
     ("Most of our support emails were blurry photos of sad leaves.\n\nFernlight reads a leaf photo and names the "
      "likely cause.\n\nYou get three things to do today.\n\nhttp://127.0.0.1:8731/k3/", "Fernlight"),
-    ("People kept asking to match their pet page to their own site.\n\nPeople kept asking for it.\n\n"
-     "Custom themes for pet pages are live.\n\nhttps://pawr.link", "pawr.link"),
+    ("Pet pages look the same. We built themes to match your site.\n\nYou can now pick a theme in "
+     "settings.\n\nA small thing, but it makes the page feel like yours.\n\nhttps://pawr.link", "pawr.link"),
 ]
+PAWR_ECHO = ("People kept asking to match their pet page to their own site.\n\nPeople kept asking for it.\n\n"
+             "Custom themes for pet pages are live.\n\nhttps://pawr.link")
+K2_RUN3 = ("People kept asking to see their deep work next to their meetings.\n\nBrookhour 2.0 is out. Focus "
+           "sessions now show up in your calendar.\n\nA calm focus timer for Mac, so deep work sits next to "
+           "your meetings.\n\nhttp://127.0.0.1:8731/k2/")
 
 
 def test_brookhour_repeats_a_phrase_across_lines_and_names_it():
@@ -285,3 +290,14 @@ def test_the_product_name_may_appear_in_every_line():
 def test_a_phrase_shared_only_with_the_first_line_is_not_this_rule():
     text = "Deep work next to meetings.\n\nYour calendar shows deep work now."
     assert "repeated-phrase" not in ids(text)
+
+
+@pytest.mark.parametrize("text,product,phrase", [(PAWR_ECHO, "pawr.link", "people kept asking"),
+                                                 (K2_RUN3, "Brookhour", "deep work next")])
+def test_a_later_line_echoing_three_words_of_line_one_repeats(text, product, phrase):
+    [f] = [f for f in check(text, network="x", product=product) if f.rule_id == "repeated-phrase"]
+    assert f.found == phrase
+
+
+def test_two_words_shared_with_line_one_are_fine():
+    assert "repeated-phrase" not in ids("Deep work next to meetings.\n\nYour calendar shows deep work now.")
