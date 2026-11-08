@@ -172,7 +172,7 @@ def save(im: Image.Image, path: Path, colors: int | None = None) -> Path:
 def scroll_test(kit: BrandKit, brief: Brief, post: str, card: str) -> list[str]:
     """The checks the plugin runs on the post, as banner rows. Fails loudly if the post fails any
     check, or if the card line is not the one /launch would draw."""
-    failures = post_failures(post, brief, kit, [])
+    failures = post_failures(post, brief, kit, [], founder=True)  # each sample leads with the founder's words
     assert not failures, [f.rule_id for f in failures]
     assert card_line(card, post, brief, kit) == card, card
     lines = {c.rules[0]: c.text for c in checklist(post, failures, "x")}

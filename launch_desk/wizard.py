@@ -492,7 +492,9 @@ class _Pending:
 
     def checks(self) -> list[CheckLine]:
         text = self.text
-        return checklist(text, post_failures(text, self.brief, self.brand, self.refs), self.brief.network,
+        founder = self.option.source == "founder"
+        return checklist(text, post_failures(text, self.brief, self.brand, self.refs, founder=founder),
+                         self.brief.network,
                          use_case=str(self.data.get("use_case") or "") if self.option.source == "founder" else "",
                          what=self.brief.what,
                          from_site=site_details(text, self.brief, self.brand),

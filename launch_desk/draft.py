@@ -434,7 +434,7 @@ def _failures(hooks: Sequence[str], caption: str, use_case: str, brief: Brief,
     left out: the model only copies it, and the checklist shows it."""
     captions = outside_captions(refs)
     found = list(check(caption, network=brief.network, reference_captions=captions, voice_samples=voice,
-                       own_words=own_words(brief), product=product, what=brief.what))
+                       own_words=own_words(brief), product=product))
     if is_private_link(brief.product_url):
         found = [f for f in found if f.rule_id != "private-link"]
     found += unsupported_details(caption, facts)
@@ -589,11 +589,14 @@ def founder_hook(detail: str) -> str:
     return text if _END_RE.search(text) else text + "."
 
 
-def post_failures(text: str, brief: Brief, brand: BrandKit, refs: Sequence[Reference]) -> list[Failure]:
-    """The scroll test and unsupported_details() for a post as it will be posted."""
+def post_failures(text: str, brief: Brief, brand: BrandKit, refs: Sequence[Reference],
+                  founder: bool = False) -> list[Failure]:
+    """The scroll test and unsupported_details() for a post as it will be posted. `founder`: line
+    1 is the founder's own words, so a later line that names what shipped is no repeat of it (R54);
+    every other post is checked with no such exemption."""
     found = check(text, network=brief.network, reference_captions=outside_captions(refs),
                   voice_samples=brand.voice_samples, own_words=own_words(brief), product=brand.name,
-                  what=brief.what)
+                  what=brief.what if founder else "")
     return found + unsupported_details(text, facts_text(brief, brand))
 
 
@@ -648,8 +651,8 @@ def _keep_what_shipped(post: str, draft: Draft, brief: Brief, brand: BrandKit,
     rest = candidate.split("\n")
     if not says_what_shipped("\n".join(rest[1:]), draft.use_case, brief.what, rest[0]):
         return post
-    before = {(f.rule_id, f.found) for f in post_failures(post, brief, brand, refs)}
-    after = {(f.rule_id, f.found) for f in post_failures(candidate, brief, brand, refs)}
+    before = {(f.rule_id, f.found) for f in post_failures(post, brief, brand, refs, founder=True)}
+    after = {(f.rule_id, f.found) for f in post_failures(candidate, brief, brand, refs, founder=True)}
     return candidate if after <= before else post
 
 

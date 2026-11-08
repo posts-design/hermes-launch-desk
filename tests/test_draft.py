@@ -999,7 +999,7 @@ def test_a_line_naming_what_shipped_is_not_an_echo_of_the_founder_line():
     assert not founder.dropped
     assert founder.post.splitlines()[2].startswith("Offline mode keeps every note")
     assert "Jotter notes now work offline." not in founder.post
-    assert post_failures(founder.post, JOT_BRIEF, JOT_BRAND, REFS) == []
+    assert post_failures(founder.post, JOT_BRIEF, JOT_BRAND, REFS, founder=True) == []
 
 
 def test_the_founder_line_counts_toward_says_what_shipped():
@@ -1077,3 +1077,43 @@ def test_a_stopless_voice_keeps_lines_without_stops():
     [line] = [c for c in checklist(text, fails, "x", kept=kept) if "line-end" in c.rules]
     [plain] = [c for c in checklist(text, fails, "x") if "line-end" in c.rules]
     assert line.ok and line.text != plain.text
+
+
+# ------------------------------------------------------------------ R54: the what-shipped exemption is the founder's
+
+PAWR_THEMES = Brief("feature", "x", "custom themes for pet profile pages", "https://pawr.link")
+
+
+@pytest.mark.parametrize("brief,brand,post", [
+    (PAWR_THEMES, BRAND, "Custom themes for pet pages are live.\n\nPet pages now take custom themes.\n\nhttps://pawr.link"),
+    (K3_BRIEF, K3_BRAND, "Fernlight now has photo diagnosis.\n\nPhoto diagnosis is live in Fernlight.\n\nhttps://fernlight.app"),
+    (JOT_BRIEF, JOT_BRAND, "Offline mode for notes is here.\n\nJotter notes now work in offline mode.\n\nhttps://jotter.app"),
+    (K2_BRIEF, K2_BRAND, "Brookhour 2.0 puts your focus sessions in your calendar.\n\nSee each focus session in your "
+                         "calendar, next to meetings.\n\nhttps://brookhour.app"),
+    (K2_BRIEF, K2_BRAND, "Focus sessions now show up in your calendar.\n\nYour calendar now shows each focus "
+                         "session.\n\nhttps://brookhour.app"),
+])
+def test_a_model_post_restating_line_one_in_the_briefs_words_fails(brief, brand, post):
+    assert {"repeats-first-line", "repeated-phrase"} & {f.rule_id for f in post_failures(post, brief, brand, REFS)}
+
+
+def test_k2e_hook_three_is_not_offered_over_a_body_that_restates_it():
+    d = Draft(("See each focus session in your calendar.", "Are you a developer? Stop checking your calendar.",
+               "Brookhour 2.0 puts your focus sessions in your calendar."),
+              "See each focus session in your calendar.\n\nSee each focus session in your calendar, next to "
+              "meetings.\n\nhttps://brookhour.app", (), False, "Focus sessions show up in your calendar.")
+    brief = replace_detail(K2_BRIEF, "")
+    assert "Brookhour 2.0 puts your focus sessions in your calendar." not in \
+        [o.text for o in hook_options(d, brief, K2_BRAND, REFS)]
+
+
+def replace_detail(brief, detail):
+    from dataclasses import replace
+    return replace(brief, detail=detail)
+
+
+def test_the_founder_post_still_keeps_a_line_naming_what_shipped():
+    caption = ("Jotter notes now work offline.\n\nOffline mode keeps every note on your device until you "
+               "reconnect.\n\nhttps://jotter.app")
+    [founder, *_] = hook_options(jot_draft(caption), JOT_BRIEF, JOT_BRAND, REFS)
+    assert not founder.dropped and post_failures(founder.post, JOT_BRIEF, JOT_BRAND, REFS, founder=True) == []

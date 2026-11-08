@@ -401,9 +401,10 @@ def _find_repeated_phrase(text: str, product: str = "", what: str = "") -> tuple
 
 def repeating_lines(text: str, product: str = "", what: str = "") -> list[int]:
     """Indexes of the lines after the first that repeat most of the first line (60% of its
-    content words, the product's name and the words of what shipped left out); none when the
-    first line has fewer than three."""
-    skip = set(_content_seq(product)) | set(_content_seq(what))
+    content words); none when the first line has fewer than three. With `what` (line 1 is the
+    founder's fixed words, R54) the product's name and the words of what shipped are left out:
+    naming what shipped under the founder's line is no repeat."""
+    skip = set(_content_seq(product)) | set(_content_seq(what)) if what else set()
     lines = [ln.strip() for ln in text.split("\n")]
     first = _content_words(lines[0]) - skip if lines else set()
     if len(first) < 3:
