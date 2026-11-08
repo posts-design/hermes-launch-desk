@@ -48,7 +48,7 @@ def card_contents(layout: str | None, has_screenshot: bool) -> dict:
 
 
 def alt_text(brief: Brief, brand: BrandKit, has_screenshot: bool, headline: str | None = None,
-             layout: str | None = None) -> str:
+             layout: str | None = None, quoted: bool = False) -> str:
     name = " ".join(brand.name.split()) or "the product"
     what = _clip(headline or brief.what, 400).rstrip(".")
     shots = card_contents(layout, has_screenshot)["screenshots"]
@@ -58,7 +58,8 @@ def alt_text(brief: Brief, brand: BrandKit, has_screenshot: bool, headline: str 
     elif shots == 1:
         parts.append(f"It shows a screenshot of {name}.")
     else:
-        parts.append(f"A text card: the headline set large as a quote, with {name} below it.")
+        large = "set large as a quote" if quoted else "set large"
+        parts.append(f"A text card: the headline {large}, with {name} below it.")
     if brand.tagline:
         parts.append(_clip(brand.tagline, 200))
     return _clip(" ".join(parts), ALT_MAX)

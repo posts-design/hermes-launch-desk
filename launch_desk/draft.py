@@ -76,8 +76,8 @@ USE_CASE_MISSING = "use-case-missing"
 USE_CASE_CHARS = 140
 _CARRIED = 0.4  # share of the use case's words the caption must contain
 
-# Longest first so "one tap" wins over "one". A bare "one" or "half" counts only when a word
-# follows it ("one link", "half the steps"), so "Small one:" or "pick one." pass.
+# Longest first. "one" alone never counts ("pick one", "in one place"), only "one tap" or
+# "one click"; "half" counts only with a unit of time or money ("half the time", "half an hour").
 _DETAIL_RE = re.compile(
     r"(?<!\w)(?:"
     r"one tap|one click|in seconds|in minutes|no hands|instantly"
@@ -85,7 +85,7 @@ _DETAIL_RE = re.compile(
     r"|(?:minute|second|hour|day|week|month|year)s?"
     r"|a dozen|dozens?|hundreds?|thousands?|millions?|billions?"
     r"|two|three|four|five|six|seven|eight|nine|ten|eleven|twelve"
-    r"|(?:one|half)(?=\s+[a-z])"
+    r"|half(?=\s+(?:an?\s+|the\s+)?(?:hour|minute|second|day|week|month|year|time|price|cost)s?\b)"
     r"|\d+(?:[.,:]\d+)*"
     r")(?!\w)",
     re.IGNORECASE,
@@ -758,7 +758,7 @@ def checklist(text: str, failures: Sequence[Failure], network: str,
              lambda f: f"Copies five words from a reference: {_quoted(f)}".rstrip(": ")),
         line(("repeats-first-line", "repeated-phrase"), "Each line says something new",
              lambda f: "A later line repeats the first" if f.rule_id == "repeats-first-line"
-             else f"Two lines repeat {_quoted(f)}"),
+             else f.message.rstrip(".")),
         line((UNSUPPORTED,), "Only details you gave" + (
             " or your site says (" + ", ".join(f'"{p}"' for p in from_site) + ")" if from_site else ""),
              lambda f: f"Details you didn't give: {quote_phrases(f)}".rstrip(": ")),

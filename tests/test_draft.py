@@ -719,7 +719,8 @@ def test_three_things_to_do_today_passes_when_the_facts_say_it(where):
 
 
 @pytest.mark.parametrize("text", ["Live today.", "Ready tonight.", "Shipping this week.", "Check it every day.",
-                                  "Half the steps are gone.", "Done in minutes.", "Hundreds of themes."])
+                                  "Half the time it works.", "Done in half an hour.", "Done in minutes.",
+                                  "Hundreds of themes."])
 def test_time_and_count_claims_are_details(text):
     assert [f.rule_id for f in unsupported_details(text, FACTS)] == ["unsupported-detail"]
 
@@ -824,8 +825,8 @@ def test_the_card_line_is_never_line_one():
 
 
 def test_the_prompt_asks_for_a_card_line_and_stays_short():
-    instructions = build_brief_prompt(K3_BRIEF, K3_BRAND, REFS, SHAPES, set())[0]
-    assert '"card_line"' in instructions
+    instructions, text = build_brief_prompt(K3_BRIEF, K3_BRAND, REFS, SHAPES, set())
+    assert '"card_line"' in instructions and len(instructions) + len(text) < 6000
 
 
 def test_a_use_case_detail_failure_names_its_phrases():
@@ -1029,3 +1030,9 @@ def test_with_every_model_hook_echoing_only_the_founder_option_is_left():
               "calendar.\n\nhttps://brookhour.app", (), False, "Focus sessions show up in your calendar.")
     opts = hook_options(d, K2_BRIEF, K2_BRAND, REFS)
     assert [o.source for o in opts] == ["founder"]
+
+
+@pytest.mark.parametrize("text", ["Pick one in Settings.", "Everything in one place.", "One link for your pet.",
+                                  "Half the steps are gone.", "Cut the list in half."])
+def test_one_alone_and_half_without_a_unit_are_not_details(text):
+    assert unsupported_details(text, FACTS) == []  # R50

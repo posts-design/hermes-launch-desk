@@ -450,3 +450,12 @@ def test_vietnamese_stays_in_the_brand_face(tmp_path):
     b = render_card(replace(KIT, font_face="serif"), None, headline, (1200, 675), tmp_path / "b.png")
     with Image.open(a) as ia, Image.open(b) as ib:
         assert ia.tobytes() != ib.tobytes()
+
+
+def test_the_statement_card_draws_a_quote_mark_only_for_the_founders_words(tmp_path):
+    from PIL import ImageChops
+    plain = render_card(KIT, [], "Ship it", (1200, 675), tmp_path / "plain.png", layout="statement")
+    quoted = render_card(KIT, [], "Ship it", (1200, 675), tmp_path / "quoted.png", layout="statement", quote=True)
+    assert ImageChops.difference(Image.open(plain).convert("RGB"), Image.open(quoted).convert("RGB")).getbbox()
+    default = render_card(KIT, [], "Ship it", (1200, 675), tmp_path / "default.png", layout="statement")
+    assert not ImageChops.difference(Image.open(plain).convert("RGB"), Image.open(default).convert("RGB")).getbbox()

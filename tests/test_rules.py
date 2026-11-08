@@ -386,3 +386,12 @@ def test_pawr_and_k2_echoes_still_fail_with_what_shipped_left_out():
     assert [f.found for f in check(K2_RUN3, network="x", product="Brookhour",
                                    what="Brookhour 2.0: focus sessions now show up in your calendar")
             if f.rule_id == "repeated-phrase"] == ["deep work next"]
+
+
+def test_the_repeated_phrase_message_fits_what_repeated():
+    def message(text):
+        return next(f.message for f in check(text, network="x") if f.rule_id == "repeated-phrase")
+    pair = message("Themes are live.\n\nPick a colour theme.\n\nThe colour theme follows you.")
+    three = message("Themes are here.\n\nPick a theme.\n\nEvery theme follows your site.")
+    first = message("Deep work sits next to meetings.\n\nDeep work next to every meeting, finally.")
+    assert len({pair, three, first}) == 3

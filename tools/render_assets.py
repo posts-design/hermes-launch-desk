@@ -176,7 +176,7 @@ def scroll_test(kit: BrandKit, brief: Brief, post: str, card: str) -> list[str]:
     assert not failures, [f.rule_id for f in failures]
     assert card_line(card, post, brief, kit) == card, card
     lines = {c.rules[0]: c.text for c in checklist(post, failures, "x")}
-    return [lines["first-line-short"], lines["stock-phrase"], "No details you didn\u2019t give",
+    return [lines["first-line-short"], lines["stock-phrase"], lines["unsupported-detail"],
             f"{x_length(post)} of 280 characters"]
 
 

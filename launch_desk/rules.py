@@ -339,12 +339,13 @@ def _find_lower_start(text: str, product: str = "") -> str:
     return ""
 
 
-def _find_repeated_phrase(text: str, product: str = "", what: str = "") -> str:
+def _find_repeated_phrase(text: str, product: str = "", what: str = "") -> tuple[str, str]:
     """What lines repeat: a phrase of two content words that two lines after the first both have
     ("next ... meeting"), a phrase of three content words of line 1 that a later line says again
     (near each other: "deep work ... next"), else a content word in three or more lines. The
     product's own name never counts (nor, for line 1, the words of what shipped), and link-only
-    lines are skipped. "" if nothing repeats."""
+    lines are skipped. Returns (phrase, kind): kind is "two", "first" or "three"; ("", "") if
+    nothing repeats."""
     skip = set(_content_seq(product)) | _FILLER
     lines = [_URL_RE.sub(" ", ln).strip() for ln in text.split("\n")]
     seqs = [_content_pairs(ln, skip) for ln in lines if ln]
@@ -353,17 +354,18 @@ def _find_repeated_phrase(text: str, product: str = "", what: str = "") -> str:
         for (s1, w1), (s2, w2) in zip(seq, seq[1:]):
             seen = first_seen.setdefault((s1, s2), (i, f"{w1} {w2}"))
             if seen[0] != i:
-                return seen[1]
+                return seen[1], "two"
     texts = [ln for ln in lines if ln]
     for later in texts[1:]:
         echoed = echoes(later, texts[0], product, what, half=False)  # most of line 1: repeats-first-line
         if echoed:
-            return echoed
+            return echoed, "first"
     lines_with: dict[str, int] = {}
     for seq in seqs:
         for stem in dict.fromkeys(s for s, _ in seq):
             lines_with[stem] = lines_with.get(stem, 0) + 1
-    return next((w for seq in seqs for s, w in seq if lines_with[s] >= 3), "")
+    word = next((w for seq in seqs for s, w in seq if lines_with[s] >= 3), "")
+    return (word, "three") if word else ("", "")
 
 
 def repeating_lines(text: str, product: str = "", what: str = "") -> list[int]:
@@ -479,11 +481,11 @@ def check(text: str, *, network: str, reference_captions: Sequence[str] = (),
         elif rule.id == "repeats-first-line":
             hit = bool(repeating_lines(text, product, what))
         elif rule.id == "repeated-phrase":
-            found = _find_repeated_phrase(text, product, what)
-            hit = bool(found)
-            if hit:
-                failed.append(Failure(rule.id, f'Two lines repeat "{found}".',
-                                      f'Say "{found}" once; give every line something new.', found))
+            found, kind = _find_repeated_phrase(text, product, what)
+            if found:
+                said = {"two": f'Two lines repeat "{found}".', "three": f'Three or more lines say "{found}".',
+                        "first": f'A later line repeats "{found}" from the first.'}[kind]
+                failed.append(Failure(rule.id, said, f'Say "{found}" once; give every line something new.', found))
             continue
         else:
             hit = _PREDICATES[rule.id](text)
