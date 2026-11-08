@@ -257,7 +257,7 @@ def _instructions(brief: Brief, relaxed: set[str], refs: Sequence[Reference] | N
         "hook 3 your own. One \"we built\" at most.\n"
         "- caption: the whole post, starting with your best hook as its first line. "
         "Use \\n for line breaks.\n"
-        "- card_line: the product name and what shipped, 9 words at most, from FACTS. Not a post line."
+        "- card_line: the product name and what shipped, max 9 words, from FACTS, unlike any post line."
     )
 
 
@@ -471,15 +471,22 @@ _CARD_RULES = frozenset({"stock-phrase", "template-opener", "placeholder", "link
 _CLAUSE_RE = re.compile(r"(?<=[:;,.!?])\s+|\s+[\u2013\u2014-]\s+")
 
 
-def _card_ok(line: str, first: str, facts: str, product: str = "") -> bool:
-    """A card line that is short, plain, from the facts and not a restatement of line 1."""
-    if not line or first_line_words(line) > CARD_LINE_WORDS or _same(line, first):
+def _card_ok(line: str, post_lines: Sequence[str], facts: str, product: str = "") -> bool:
+    """A card line that is short, plain, from the facts and restates no line of the post (the
+    same sentence, or 60% of the content words of the shorter one; the product's name, which
+    both may carry, is left out of the count)."""
+    if not line or first_line_words(line) > CARD_LINE_WORDS:
         return False
     if ({f.rule_id for f in check(line, network="x", product=product)} & _CARD_RULES
             or unsupported_details(line, facts)):
         return False
-    a, b = _stems(first), _stems(line)
-    return not (a and b and len(a & b) >= 0.6 * min(len(a), len(b)))
+    name = _stems(product)
+    b = _stems(line) - name
+    for other in post_lines:
+        a = _stems(other) - name
+        if _same(line, other) or (a and b and len(a & b) >= 0.6 * min(len(a), len(b))):
+            return False
+    return True
 
 
 def _cap_first(text: str) -> str:
@@ -526,22 +533,21 @@ def _product_line(brief: Brief, brand: BrandKit) -> str:
     return _cap_first(text)
 
 
-def card_line(candidate: str, post: str, brief: Brief, brand: BrandKit, use_case: str = "") -> str:
-    """The card headline: the model's card line when it passes (9 words or fewer, no stock
-    phrase, template opener, placeholder or link, no detail outside FACTS, not mostly the
-    words of line 1), else the post's what-shipped line (a line after the first that says the
-    use case) when it passes the same, else the product name and what shipped from the brief.
-    Never the same sentence as line 1."""
+def card_line(candidate: str, post: str, brief: Brief, brand: BrandKit) -> str:
+    """The card headline (R48): the model's card line when it passes (9 words or fewer, no stock
+    phrase, template opener, placeholder, link or lower-case start, no detail outside FACTS, and
+    no restatement of any line of the post), else the product name and what shipped from the
+    brief (_product_line). Never a line of the post, so the feed never shows a sentence twice."""
     facts = facts_text(brief, brand)
-    lines = [ln.strip() for ln in post.strip().split("\n")]
-    first = lines[0] if lines else ""
-    body = [ln for ln in lines[1:] if ln and not _URL_RE.fullmatch(ln)]
-    shipped = [ln for ln in body if use_case and use_case_carried(use_case, ln)] or body
-    for line in [" ".join((candidate or "").split()), *shipped]:
-        if _card_ok(line, first, facts, brand.name):
-            return line
+    lines = [ln.strip() for ln in post.strip().split("\n") if ln.strip() and not _URL_RE.fullmatch(ln.strip())]
+    line = " ".join((candidate or "").split())
+    if _card_ok(line, lines, facts, brand.name):
+        return line
     fallback = _product_line(brief, brand)
-    return fallback if fallback and not _same(fallback, first) else " ".join((brand.name or "").split())
+    name = " ".join((brand.name or "").split())
+    if not fallback or any(_same(fallback, ln) for ln in lines):
+        return f"{name} is live." if name else fallback
+    return fallback
 
 
 # ------------------------------------------------------------------ the hooks offered

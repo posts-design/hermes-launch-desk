@@ -770,8 +770,8 @@ K3_POST = ("Most of our support emails were blurry photos of sad leaves.\n\nFern
 K3_USE = "Fernlight reads a leaf photo and names the cause."
 
 
-def k3_line(candidate, post=K3_POST, use_case=K3_USE):
-    return card_line(candidate, post, K3_BRIEF, K3_BRAND, use_case)
+def k3_line(candidate, post=K3_POST):
+    return card_line(candidate, post, K3_BRIEF, K3_BRAND)
 
 
 def test_parse_keeps_the_card_line():
@@ -797,16 +797,25 @@ def test_a_good_card_line_is_kept():
     "Fernlight reads [the photo] for you.",  # placeholder
     "Fernlight diagnoses a leaf in three seconds.",  # unsupported detail
     "Our support emails were blurry photos of sad leaves.",  # too close to line 1
+    "Fernlight reads a leaf photo and names its cause.",  # too close to line 2 (R48)
+    "Fernlight reads a leaf photo and names the cause.",  # line 2 itself
     "",
 ])
-def test_a_failing_card_line_falls_back_to_the_posts_what_shipped_line(bad):
-    assert k3_line(bad) == "Fernlight reads a leaf photo and names the cause."
+def test_a_failing_card_line_falls_back_to_the_product_and_what_shipped(bad):
+    assert k3_line(bad) == "Fernlight: photo diagnosis, snap a leaf"  # R48: never a post line
+
+
+def test_no_post_line_is_ever_the_card():
+    post = ("Most of our support emails were blurry photos of sad leaves.\n\nSo we built something for it, and "
+            "it's out.\n\nhttps://fernlight.app")
+    assert k3_line("Fernlight now names what is wrong with your sad houseplant leaf.", post) == \
+        "Fernlight: photo diagnosis, snap a leaf"
 
 
 def test_without_a_usable_line_the_card_names_the_product_and_what_shipped():
     post = ("Most of our support emails were blurry photos of sad leaves.\n\nFernlight now reads every photo you "
             "send and names the likely cause right away.\n\nhttps://fernlight.app")
-    line = k3_line("", post, use_case="")
+    line = k3_line("", post)
     assert line.startswith("Fernlight") and "photo diagnosis" in line
     assert len(line.split()) <= 9
     assert not unsupported_details(line, facts_text(K3_BRIEF, K3_BRAND))
@@ -815,7 +824,7 @@ def test_without_a_usable_line_the_card_names_the_product_and_what_shipped():
 def test_the_card_line_is_never_line_one():
     post = "Fernlight reads a leaf photo.\n\nhttps://fernlight.app"
     for candidate in ("Fernlight reads a leaf photo.", ""):
-        assert card_line(candidate, post, K3_BRIEF, K3_BRAND, "Fernlight reads a leaf photo.") != "Fernlight reads a leaf photo."
+        assert card_line(candidate, post, K3_BRIEF, K3_BRAND) != "Fernlight reads a leaf photo."
 
 
 def test_the_prompt_asks_for_a_card_line_and_stays_short():

@@ -51,7 +51,7 @@ POSTS_POST = (
     "Ask it for directions, examples and breakdowns for your next post design.\n\n"
     "https://posts.design/mcp"
 )
-POSTS_CARD = "posts.design MCP: search 5,000+ launch posts, OG images, Headers"
+POSTS_CARD = "posts.design MCP is live."  # the model's line restated line 2, so the card is the brief's (R48)
 BROOKHOUR_BRIEF = Brief("feature", "x", "Brookhour 2.0: focus sessions now show up in your calendar",
                         f"{SAMPLES_URL}/brookhour/",
                         detail="people kept asking to see their deep work next to their meetings")
@@ -61,7 +61,7 @@ BROOKHOUR_POST = (
     "See a session sit beside a meeting on your Mac.\n\n"
     f"{SAMPLES_URL}/brookhour/"
 )
-BROOKHOUR_CARD = "Brookhour 2.0: focus sessions in your calendar"
+BROOKHOUR_CARD = "Brookhour 2.0 is live."  # the model's line restated line 2 (R48)
 FERNLIGHT_BRIEF = Brief("feature", "x", "photo diagnosis: snap a leaf, get what is wrong and what to do",
                         f"{SAMPLES_URL}/fernlight/",
                         detail="most of our support emails were blurry photos of sad leaves")
@@ -71,7 +71,7 @@ FERNLIGHT_POST = (
     "Snap a leaf. Get the likely cause and three things to do today.\n\n"
     f"{SAMPLES_URL}/fernlight/"
 )
-FERNLIGHT_CARD = "Fernlight ships photo diagnosis for houseplants"
+FERNLIGHT_CARD = "Fernlight: photo diagnosis, snap a leaf"  # the model's line restated line 2 (R48)
 
 
 def posts_kit(inp: Path) -> BrandKit:

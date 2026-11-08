@@ -470,8 +470,7 @@ class _Pending:
 
     def card(self) -> str:
         """The card headline for the picked hook: what shipped, never line 1 (draft.card_line)."""
-        return card_line(str(self.data.get("card_draft") or ""), self.text, self.brief, self.brand,
-                         str(self.data.get("use_case") or ""))
+        return card_line(str(self.data.get("card_draft") or ""), self.text, self.brief, self.brand)
 
     @property
     def option(self) -> HookOption:
