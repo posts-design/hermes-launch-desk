@@ -78,7 +78,7 @@ The page only reads. Its backend (`dashboard/plugin_api.py`, loaded when the plu
 - Every line starts with a capital letter, unless it starts with a link, a handle or your product's name as you write it. If your own past posts start lower case, this is relaxed.
 - No numbers, counts or time and effort claims ("three things", "today", "in seconds") that are not in your facts. Ones that only your site's description gives are named in the checklist as from your site.
 
-The reply shows this list for your post, each line marked pass or fail, and the pack keeps it in `pack.json` and `checklist.md`. A hook the model wrote is offered only if it adds no failure of its own; if none does, the least bad one is offered marked "(has issues)". Your own words are always offered, and if they break a rule (say, over 12 words) the checklist says so. If picking your words drops the only line that said what shipped, the checklist says that too.
+The reply shows this list for your post, each line marked pass or fail, and the pack keeps it in `pack.json` and `checklist.md`. A hook the model wrote is offered only if it adds no failure of its own; if none does, the least bad one is offered marked "(has issues)". Your own words are always offered, and if they break a rule (say, over 12 words) the checklist says so. If your words replace the only line that said what shipped, the draft's own first line comes back as the second; if no line says it, the checklist says so. A rule your own past posts relax (em-dashes, emoji, hashtags, lower-case starts) shows on the checklist as kept from your style.
 
 ## What goes where
 
