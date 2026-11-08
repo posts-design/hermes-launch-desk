@@ -74,7 +74,8 @@ The page only reads. Its backend (`dashboard/plugin_api.py`, loaded when the plu
 - No link that only opens on your machine or network: localhost, a loopback or private address, or a .local name.
 - At most 280 characters on X, counting each link as 23.
 - No run of five words copied from a reference (your own past post and your own detail don't count).
-- No line that just restates the first, and no phrase said twice: two lines sharing a phrase ("next to meetings"), or a word other than your product's name in three lines.
+- No line that just restates the first, and no phrase said twice: a later line saying three words of the first again, two lines sharing a phrase ("next to meetings"), or a word other than your product's name in three lines.
+- Every line starts with a capital letter, unless it starts with a link, a handle or your product's name as you write it. If your own past posts start lower case, this is relaxed.
 - No numbers, counts or time and effort claims ("three things", "today", "in seconds") that are not in your facts. Ones that only your site's description gives are named in the checklist as from your site.
 
 The reply shows this list for your post, each line marked pass or fail, and the pack keeps it in `pack.json` and `checklist.md`. A hook the model wrote is offered only if it adds no failure of its own; if none does, the least bad one is offered marked "(has issues)". Your own words are always offered, and if they break a rule (say, over 12 words) the checklist says so. If picking your words drops the only line that said what shipped, the checklist says that too.
