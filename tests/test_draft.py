@@ -794,12 +794,18 @@ def test_a_good_card_line_is_kept():
     "Fernlight reads [the photo] for you.",  # placeholder
     "Fernlight diagnoses a leaf in three seconds.",  # unsupported detail
     "Our support emails were blurry photos of sad leaves.",  # too close to line 1
-    "Fernlight reads a leaf photo and names its cause.",  # too close to line 2 (R48)
+    "Fernlight reads a leaf photo and names its cause.",  # 90% the same words as line 2 (R51)
     "Fernlight reads a leaf photo and names the cause.",  # line 2 itself
+    "Blurry photos of sad leaves, answered.",  # echoes line 1, the founder's words (R51)
     "",
 ])
 def test_a_failing_card_line_falls_back_to_the_product_and_what_shipped(bad):
     assert k3_line(bad) == "Fernlight: photo diagnosis, snap a leaf"  # R48: never a post line
+
+
+def test_a_card_line_may_share_words_with_a_later_line():
+    # R51: the card's job is to say what shipped, so overlap with line 2 is fine
+    assert k3_line("Fernlight now reads a leaf photo.") == "Fernlight now reads a leaf photo."
 
 
 def test_no_post_line_is_ever_the_card():

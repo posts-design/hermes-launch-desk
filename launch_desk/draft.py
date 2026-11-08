@@ -255,9 +255,9 @@ def _instructions(brief: Brief, relaxed: set[str], refs: Sequence[Reference] | N
         "Nothing beyond FACTS. A later line says it, never the words \"use case\".\n"
         "- hooks: three first lines, each built differently: hook 1 on pattern A, hook 2 on pattern B, "
         "hook 3 your own. One \"we built\" at most.\n"
-        "- caption: the whole post, starting with your best hook as its first line. "
+        "- caption: the whole post, your best hook as its first line. "
         "Use \\n for line breaks.\n"
-        "- card_line: the product name and what shipped, max 9 words, from FACTS, unlike any post line."
+        "- card_line: product name and what shipped, max 9 words, from FACTS, different from the first line."
     )
 
 
@@ -471,20 +471,22 @@ _CARD_RULES = frozenset({"stock-phrase", "template-opener", "placeholder", "link
 _CLAUSE_RE = re.compile(r"(?<=[:;,.!?])\s+|\s+[\u2013\u2014-]\s+")
 
 
-def _card_ok(line: str, post_lines: Sequence[str], facts: str, product: str = "") -> bool:
-    """A card line that is short, plain, from the facts and restates no line of the post (the
-    same sentence, or 60% of the content words of the shorter one; the product's name, which
-    both may carry, is left out of the count)."""
+def _card_ok(line: str, post_lines: Sequence[str], facts: str, product: str = "", what: str = "") -> bool:
+    """A card line that is short, plain and from the facts (R51): it does not echo line 1
+    (rules.echoes, the product's name and the words of what shipped left out) and is no line of
+    the post (the same sentence, or 90% the same words). Sharing words with a later line is
+    fine: the card says what shipped."""
     if not line or first_line_words(line) > CARD_LINE_WORDS:
         return False
     if ({f.rule_id for f in check(line, network="x", product=product)} & _CARD_RULES
             or unsupported_details(line, facts)):
         return False
-    name = _stems(product)
-    b = _stems(line) - name
+    if post_lines and echoes(line, post_lines[0], product, what):
+        return False
+    b = _stems(line)
     for other in post_lines:
-        a = _stems(other) - name
-        if _same(line, other) or (a and b and len(a & b) >= 0.6 * min(len(a), len(b))):
+        a = _stems(other)
+        if _same(line, other) or (a and b and len(a & b) >= 0.9 * max(len(a), len(b))):
             return False
     return True
 
@@ -534,14 +536,15 @@ def _product_line(brief: Brief, brand: BrandKit) -> str:
 
 
 def card_line(candidate: str, post: str, brief: Brief, brand: BrandKit) -> str:
-    """The card headline (R48): the model's card line when it passes (9 words or fewer, no stock
-    phrase, template opener, placeholder, link or lower-case start, no detail outside FACTS, and
-    no restatement of any line of the post), else the product name and what shipped from the
-    brief (_product_line). Never a line of the post, so the feed never shows a sentence twice."""
+    """The card headline (R48, R51): the model's card line when it passes _card_ok() (9 words or
+    fewer, no stock phrase, template opener, placeholder, link or lower-case start, no detail
+    outside FACTS, no echo of line 1, no line of the post), else the product name and what
+    shipped from the brief (_product_line). Never a line of the post, so the feed never shows a
+    sentence twice."""
     facts = facts_text(brief, brand)
     lines = [ln.strip() for ln in post.strip().split("\n") if ln.strip() and not _URL_RE.fullmatch(ln.strip())]
     line = " ".join((candidate or "").split())
-    if _card_ok(line, lines, facts, brand.name):
+    if _card_ok(line, lines, facts, brand.name, brief.what):
         return line
     fallback = _product_line(brief, brand)
     name = " ".join((brand.name or "").split())
