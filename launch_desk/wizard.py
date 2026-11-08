@@ -109,9 +109,12 @@ CAUGHT = {
     "repeats-first-line": "a line repeating the first",
     "repeated-phrase": "a phrase said twice",
     "lower-start": "a line starting lower case",
+    "line-end": "a line without a stop",
+    "name-only-line": "a line that is only the name",
     "unsupported-detail": "details you didn't give",
 }
-_QUOTE = {"stock-phrase", "template-opener", "placeholder", "copied-run", "repeated-phrase", "lower-start"}
+_QUOTE = {"stock-phrase", "template-opener", "placeholder", "copied-run", "repeated-phrase", "lower-start",
+          "line-end", "name-only-line"}
 FOUND_MAX = 40
 NEXT_CHOICES = [
     {"value": "approve", "label": "Approve"},

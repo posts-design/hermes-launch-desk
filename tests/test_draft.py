@@ -951,7 +951,7 @@ def test_a_relaxed_rule_says_it_was_kept_from_your_style():
     assert kept == {"em-dash", "lower-start"}
     lines = {c.rules: c for c in checklist(text, fails, "x", kept=kept)}
     plain = {c.rules: c for c in checklist(text, fails, "x")}
-    for rules in (("em-dash", "emoji", "hashtags"), ("placeholder", "lower-start")):
+    for rules in (("em-dash", "emoji", "hashtags"), ("placeholder", "lower-start", "line-end")):
         assert lines[rules].ok and lines[rules].text != plain[rules].text
     assert kept_from_style("Pet pages take themes now.", BRIEF, brand) == set()
 
@@ -1042,3 +1042,38 @@ def test_with_every_model_hook_echoing_only_the_founder_option_is_left():
                                   "Half the steps are gone.", "Cut the list in half."])
 def test_one_alone_and_half_without_a_unit_are_not_details(text):
     assert unsupported_details(text, FACTS) == []  # R50
+
+
+# ------------------------------------------------------------------ R53: stops and name-only lines
+
+def test_missing_stops_and_a_name_only_line_show_on_the_checklist():
+    from test_rules import K2E, K3E
+    k3 = post_failures(K3E, K3_BRIEF, K3_BRAND, REFS)
+    [line] = [c for c in checklist(K3E, k3, "x") if "line-end" in c.rules]
+    assert not line.ok and "Fernlight" in line.text
+    k2 = post_failures(K2E, K2_BRIEF, K2_BRAND, REFS)
+    [line] = [c for c in checklist(K2E, k2, "x") if "name-only-line" in c.rules]
+    assert not line.ok and "Brookhour 2.0." in line.text
+    assert len(checklist(K2E, k2, "x", use_case="x y z")) <= 12
+
+
+def test_missing_stops_and_a_name_only_line_trigger_the_redraft():
+    bad = {**CLEAN, "caption": "Pet pages can wear your colours now.\n\nPick a theme in settings and the whole page "
+                               "follows\n\npawr.link.\n\nhttps://pawr.link"}
+    host, d = draft([bad, CLEAN])
+    second = prompt_of(host.llm_calls[1])
+    assert "line-end" in second and "name-only-line" in second
+    assert {"line-end", "name-only-line"} <= {f.rule_id for f in d.first_failures} and d.failures == ()
+
+
+def test_a_stopless_voice_keeps_lines_without_stops():
+    from dataclasses import replace
+    brand = replace(BRAND, voice_samples=("shipped a small thing today\nmore soon",))
+    text = "Pet pages take themes now\n\nPick one in settings\n\nhttps://pawr.link"
+    fails = post_failures(text, BRIEF, brand, REFS)
+    assert "line-end" not in {f.rule_id for f in fails}
+    kept = kept_from_style(text, BRIEF, brand)
+    assert "line-end" in kept
+    [line] = [c for c in checklist(text, fails, "x", kept=kept) if "line-end" in c.rules]
+    [plain] = [c for c in checklist(text, fails, "x") if "line-end" in c.rules]
+    assert line.ok and line.text != plain.text

@@ -47,6 +47,10 @@ RULES: tuple[Rule, ...] = (
          "Make every line after the first say something new; don't restate the first line.", False),
     Rule("lower-start", "A line starts with a lower-case letter.",
          "Start each line with a capital.", True),
+    Rule("line-end", "A line ends without a full stop, question mark, exclamation mark or colon.",
+         "End each line with a full stop.", True),
+    Rule("name-only-line", "A line is only the product's name.",
+         "Say what shipped; a line is more than the name.", False),
     Rule("repeated-phrase", "Two lines say the same thing.",
          "Say the repeated phrase once; give every line something new.", False),
 )
@@ -339,6 +343,33 @@ def _find_lower_start(text: str, product: str = "") -> str:
     return ""
 
 
+_TAIL_RE = re.compile(r"(?:\s*(?:#\w+|" + _EMOJI_RE.pattern + r"))+\s*$")
+_ENDS_RE = re.compile(r"[.!?:\u2026][\"'\u2019\u201d)\]]*$")
+
+
+def _find_line_end(text: str) -> str:
+    """The end of the first line that stops without a full stop, question mark, exclamation mark
+    or colon (its last three words); "" if none. Link lines (ending on a link) are exempt, and
+    trailing emoji or hashtags are looked past."""
+    for raw in text.split("\n"):
+        line = raw.strip()
+        if not line or _URL_RE.search(line.split()[-1]):
+            continue
+        core = _TAIL_RE.sub("", line).strip()
+        if core and not _ENDS_RE.search(core):
+            return " ".join(core.split()[-3:])
+    return ""
+
+
+def _find_name_only(text: str, product: str = "") -> str:
+    """The first line that is only the product's name, maybe with a version ("Brookhour 2.0.")."""
+    name = " ".join(product.split())
+    if not name:
+        return ""
+    pattern = re.compile(re.escape(name) + r"(?:\s+v?\d+(?:\.\d+)*)?[.!?:\u2026]*", re.IGNORECASE)
+    return next((ln.strip() for ln in text.split("\n") if pattern.fullmatch(ln.strip())), "")
+
+
 def _find_repeated_phrase(text: str, product: str = "", what: str = "") -> tuple[str, str]:
     """What lines repeat: a phrase of two content words that two lines after the first both have
     ("next ... meeting"), a phrase of three content words of line 1 that a later line says again
@@ -401,6 +432,8 @@ _PREDICATES: dict[str, Callable[[str], bool]] = {
     "link-first-line": _link_first,
     "private-link": lambda t: bool(_find_private_link(t)),
     "lower-start": lambda t: bool(_find_lower_start(t)),
+    "line-end": lambda t: bool(_find_line_end(t)),
+    "name-only-line": lambda t: False,  # needs the product name: check() runs it
     "repeats-first-line": _repeats_first,
 }
 
@@ -477,6 +510,12 @@ def check(text: str, *, network: str, reference_captions: Sequence[str] = (),
             hit = bool(found)
         elif rule.id == "lower-start":
             found = _find_lower_start(text, product)
+            hit = bool(found)
+        elif rule.id == "line-end":
+            found = _find_line_end(text)
+            hit = bool(found)
+        elif rule.id == "name-only-line":
+            found = _find_name_only(text, product)
             hit = bool(found)
         elif rule.id == "repeats-first-line":
             hit = bool(repeating_lines(text, product, what))

@@ -41,7 +41,7 @@ DRAFT_SCHEMA: dict = {
 
 # Rules that make sense for a single first line.
 HOOK_RULES: frozenset[str] = frozenset({
-    "first-line-short", "stock-phrase", "template-opener", "lower-start", "em-dash", "emoji", "placeholder",
+    "first-line-short", "stock-phrase", "template-opener", "lower-start", "line-end", "em-dash", "emoji", "placeholder",
     "link-first-line", "copied-run",
 })
 
@@ -202,6 +202,8 @@ def _rule_lines(brief: Brief, relaxed: set[str]) -> list[str]:
         "repeats-first-line": "Each line says something new, no phrase twice. Don't restate the first line.",
         "repeated-phrase": None,  # said in the repeats-first-line line
         "lower-start": None,  # said in rule 1
+        "line-end": None,  # said in rule 1
+        "name-only-line": None,  # the redraft names it
         "copied-run": "Never copy 5 words in a row from the example posts.",
     }
     lines = []
@@ -232,7 +234,8 @@ def _instructions(brief: Brief, relaxed: set[str], refs: Sequence[Reference] | N
     network = _NETWORK.get(brief.network, brief.network)
     rules = [
         "Write like the founder talking to a friend: plain short sentences, I or we"
-        + ("." if "lower-start" in relaxed else ", a capital at each line start."),
+        + ("" if "lower-start" in relaxed else ", a capital at each line start")
+        + ("." if "line-end" in relaxed else ", a stop at each end."),
         "Say what the reader can do now; make it concrete with the use case. One line may say why it "
         "matters, if it adds no new fact.",
         "Every detail comes from FACTS: never add pets, people, names, times, steps, counts, results or "
@@ -314,7 +317,8 @@ def build_redraft_prompt(brief: Brief, brand: BrandKit, refs: Sequence[Reference
     so the references and the voice block are left out; the facts and hook patterns
     stay (far over budget, the hook patterns go and the last hooks are cut short). Fix
     lines are grouped: one line per rule and fix, naming every place it failed
-    ("- (em-dash, hook2:em-dash: <fix>)"). Under 6,000 characters together."""
+    ("- (em-dash, hook2:em-dash: <fix>)"); far over budget, more compactly ("- (em-dash in caption,
+    hooks 2, 3: <fix>)"). Under 6,000 characters together."""
     instructions = _instructions(brief, relaxed, None)
     groups: dict[tuple[str, str], list[str]] = {}
     for f in failures:
@@ -322,8 +326,22 @@ def build_redraft_prompt(brief: Brief, brand: BrandKit, refs: Sequence[Reference
         if base in MODEL_CANNOT_FIX:
             continue
         groups.setdefault((base, f.fix), []).append(f.rule_id)
-    fixes = "\n".join(f"- ({', '.join(ids)}: {fix})" for (_, fix), ids in groups.items())
-    tail = f"\n\nYour draft broke these rules. Fix exactly these:\n{fixes}\nKeep everything else the same."
+    def fix_lines(compact: bool) -> str:
+        if not compact:
+            return "\n".join(f"- ({', '.join(ids)}: {fix})" for (_, fix), ids in groups.items())
+        out = []  # far over budget: "- (em-dash in caption, hooks 2, 3: <fix>)"
+        for (base, fix), ids in groups.items():
+            hooks = [i.split(":", 1)[0][4:] for i in ids if i.startswith("hook") and ":" in i]
+            places = (["caption"] if base in ids else []) + ([f"hooks {', '.join(hooks)}"] if hooks else [])
+            other = [i for i in ids if i != base and not (i.startswith("hook") and ":" in i)]
+            out.append(f"- ({', '.join(other) + ': ' if other else ''}{base} in {', '.join(places) or 'post'}: {fix})")
+        return "\n".join(out)
+
+    def tail_for(compact: bool) -> str:
+        return (f"\n\nYour draft broke these rules. Fix exactly these:\n{fix_lines(compact)}"
+                "\nKeep everything else the same.")
+
+    tail = tail_for(False)
 
     def last_draft(limit: int) -> str:
         return "\n".join([f"Use case: {_one_line(use_case, min(limit, USE_CASE_CHARS))}"]
@@ -334,6 +352,7 @@ def build_redraft_prompt(brief: Brief, brand: BrandKit, refs: Sequence[Reference
     room = PROMPT_BUDGET - len(instructions) - len(head) - len(tail) - len(previous) - 40
     if room < REDRAFT_CAPTION_MIN:  # far over budget: shorter last-draft lines, no hook patterns
         previous, head = last_draft(REDRAFT_SHORT_LINE), _facts(brief, brand, short=True)
+        tail = tail_for(True)
         room = PROMPT_BUDGET - len(instructions) - len(head) - len(tail) - len(previous) - 40
     cap = _trim(caption, max(REDRAFT_CAPTION_MIN, min(REDRAFT_CAPTION_CHARS, room)))
     return instructions, f"{head}\n\nYOUR LAST DRAFT\n{previous}\nCaption:\n{cap}{tail}"
@@ -748,10 +767,12 @@ def checklist(text: str, failures: Sequence[Failure], network: str,
         line(("em-dash", "emoji", "hashtags"), style[:1].upper() + style[1:]
              + (" (kept from your style)" if kept & {"em-dash", "emoji", "hashtags"} else ""),
              lambda f: f"Too many: {style}"),
-        line(("placeholder", "lower-start"), "No placeholders; " + (
-            "lower-case starts kept from your style" if "lower-start" in kept else "no line starts lower case"),
-             lambda f: f"Placeholder: {_quoted(f)}".rstrip(": ") if f.rule_id == "placeholder"
-             else f"Line starts lower case: {_quoted(f)}".rstrip(": ")),
+        line(("placeholder", "lower-start", "line-end"), "No placeholders; " + "; ".join((
+            "lower-case starts kept from your style" if "lower-start" in kept else "no line starts lower case",
+            "lines without stops kept from your style" if "line-end" in kept else "every line ends with a stop")),
+             lambda f: {"placeholder": f"Placeholder: {_quoted(f)}",
+                        "lower-start": f"Line starts lower case: {_quoted(f)}",
+                        "line-end": f"Line ends without a stop: {_quoted(f)}"}[f.rule_id].rstrip(": ")),
         line(("link-first-line",), "No link in the first line", lambda f: "Link in the first line"),
         line(("private-link",), "Link is public" if has_link(text) else "No private links",
              lambda f: f"Link only opens on your own machine or network: {f.found}".rstrip(": ")),
@@ -759,9 +780,10 @@ def checklist(text: str, failures: Sequence[Failure], network: str,
              lambda f: f"Too long for X: {length}/280"),
         line(("copied-run",), "No five words copied from the references",
              lambda f: f"Copies five words from a reference: {_quoted(f)}".rstrip(": ")),
-        line(("repeats-first-line", "repeated-phrase"), "Each line says something new",
-             lambda f: "A later line repeats the first" if f.rule_id == "repeats-first-line"
-             else f.message.rstrip(".")),
+        line(("repeats-first-line", "repeated-phrase", "name-only-line"), "Each line says something new",
+             lambda f: {"repeats-first-line": "A later line repeats the first",
+                        "name-only-line": f"A line is only the name: {_quoted(f)}"}.get(
+                 f.rule_id, f.message.rstrip("."))),
         line((UNSUPPORTED,), "Only details you gave" + (
             " or your site says (" + ", ".join(f'"{p}"' for p in from_site) + ")" if from_site else ""),
              lambda f: f"Details you didn't give: {quote_phrases(f)}".rstrip(": ")),

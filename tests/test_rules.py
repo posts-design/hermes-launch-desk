@@ -395,3 +395,40 @@ def test_the_repeated_phrase_message_fits_what_repeated():
     three = message("Themes are here.\n\nPick a theme.\n\nEvery theme follows your site.")
     first = message("Deep work sits next to meetings.\n\nDeep work next to every meeting, finally.")
     assert len({pair, three, first}) == 3
+
+
+# ------------------------------------------------------------------ stops and name-only lines (R53)
+
+K3E = ("Most of our support emails were blurry photos of sad leaves.\n\nSo we put photo diagnosis in Fernlight\n\n"
+       "Snap a leaf, get the likely cause\n\nAnd three things to do today\n\nTry it on the plant that looks off\n\n"
+       "https://posts-design.github.io/launch-desk-samples/fernlight/")
+K2E = ("People kept asking to see their deep work next to their meetings.\n\nSee each focus session in your calendar, "
+       "next to meetings.\n\nBrookhour 2.0.\n\nhttps://posts-design.github.io/launch-desk-samples/brookhour/")
+
+
+def test_a_line_without_a_stop_fails_and_is_named():
+    [f] = [f for f in check(K3E, network="x", product="Fernlight") if f.rule_id == "line-end"]
+    assert f.found and f.found in "So we put photo diagnosis in Fernlight"
+
+
+@pytest.mark.parametrize("text", ["Themes are live.\n\nPick one?\n\nIt works!\n\nTry it: https://pawr.link",
+                                  "Themes are live. \U0001f680\n\nhttps://pawr.link",
+                                  "Here is how:\n\n- pick a theme.\n\nhttps://pawr.link",
+                                  "Themes are live.\n\nhttps://pawr.link/themes"])
+def test_stops_question_marks_colons_and_link_lines_pass(text):
+    assert "line-end" not in ids(text)
+
+
+def test_a_founder_who_writes_without_stops_keeps_that_style():
+    voice = ["shipped a small thing today\nmore soon"]
+    assert "line-end" not in ids("Themes are live\n\nPick one", voice_samples=voice)
+    assert next(r for r in RULES if r.id == "line-end").relaxable
+
+
+def test_a_line_that_is_only_the_product_name_fails():
+    [f] = [f for f in check(K2E, network="x", product="Brookhour") if f.rule_id == "name-only-line"]
+    assert f.found == "Brookhour 2.0."
+    for line in ("Brookhour.", "brookhour v2", "Brookhour 2.0!"):
+        assert "name-only-line" in ids(f"Focus sessions land in your calendar.\n\n{line}", product="Brookhour")
+    assert "name-only-line" not in ids("Focus sessions land in your calendar.\n\nBrookhour 2.0 is out.",
+                                       product="Brookhour")

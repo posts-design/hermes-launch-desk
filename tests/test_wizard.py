@@ -1394,3 +1394,11 @@ def test_caught_line_names_each_invented_detail_once():
         Failure("hook2:unsupported-detail", "m", "f", "one, week")))
     line = wizard.caught_line(d)
     assert line.count('"day"') == 1 and line.count('"one"') == 1 and line.count('"week"') == 1
+
+
+def test_caught_line_quotes_a_name_only_line():
+    named = {**CLEAN, "caption": CLEAN["caption"].replace("\n\nhttps://pawr.link", "\n\npawr.link.\n\nhttps://pawr.link")}
+    clean_reply = start(make_host(PHASE1))
+    reply = start(make_host(PHASE1, llm=(named, CLEAN)))
+    [line] = [ln for ln in plain(reply) if ln and ln not in plain(clean_reply)]
+    assert '"pawr.link."' in line
