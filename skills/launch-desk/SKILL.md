@@ -19,7 +19,7 @@ For example: `/launch https://yoursite.com dark mode for the editor -- people ke
 
 - Add the site link the first time. It is remembered after that.
 - The part after ` -- ` is one true detail, like who asked for it or what it replaced. The draft treats it as a fact and uses nothing it cannot find. Ask for one in the founder's own words if they have none; a real detail is the best thing a launch post can have.
-- Hook 1 is always that detail, word for word, marked "(your words)". The model's hooks come after it, each offered only if it adds no failure of its own to the post, does not echo your words, and is built unlike the others. If no model hook passes, the least bad one is offered marked "(has issues)". Encourage the founder to lead with their own line.
+- Hook 1 is always that detail, word for word, marked "(your words)". The model's hooks come after it, each offered only if it adds no failure of its own to the post, does not echo your words, and is built unlike the others. With a detail and no model hook that passes, only hook 1 is offered. Without a detail, if no model hook passes, the least bad one is offered marked "(has issues)". Encourage the founder to lead with their own line.
 - `/launch` always takes two steps. The first run ends with the draft, the card and a feed preview. Sending `/launch` again lets them approve, change the hook, swap references or discard.
 - `/launch brand <url>` reads the site's colours and logo again. `/launch help` shows the usage.
 - `/launch voice: <a past post>` keeps one of the founder's own posts as a voice sample (the last three are kept); drafts follow its style. `/launch voice: clear` forgets them. The colon is required; `/launch voice mode ...` is a normal launch. It needs a saved brand first: `/launch brand <url>`, or one approved launch.
@@ -46,7 +46,7 @@ When a check-in runs:
 2. Reply with its `message` exactly, adding nothing. The message is composed from the pack and already checked: it names the pack, asks how many sign-ups each channel brought, and gives up to two next-post ideas.
 3. If its result has `ok` false, reply with its `message` exactly (for example, there is no pack yet), and stop. If the tool is missing, reply with one line saying the check-in could not run, and stop. Never wait for an answer.
 
-A check-in made from the "Launch Desk check-in" blueprint (Hermes Desktop, New cron job) is named "Launch Desk check-in" and its prompt gives the pack as "Your latest pack", a label like "pawr.link · 7 Nov 02:06", or a folder name. Pass it to `launch_desk_followup` exactly as written; the tool finds the pack.
+A check-in made from the "Launch Desk check-in" blueprint (Hermes Desktop, New cron job) is named "Launch Desk check-in" and its prompt gives the pack as "Your latest pack", a label like "pawr.link · 7 Nov 02:06 UTC", or a folder name. Pass it to `launch_desk_followup` exactly as written; the tool finds the pack.
 
 When the founder replies to a check-in with numbers, call `launch_desk_record_results` once per channel: the pack name from the check-in, the channel (like X or LinkedIn) and the sign-ups as a whole number. Never guess a number they did not give. Then say what was recorded, in one line.
 

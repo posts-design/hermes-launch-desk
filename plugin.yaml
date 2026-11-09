@@ -7,7 +7,9 @@ description: >-
   requests); the brand kit, voice samples, drafts and their search results are stored locally in the
   plugin data directory; nothing is posted. After approve, only if the founder says Yes, two check-ins
   (a day and three days later) are created on Hermes' own scheduler and post to the same chat;
-  sign-ups the founder reports are stored in the pack.
+  sign-ups the founder reports are stored in the pack. An optional Hermes Desktop page (its UI off
+  until turned on) shows the packs; its read-only backend, served while the plugin is enabled, reads
+  the packs and, from Hermes' cron/jobs.json, the times of the check-ins Launch Desk scheduled.
 author: posts.design
 license: MIT
 homepage: https://github.com/posts-design/hermes-launch-desk
