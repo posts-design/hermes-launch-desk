@@ -188,8 +188,7 @@ def _written(folder: Path | None) -> datetime | None:
 
 
 def pack_label(name: str, data: dict, folder: Path | None = None) -> str:
-    """A friendly name for a pack: "pawr.link · 7 Nov 02:06" (its brand, then when it was made,
-    UTC): its created_at, else when its files were written, else the date in its folder name
+    """A friendly name for a pack: "pawr.link · 7 Nov 02:06 UTC" (its brand, then when it was made): its created_at, else when its files were written, else the date in its folder name
     ("pawr.link · 5 Nov")."""
     brand = data.get("brand") if isinstance(data.get("brand"), dict) else {}
     who = " ".join(str(brand.get("name") or "").split()) or _pack_site(data) or name
@@ -203,7 +202,7 @@ def pack_label(name: str, data: dict, folder: Path | None = None) -> str:
         stamp = _written(folder)
     if stamp is not None:
         stamp = stamp.astimezone(timezone.utc) if stamp.tzinfo else stamp
-        when = f"{stamp.day} {_MONTHS[stamp.month - 1]} {stamp:%H:%M}"
+        when = f"{stamp.day} {_MONTHS[stamp.month - 1]} {stamp:%H:%M} UTC"
     else:
         m = _DATE_RE.match(name)
         if m:

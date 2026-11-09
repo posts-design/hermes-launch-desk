@@ -188,6 +188,13 @@ def _cut(text: str, limit: int) -> str:
 LOCAL_SURFACES = {"cli", "tui", "local", "desktop", "acp"}
 
 
+def _surface(host: Host) -> str:
+    try:
+        return str(host.surface() or "")
+    except Exception:
+        return ""
+
+
 def _local(host: Host) -> bool:
     """A terminal or desktop client, where long links and paths can be clicked or copied."""
     try:
@@ -366,7 +373,9 @@ def _search(host: Host, brief: Brief, offline: bool, setup_issue: str = "") -> t
 
 
 def _refs_block(refs: list[Reference], used_pack: bool) -> str:
-    head = "Three launch posts that worked" + (" (from the sample pack)" if used_pack else "") + ":"
+    own = bool(refs) and refs[0].signups is not None  # the founder's own launch leads (closed loop)
+    pack_note = (" (the others from the sample pack)" if own else " (from the sample pack)") if used_pack else ""
+    head = "Three launch posts that worked" + pack_note + ":"
     lines = [head]
     for n, r in enumerate(refs, 1):
         lines.append(f"{n}. {reference_line(r)} {reference_where(r)}")
@@ -388,6 +397,8 @@ def _pick_hook(host: Host, options: list[HookOption], caption: str, refs: list[R
     for n, o in enumerate(options, 1):
         for line in o.dropped:
             question += f"\n\nWith hook {n}, this line comes out, since it repeats those words: {line}"
+        for line in o.added:
+            question += f"\n\nWith hook {n}, this line is added, so the post still says what shipped: {line}"
     def label(o: HookOption) -> str:
         mark = YOUR_WORDS if o.source == "founder" else HAS_ISSUES if o.flagged else ""
         return f"{o.text} {mark}" if mark else o.text
@@ -462,13 +473,15 @@ class _Pending:
             return [HookOption(h, "model", post_text(plain, h)) for h in hooks]
         sources = self.data.get("sources") or ["model"] * len(hooks)
         dropped = self.data.get("dropped") or [[] for _ in hooks]
+        added = self.data.get("added") or [[] for _ in hooks]
         flagged = self.data.get("flagged") or [False] * len(hooks)
-        return [HookOption(h, s if s == "founder" else "model", p, tuple(d), bool(f))
-                for h, s, p, d, f in zip(hooks, sources, posts, dropped, flagged)]
+        return [HookOption(h, s if s == "founder" else "model", p, tuple(d), bool(f), tuple(a))
+                for h, s, p, d, f, a in zip(hooks, sources, posts, dropped, flagged, added)]
 
     def set_options(self, options: list[HookOption], draft: Draft) -> None:
         self.data.update(hooks=[o.text for o in options], sources=[o.source for o in options],
                          posts=[o.post for o in options], dropped=[list(o.dropped) for o in options],
+                         added=[list(o.added) for o in options],
                          flagged=[o.flagged for o in options], caption=draft.caption,
                          use_case=draft.use_case, card_draft=draft.card_line)
 
@@ -635,7 +648,7 @@ def _phase1(host: Host, args: Args, stored: BrandKit | None, get: Callable[[str]
     refs = with_own(best, rank_references(items, brief))
 
     host.say("Drafting the post.")
-    kept = [STYLE_WORDS[r] for r in sorted(relaxed_rules(brand.voice_samples)) if r in STYLE_WORDS]
+    kept = [STYLE_WORDS[r] for r in sorted(relaxed_rules(brand.voice_samples, brand.name)) if r in STYLE_WORDS]
     if kept:
         notes.append(f"Kept your style: your past posts use {' and '.join(kept)}, so the draft may too.")
     draft = draft_post(host, brief, brand, refs, pick_hook_shapes(brief.shipped))
@@ -756,7 +769,10 @@ def _approve(host: Host, p: _Pending) -> str:
     data = json.loads((pack / "pack.json").read_text(encoding="utf-8"))
     text = (pack / data["files"]["post"]).read_text(encoding="utf-8").strip()
     checkins = _offer_checkins(host, pack.name)
-    if _local(host):
+    if _local(host) and _surface(host) in ("desktop", "acp"):  # Desktop may talk to a remote gateway
+        post_it = f"Post it on X with this text filled in: {data['intent_url']}"
+        saved = f"Saved as {pack.name}. The Launch Desk page in Hermes Desktop shows it."
+    elif _local(host):
         post_it = f"Post it on X with this text filled in: {data['intent_url']}"
         saved = f"Pack folder: {pack}"
     else:  # chat apps show a Markdown link as a short label, and the server path means nothing there

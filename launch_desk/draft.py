@@ -691,8 +691,9 @@ def hook_options(draft: Draft, brief: Brief, brand: BrandKit, refs: Sequence[Ref
     words = founder_hook(brief.detail)
     if words:
         post, dropped = _drop_repeats(with_first_line(draft.caption, words), brand.name, brief.what)
-        post = _keep_what_shipped(post, draft, brief, brand, refs)
-        options.append(HookOption(words, "founder", post, dropped))
+        kept = _keep_what_shipped(post, draft, brief, brand, refs)
+        added = (draft.caption.strip().split("\n")[0].strip(),) if kept != post else ()
+        options.append(HookOption(words, "founder", kept, dropped, added=added))
     lines = draft.caption.strip().split("\n")
     body = {(f.rule_id, f.found) for f in post_failures("\n" + "\n".join(lines[1:]), brief, brand, refs)}
     scored: list[tuple[int, str, str]] = []

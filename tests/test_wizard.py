@@ -389,7 +389,7 @@ def test_phase2_approve_writes_pack_and_clears_pending():
     assert CARD in (pack_json.parent / "alt-text.txt").read_text()
 
 
-@pytest.mark.parametrize("surface", ["cli", "tui", "local", "desktop", "acp"])
+@pytest.mark.parametrize("surface", ["cli", "tui", "local"])
 def test_approve_on_a_local_client_shows_the_raw_intent_url_and_full_folder(surface):
     host = make_host(PHASE1, surface=surface)
     start(host)
@@ -1427,3 +1427,40 @@ def test_a_link_in_the_detail_never_reads_another_brand_and_shows_on_the_checkli
     assert p.brief.product_url == URL and not p.data["brand_new"]
     assert p.data["hook"] == founder_hook("people asked in https://github.com/x/y/issues/1 for months")
     assert [c.ok for c in p.checks() if "link-first-line" in c.rules] == [False]
+
+
+@pytest.mark.parametrize("surface", ["desktop", "acp"])
+def test_approve_on_desktop_names_the_pack_not_a_server_path(surface):
+    host = make_host(PHASE1, surface=surface)
+    start(host)
+    reply = resume(host, "approve")
+    [pack_json] = packs(host)
+    url = json.loads(pack_json.read_text())["intent_url"]
+    lines = plain(reply)
+    assert any(url in line.split() for line in lines)
+    assert any(pack_json.parent.name in line for line in lines)
+    assert not any(str(pack_json.parent) in line for line in lines)
+
+
+def test_the_hook_question_names_a_line_r44_adds_to_hook_one():
+    k2b = {"use_case": "See focus sessions in your calendar next to meetings.",
+           "hooks": ["See focus sessions in your calendar with Brookhour 2.0.", "Are you a maker? Stop guessing.",
+                     "Brookhour 2.0 is out."],
+           "caption": "See focus sessions in your calendar with Brookhour 2.0.\n\nYou asked to see deep work next to "
+                      "meetings.\n\nhttps://pawr.link",
+           "card_line": "Brookhour 2.0: focus sessions in your calendar"}
+    host = make_host(PHASE1, llm=(k2b,))
+    start(host, args=f"{URL} Brookhour 2.0: focus sessions now show up in your calendar -- "
+                     "people kept asking to see their deep work next to their meetings")
+    p = pending(host)
+    assert p["added"][0] == ["See focus sessions in your calendar with Brookhour 2.0."]
+    assert "See focus sessions in your calendar with Brookhour 2.0." in questions(host, "1")[0].split("Pick the hook")[1]
+
+
+def test_the_sample_pack_label_never_covers_your_own_launch():
+    from launch_desk.models import Reference
+    own = Reference("own:p", "Your own launch", "", "Hi.", None, None, "Your best launch", signups=12)
+    other = Reference("r1", "Notion", "https://posts.design/r1", "Hi.", 900, None, "Close match")
+    with_own = wizard._refs_block([own, other], used_pack=True)
+    without = wizard._refs_block([other, other], used_pack=True)
+    assert with_own.splitlines()[0] != without.splitlines()[0]

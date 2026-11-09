@@ -306,7 +306,7 @@ def _label(name: str, data: dict, folder: Optional[Path] = None) -> str:
         stamp = datetime.fromtimestamp(_created(folder), tz=timezone.utc)
     if stamp is not None:
         stamp = stamp.astimezone(timezone.utc) if stamp.tzinfo else stamp
-        when = f"{stamp.day} {MONTHS[stamp.month - 1]} {stamp:%H:%M}"
+        when = f"{stamp.day} {MONTHS[stamp.month - 1]} {stamp:%H:%M} UTC"
     else:
         m = DATE_RE.match(name)
         if m:
@@ -412,10 +412,12 @@ def checkin_summary(packs: list, now: Optional[datetime] = None) -> dict:
 # ------------------------------------------------------------------ the listing
 
 def list_packs(root: Path, jobs_path: Optional[Path] = None, now: Optional[datetime] = None) -> dict:
-    """Every readable pack, newest first (by when it was written, then by name)."""
+    """Every readable pack, newest first (by when it was written, then by name). At most
+    MAX_PACKS are read: the newest by when their files were written (one directory scan each)."""
     checkins = checkins_by_pack(jobs_path, now, root) if jobs_path is not None else {}
+    names = sorted(pack_names(root), key=lambda n: (_created(root / n), n), reverse=True)[:MAX_PACKS]
     packs = []
-    for name in pack_names(root):
+    for name in names:
         summary = summarize_pack(root / name, checkins.get(name))
         if summary is not None:
             packs.append(summary)

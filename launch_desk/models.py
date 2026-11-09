@@ -88,6 +88,7 @@ class HookOption:
     post: str
     dropped: tuple[str, ...] = ()  # body lines left out because they repeat this hook
     flagged: bool = False  # offered although it fails a check: no model hook passed
+    added: tuple[str, ...] = ()  # lines put back so the post says what shipped (R44)
 
 
 @dataclass(frozen=True)

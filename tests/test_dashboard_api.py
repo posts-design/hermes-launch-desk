@@ -470,3 +470,15 @@ def test_the_dashboard_labels_packs_as_the_plugin_does(tmp_path):
     make_pack(root, "2026-11-05-old", 1_000)  # no created_at: the folder date
     assert api.pack_labels(root) == dict(zip(followup.recent_labels(root, limit=99),
                                              ["2026-11-07-new", "2026-11-06-same", "2026-11-05-old"]))
+
+
+def test_the_listing_caps_before_reading_every_pack(tmp_path, monkeypatch):
+    root = tmp_path / "packs"
+    for n in range(api.MAX_PACKS + 5):
+        (root / f"2026-11-{n % 28 + 1:02d}-p{n:03d}").mkdir(parents=True)
+        (root / f"2026-11-{n % 28 + 1:02d}-p{n:03d}" / "pack.json").write_text("{}", encoding="utf-8")
+    seen = []
+    real = api.summarize_pack
+    monkeypatch.setattr(api, "summarize_pack", lambda folder, checkins=None: seen.append(folder) or real(folder, checkins))
+    listing = api.list_packs(root)
+    assert len(seen) <= api.MAX_PACKS and len(listing["packs"]) <= api.MAX_PACKS

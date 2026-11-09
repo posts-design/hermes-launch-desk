@@ -140,7 +140,7 @@ def register(ctx):
             schedule_template="in 24h",
             prompt_template=followup.BLUEPRINT_PROMPT,
             slots=[{
-                "name": "pack", "type": "enum", "label": "Launch pack (leave blank for your latest)",
+                "name": "pack", "type": "enum", "label": "Launch pack (your latest unless you pick one)",
                 "optional": True, "strict": False, "default": followup.LATEST,
                 "options": [followup.LATEST, *labels],
                 "help": "Your latest pack is the newest one when the check-in runs. Or pick a recent pack.",
