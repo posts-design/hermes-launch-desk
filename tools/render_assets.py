@@ -13,9 +13,9 @@ INPUT_DIR holds files gathered once by hand (not committed):
   fernlight-logo.png      the logo fetch_brand() saved for the Fernlight sample site
   cli.ansi                (optional) `tmux capture-pane -p -e` of a live `hermes chat` run of /launch
 OUT_DIR defaults to the repo's assets/. Each card carries the post and card line of a live /launch
-run (hook 1, the founder's words): the hero card and the feed preview are K1 (posts.design MCP,
+run (hook 1, the founder's words): the hero card and the banner are K1 (posts.design MCP, showing its card line,
 2026-11-07), the statement card is K2 (Brookhour, 2026-11-08) and the split card is K3 (Fernlight,
-2026-11-08). Brookhour and Fernlight are sample apps made for this demo, on public sample sites. The
+2026-11-08); the feed preview is the Fernlight post with its split card. Brookhour and Fernlight are sample apps made for this demo, on public sample sites. The
 brand values are what fetch_brand() read from each site on 2026-11-08. Every post passes every check.
 The CLI image (cli-flow.png) is a capture of a live /launch run for Fernlight on 2026-11-09, at the
 hook question with the founder words as hook 1.
@@ -576,7 +576,10 @@ def main(argv: list[str]) -> int:
             ("card-statement.png", brookhour, [], BROOKHOUR_CARD),
             ("card-split.png", fernlight, [inp / "fernlight-phone.png", inp / "fernlight-desktop.png"], FERNLIGHT_CARD)):
         render_card(kit, used, card, X, shots / name, layout=choose_layout(used, card))
-    preview = render_feed_preview(posts, POSTS_POST, shots / "card-x.png", shots / "feed-preview.png", scale=2)
+    # The feed preview is the Fernlight post with its split card: a sample app, so no founder line
+    # in it stands for a real person (R60).
+    preview = render_feed_preview(fernlight, FERNLIGHT_POST, shots / "card-split.png", shots / "feed-preview.png",
+                                  scale=2)
     frame_preview(preview)
     if with_banner:
         card = render_card(posts, [inp / "posts-shot.png"], POSTS_CARD, X, out / "_banner-card.png")
