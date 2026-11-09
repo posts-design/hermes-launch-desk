@@ -1,10 +1,13 @@
-"""Read a product site once and extract its brand. Pure Python, stdlib only."""
+"""Read a product site once and extract its brand: the standard library, plus Pillow to check a
+logo's size before it is kept."""
 from __future__ import annotations
 
 import colorsys
 import io
 import math
 import re
+import socket
+import struct
 import urllib.parse
 import urllib.request
 from collections import Counter
@@ -716,12 +719,24 @@ def _host(url: str) -> str:
         return ""
 
 
+def _resolves_private(host: str) -> bool:
+    """True when the name resolves to any private, loopback, link-local or unspecified address
+    ("169.254.169.254.nip.io", "localtest.me"). A name that does not resolve is not refused here;
+    its GET fails on its own."""
+    try:
+        infos = socket.getaddrinfo(host, None)
+    except (OSError, UnicodeError, ValueError):
+        return False
+    return any(_private_host(str(info[4][0])) for info in infos)
+
+
 def _private_elsewhere(target: str, own: str) -> bool:
-    """A private, loopback or link-local host other than the founder's own (R59): a public site
-    must not send the read to the founder's network or a metadata address. The founder's own
-    staging host (http://127.0.0.1:8731/...) is still read."""
+    """A host other than the founder's own that is, or resolves to, a private, loopback or
+    link-local address (R59, R61): a public site must not send the read to the founder's network
+    or a metadata address, by a literal (decimal, short or hex), a name, or a redirect. The
+    founder's own staging host (http://127.0.0.1:8731/...) is still read."""
     host = _host(target)
-    return bool(host) and host != _host(own) and _private_host(host)
+    return bool(host) and host != _host(own) and (_private_host(host) or _resolves_private(host))
 
 
 class _HttpOnlyRedirects(urllib.request.HTTPRedirectHandler):
@@ -799,9 +814,37 @@ def _logo_ext(data: bytes) -> str | None:
 LOGO_MAX_PIXELS = 4096 * 4096
 
 
+ICO_MAGIC = b"\x00\x00\x01\x00"
+
+
+def ico_within(data: bytes, max_pixels: int) -> bool:
+    """True when every image an ICO file lists is at most max_pixels, read from its directory and
+    each embedded PNG's header, before Pillow (which decodes an embedded PNG frame on open)
+    touches it (N1). A malformed directory is refused."""
+    try:
+        _reserved, _kind, count = struct.unpack_from("<HHH", data, 0)
+        if not 0 < count <= 64:
+            return False
+        for n in range(count):
+            width, height, *_rest, size, offset = struct.unpack_from("<BBBBHHII", data, 6 + 16 * n)
+            frame = data[offset:offset + 24]
+            if frame.startswith(b"\x89PNG\r\n\x1a\n"):
+                width, height = struct.unpack(">II", frame[16:24])
+            else:
+                width, height = width or 256, height or 256
+            if width * height > max_pixels:
+                return False
+    except struct.error:
+        return False
+    return True
+
+
 def _small_enough(data: bytes) -> bool:
     """An image a logo can be: it opens (lazily, without decoding) and has at most 4096² pixels.
-    A pixel-bomb icon would cost the gateway gigabytes to decode (I3)."""
+    A pixel-bomb icon would cost the gateway gigabytes to decode (I3); an ICO is checked from its
+    directory first (N1)."""
+    if data.startswith(ICO_MAGIC) and not ico_within(data, LOGO_MAX_PIXELS):
+        return False
     try:
         with Image.open(io.BytesIO(data)) as im:
             width, height = im.size

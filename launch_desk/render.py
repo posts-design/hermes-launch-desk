@@ -15,7 +15,7 @@ from typing import Sequence
 
 from PIL import Image, ImageDraw, ImageFilter, ImageFont, ImageOps, ImageStat
 
-from .brand import FACES, font_face
+from .brand import FACES, ICO_MAGIC, font_face, ico_within
 from .models import BrandKit
 
 FONT_DIR = Path(__file__).resolve().parent / "fonts"
@@ -250,6 +250,10 @@ def _open_image(path: Path | str | None) -> Image.Image | None:
     if not path:
         return None
     try:
+        with open(path, "rb") as handle:
+            head = handle.read(4)
+            if head == ICO_MAGIC and not ico_within(head + handle.read(), OPEN_MAX_PIXELS):
+                return None  # an ICO frame is decoded on open: check its directory first (N1)
         im = Image.open(path)
         if im.size[0] * im.size[1] > OPEN_MAX_PIXELS:
             return None

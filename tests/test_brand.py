@@ -689,3 +689,78 @@ def test_a_pixel_bomb_logo_is_not_kept_and_the_card_still_renders(tmp_path):
                       tmp_path / "card.png")
     from PIL import Image
     assert Image.open(out).size == (1200, 675)
+
+
+# --- R61: names and numeric forms that reach a private address; N1: ICO pixel bombs ----------
+
+def _resolves(mapping):
+    import socket
+
+    def fake(host, *args, **kwargs):
+        if host not in mapping:
+            raise socket.gaierror("no such host")
+        return [(socket.AF_INET, socket.SOCK_STREAM, 6, "", (ip, 0)) for ip in mapping[host]]
+    return fake
+
+
+@pytest.mark.parametrize("logo,mapping", [
+    ("http://169.254.169.254.nip.io/icon.png", {"169.254.169.254.nip.io": ["169.254.169.254"]}),
+    ("http://localtest.me/icon.png", {"localtest.me": ["127.0.0.1"]}),
+    ("http://mixed.example/icon.png", {"mixed.example": ["93.184.216.34", "10.0.0.5"]}),
+    ("http://0x7f000001/icon.png", {}),
+    ("http://0xa9.0xfe.0xa9.0xfe/icon.png", {}),
+])
+def test_a_logo_whose_host_reaches_a_private_address_is_refused(tmp_path, monkeypatch, logo, mapping):
+    from launch_desk import brand
+    monkeypatch.setattr(brand.socket, "getaddrinfo", _resolves(mapping))
+    calls = []
+
+    def get(url):
+        calls.append(url)
+        return PNG if url == logo else f'<link rel="icon" href="{logo}">'.encode()
+
+    assert fetch_brand("https://x.test", get, tmp_path).logo_path is None and logo not in calls
+
+
+def test_a_logo_on_a_public_host_is_still_fetched(tmp_path, monkeypatch):
+    from launch_desk import brand
+    monkeypatch.setattr(brand.socket, "getaddrinfo", _resolves({"cdn.example": ["93.184.216.34"]}))
+
+    def get(url):
+        return PNG if url.endswith("/icon.png") else b'<link rel="icon" href="https://cdn.example/icon.png">'
+
+    assert fetch_brand("https://x.test", get, tmp_path).logo_path is not None
+
+
+def _ico_around(png: bytes, side: int = 0) -> bytes:
+    import struct
+    header = struct.pack("<HHH", 0, 1, 1)
+    entry = struct.pack("<BBBBHHII", side, side, 0, 0, 1, 32, len(png), 6 + 16)  # 0 means 256 or more
+    return header + entry + png
+
+
+def test_an_ico_wrapping_a_huge_png_is_refused_without_decoding(tmp_path, monkeypatch):
+    from launch_desk import brand
+    from launch_desk.render import _open_image
+    bomb = _ico_around(_png((9000, 9000), mode="1"))
+    opened = []
+    real_open = brand.Image.open
+    monkeypatch.setattr(brand.Image, "open", lambda *a, **k: opened.append(a) or real_open(*a, **k))
+
+    def get(url):
+        return bomb if url.endswith("/favicon.ico") else b'<link rel="icon" href="/favicon.ico">'
+
+    assert fetch_brand("https://x.test", get, tmp_path).logo_path is None
+    assert opened == []  # refused from the ICO directory, before Pillow decodes the frame
+    path = tmp_path / "bomb.ico"
+    path.write_bytes(bomb)
+    assert _open_image(path) is None
+
+
+def test_a_small_ico_logo_is_kept(tmp_path):
+    small = _ico_around(_png((32, 32)), side=32)
+
+    def get(url):
+        return small if url.endswith("/favicon.ico") else b'<link rel="icon" href="/favicon.ico">'
+
+    assert fetch_brand("https://x.test", get, tmp_path).logo_path is not None

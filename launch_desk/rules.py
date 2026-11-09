@@ -174,6 +174,9 @@ def _find_template(text: str) -> str:
     return m.group(0) if m else ""
 
 
+_NUMERIC_HOST_RE = re.compile(r"(?:0x[0-9a-f]*|[0-9]+)(?:\.(?:0x[0-9a-f]*|[0-9]+)){0,3}")
+
+
 def _private_host(host: str) -> bool:
     """localhost, a loopback, private, link-local or unspecified address, or a .local name."""
     host = host.lower().rstrip(".")
@@ -182,9 +185,9 @@ def _private_host(host: str) -> bool:
     try:
         addr = ipaddress.ip_address(host.split("%", 1)[0])
     except ValueError:
-        if not re.fullmatch(r"[0-9.]+", host):
+        if not _NUMERIC_HOST_RE.fullmatch(host):
             return False
-        try:  # the short and decimal forms a browser also opens: 127.1, 2130706433
+        try:  # the short, decimal and hex forms a browser also opens: 127.1, 2130706433, 0x7f000001
             addr = ipaddress.ip_address(socket.inet_aton(host))
         except OSError:
             return False

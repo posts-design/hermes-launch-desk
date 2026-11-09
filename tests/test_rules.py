@@ -482,3 +482,8 @@ def test_real_launch_captions_mostly_pass_line_end():
 
 
 LINE_END_REAL_FAILURES = 18
+
+
+@pytest.mark.parametrize("link", ["http://0x7f000001:3000/", "http://0x7f.1/", "http://0xa9fea9fe/latest/"])
+def test_hex_ipv4_links_are_private(link):
+    assert "private-link" in ids(f"Themes are live.\n{link}")
