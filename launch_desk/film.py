@@ -22,6 +22,7 @@ import logging
 import os
 import re
 import shutil
+import time
 import urllib.parse
 import uuid
 from dataclasses import dataclass, field
@@ -305,6 +306,7 @@ def build_html(plan: Plan, shot: tuple[int, int] | None) -> str:
     fitted = plan.fitted or layout(plan)
     bg, ink, accent = plan.bg, plan.ink, plan.accent
     muted = "#%02X%02X%02X" % _mix(_rgb(ink), _rgb(bg), 0.42)
+    edge = "#%02X%02X%02X" % _mix(_rgb(bg), _rgb(ink), 0.14)  # the screenshot's edge, seen on dark grounds too
     line, card, name, site = fitted["line"], fitted["card"], fitted["end_name"], fitted["end_host"]
     css = [
         _font_face(HEAD_FAMILY, plan.head_font, _WEIGHTS.get(plan.head_font.name, "100 900")),
@@ -337,7 +339,7 @@ def build_html(plan: Plan, shot: tuple[int, int] | None) -> str:
         css += [
             "#beat-product { align-items: center; padding: 0; }",
             f"#shot-frame {{ width: {w}px; height: {h}px; border-radius: {SHOT_RADIUS}px; overflow: hidden; "
-            "box-shadow: 0 28px 80px rgba(0, 0, 0, 0.28), 0 4px 14px rgba(0, 0, 0, 0.12); "
+            f"box-shadow: 0 0 0 1px {edge}, 0 28px 80px rgba(0, 0, 0, 0.28), 0 4px 14px rgba(0, 0, 0, 0.12); "
             + _anim("ld-up", 0.9, 3.5) + " }",
             f"#shot-frame img {{ display: block; width: {w}px; height: {h}px; transform-origin: 50% 40%; "
             + _anim("ld-zoom", 5.0, 3.5, "linear") + " }",
@@ -506,6 +508,7 @@ def render(host: Host, template: list[str], project: Path, pack: Path) -> bool:
     and a non-empty MP4. Never raises; the last lines of its output go to the plugin log."""
     out = pack / f".film-{uuid.uuid4().hex[:8]}.mp4"
     argv = command(template, project, out)
+    started = time.monotonic()
     try:
         code, output = host.run(argv, cwd=project, env=render_env(), timeout=RENDER_TIMEOUT_S)
     except TimeoutError:
@@ -518,7 +521,7 @@ def render(host: Host, template: list[str], project: Path, pack: Path) -> bool:
         return False
     ok = code == 0 and out.is_file() and out.stat().st_size > 0
     level = logging.INFO if ok else logging.WARNING
-    logger.log(level, "launch-desk: film render exit %s: %s", code, _tail(output))
+    logger.log(level, "launch-desk: film render exit %s in %.1f s: %s", code, time.monotonic() - started, _tail(output))
     if not ok:
         out.unlink(missing_ok=True)
         return False
