@@ -17,6 +17,8 @@ run (hook 1, the founder's words): the hero card and the feed preview are K1 (po
 2026-11-07), the statement card is K2 (Brookhour, 2026-11-08) and the split card is K3 (Fernlight,
 2026-11-08). Brookhour and Fernlight are sample apps made for this demo, on public sample sites. The
 brand values are what fetch_brand() read from each site on 2026-11-08. Every post passes every check.
+The CLI image (cli-flow.png) is a capture of a live /launch run for Fernlight on 2026-11-09, at the
+hook question with the founder words as hook 1.
 """
 from __future__ import annotations
 
