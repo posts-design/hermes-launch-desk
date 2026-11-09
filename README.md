@@ -75,7 +75,7 @@ The page only reads. Its backend (`dashboard/plugin_api.py`, loaded when the plu
 - At most 280 characters on X, counting each link as 23.
 - No run of five words copied from a reference (your own past post and your own detail don't count).
 - No line that just restates the first, and no phrase said twice: a later line saying three words of the first again, two lines sharing a phrase ("next to meetings"), or a word other than your product's name in three lines.
-- Every line starts with a capital letter, unless it starts with a link, a handle or your product's name as you write it, and ends with a full stop, question mark, exclamation mark or colon (a link line is fine). If your own past posts do otherwise, these are relaxed.
+- Every line starts with a capital letter, unless it starts with a link, a handle or your product's name as you write it, and ends with a full stop, question mark, exclamation mark or colon. List items, links and bare domains (pawr.link), and a lead-in to a link ("Here's what's new 👇") need no stop. If your own past posts do otherwise, these are relaxed.
 - No line that is only your product's name ("Brookhour 2.0.").
 - No numbers, counts or time and effort claims ("three things", "today", "in seconds") that are not in your facts. Ones that only your site's description gives are named in the checklist as from your site. If it is true that it is out today (or took a week), put that in your detail after ` -- `, and the post may say it.
 
