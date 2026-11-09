@@ -44,7 +44,9 @@ When a check-in runs:
 
 1. Call `launch_desk_followup` with the pack name.
 2. Reply with its `message` exactly, adding nothing. The message is composed from the pack and already checked: it names the pack, asks how many sign-ups each channel brought, and gives up to two next-post ideas.
-3. If the tool is missing or its result has `ok` false, reply with one line saying the check-in for that pack could not run, and stop. Never wait for an answer.
+3. If its result has `ok` false, reply with its `message` exactly (for example, there is no pack yet), and stop. If the tool is missing, reply with one line saying the check-in could not run, and stop. Never wait for an answer.
+
+A check-in made from the "Launch Desk check-in" blueprint (Hermes Desktop, New cron job) is named "Launch Desk check-in" and its prompt gives the pack as "Your latest pack", a label like "pawr.link · 7 Nov 02:06", or a folder name. Pass it to `launch_desk_followup` exactly as written; the tool finds the pack.
 
 When the founder replies to a check-in with numbers, call `launch_desk_record_results` once per channel: the pack name from the check-in, the channel (like X or LinkedIn) and the sign-ups as a whole number. Never guess a number they did not give. Then say what was recorded, in one line.
 
