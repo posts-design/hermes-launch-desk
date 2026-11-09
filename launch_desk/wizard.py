@@ -637,7 +637,7 @@ def _phase1(host: Host, args: Args, stored: BrandKit | None, get: Callable[[str]
     kept = [STYLE_WORDS[r] for r in sorted(relaxed_rules(brand.voice_samples)) if r in STYLE_WORDS]
     if kept:
         notes.append(f"Kept your style: your past posts use {' and '.join(kept)}, so the draft may too.")
-    draft = draft_post(host, brief, brand, refs, pick_hook_shapes(brief.shipped, brief.detail))
+    draft = draft_post(host, brief, brand, refs, pick_hook_shapes(brief.shipped))
     lead = _caught(host, draft, notes)
     if loop_line and _local(host):  # a terminal shows no progress messages: open the question with it
         lead = "\n".join(x for x in (loop_line, lead) if x)
@@ -794,7 +794,7 @@ def _resume(host: Host, p: _Pending) -> str:
             fresh = [own] + fresh[:2]
         if fresh:
             host.say("Drafting again with new references.")
-            draft = draft_post(host, p.brief, p.brand, fresh, pick_hook_shapes(p.brief.shipped, p.brief.detail))
+            draft = draft_post(host, p.brief, p.brand, fresh, pick_hook_shapes(p.brief.shipped))
             lead = _caught(host, draft, caught)
             options = hook_options(draft, p.brief, p.brand, fresh)
             picked = _pick_hook(host, options, draft.caption, fresh, p.data["used_pack"], lead)

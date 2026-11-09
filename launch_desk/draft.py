@@ -329,12 +329,13 @@ def build_redraft_prompt(brief: Brief, brand: BrandKit, refs: Sequence[Reference
     def fix_lines(compact: bool) -> str:
         if not compact:
             return "\n".join(f"- ({', '.join(ids)}: {fix})" for (_, fix), ids in groups.items())
-        out = []  # far over budget: "- (em-dash in caption, hooks 2, 3: <fix>)"
+        out = []  # far over budget: "- (em-dash in caption, hook 2: <fix>)"
         for (base, fix), ids in groups.items():
             hooks = [i.split(":", 1)[0][4:] for i in ids if i.startswith("hook") and ":" in i]
-            places = (["caption"] if base in ids else []) + ([f"hooks {', '.join(hooks)}"] if hooks else [])
-            other = [i for i in ids if i != base and not (i.startswith("hook") and ":" in i)]
-            out.append(f"- ({', '.join(other) + ': ' if other else ''}{base} in {', '.join(places) or 'post'}: {fix})")
+            places = (["caption"] if base in ids else []) + (["the use case"] if f"use-case:{base}" in ids else [])
+            if hooks:
+                places.append(("hook " if len(hooks) == 1 else "hooks ") + ", ".join(hooks))
+            out.append(f"- ({base} in {', '.join(places) or 'caption'}: {fix})")
         return "\n".join(out)
 
     def tail_for(compact: bool) -> str:
@@ -574,7 +575,7 @@ def card_line(candidate: str, post: str, brief: Brief, brand: BrandKit) -> str:
 
 # ------------------------------------------------------------------ the hooks offered
 
-_END_RE = re.compile(r"[.!?\u2026][\"'\u2019\u201d)\]]*$")
+_END_RE = re.compile(r"[.!?:\u2026][\"'\u2019\u201d)\]]*$")  # a trailing ":" stays as it is
 
 
 def founder_hook(detail: str) -> str:

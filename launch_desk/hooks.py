@@ -33,10 +33,9 @@ _BY_KIND: dict[str, tuple[str, str]] = {
 }
 
 
-def pick_hook_shapes(shipped: str, detail: str = "") -> list[HookShape]:
-    """Two hook shapes for a kind of launch; unknown kinds use the feature pair. The detail no
-    longer changes them: when there is one, the founder's own words are hook 1, and a "You asked
-    for it" pattern would only echo them (R47)."""
+def pick_hook_shapes(shipped: str) -> list[HookShape]:
+    """Two hook shapes for a kind of launch; unknown kinds use the feature pair. The founder's
+    detail plays no part: when there is one, their own words are hook 1 (R47)."""
     kind = shipped if shipped in _BY_KIND else "feature"
     first, second = _BY_KIND[kind]
     return [HOOK_SHAPES[first], HOOK_SHAPES[second]]

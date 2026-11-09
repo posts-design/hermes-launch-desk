@@ -256,7 +256,7 @@ def test_redraft_prompt_stays_under_6000_chars_for_every_kind_with_a_use_case(ki
         detail = unsupported_details(" ".join(str(n) + "9" * (40 + i) for i in range(8)), "")[0]
         fails.append(detail if n == 0 else Failure(f"hook{n}:{detail.rule_id}", detail.message, detail.fix))
     fails.append(Failure("use-case-missing", "m", "Say the use case in the caption."))
-    instructions, text = build_redraft_prompt(brief, brand, REFS, pick_hook_shapes(kind, "asked"), set(), ["hook " * 500] * 3,
+    instructions, text = build_redraft_prompt(brief, brand, REFS, pick_hook_shapes(kind), set(), ["hook " * 500] * 3,
                                               "cap " * 3000, fails, use_case="use " * 500)
     assert len(instructions) + len(text) < 6000
     assert "Caption:" in text and "Use case:" in text
@@ -426,7 +426,7 @@ def test_prompt_with_the_longest_shape_notes_stays_under_6000_chars(kind):
     brand = BrandKit("N" * 300, "https://pawr.link", "T" * 1000, "#fff", "#111", "#f60", None, None,
                      voice_samples=tuple("voice " * 1000 for _ in range(5)))
     brief = Brief(kind, "x", "what " * 500, "https://pawr.link/" + "p" * 300, detail="detail " * 500)
-    instructions, text = build_brief_prompt(brief, brand, refs, pick_hook_shapes(kind, "people asked"), set())
+    instructions, text = build_brief_prompt(brief, brand, refs, pick_hook_shapes(kind), set())
     assert len(instructions) + len(text) < 6000
 
 
@@ -443,7 +443,7 @@ def test_use_case_is_carried_at_forty_percent_of_its_words():
 def test_prompt_carries_the_picked_hook_shapes(detail, shape_id):
     from launch_desk.hooks import HOOK_SHAPES
     brief = Brief("feature", "x", "custom themes for pet profile pages", "https://pawr.link", detail=detail)
-    _, text = build_brief_prompt(brief, BRAND, REFS, pick_hook_shapes("feature", detail), set())
+    _, text = build_brief_prompt(brief, BRAND, REFS, pick_hook_shapes("feature"), set())
     assert HOOK_SHAPES["bold-contrast"].shape in text and HOOK_SHAPES[shape_id].shape in text
 
 
@@ -1141,3 +1141,23 @@ def test_the_founder_line_counts_only_past_half_of_the_words():
     founder = "People kept asking to match their pet page to their own site."  # pet, page: 2 of 5
     assert not says_what_shipped("A small thing, but it helps.", "", what, founder)
     assert says_what_shipped("A small thing, but it helps.", "", what, "Custom themes for pet pages are live.")
+
+
+# ------------------------------------------------------------------ fix6 minors
+
+def test_compact_redraft_lines_name_places_plainly():
+    brand = BrandKit("N" * 300, "https://pawr.link", "T" * 1000, "#fff", "#111", "#f60", None, None)
+    brief = Brief("feature", "x", "what " * 500, "https://pawr.link/" + "p" * 300, detail="detail " * 500)
+    fails = [Failure("em-dash", "m", "Fix dashes."), Failure("hook2:em-dash", "m", "Fix dashes."),
+             Failure("hook2:stock-phrase", "m", "Fix stock."), Failure("hook3:stock-phrase", "m", "Fix stock."),
+             Failure("use-case:unsupported-detail", "m", "Fix details.")]
+    fails += [Failure(f"hook{n}:first-line-short", "m", "x" * 400 + str(n)) for n in (1, 2, 3)]  # force compact
+    _, text = build_redraft_prompt(brief, brand, REFS, SHAPES, set(), ["hook " * 500] * 3, "cap " * 3000, fails,
+                                   use_case="use " * 500)
+    tail = text[text.index("Your draft broke"):]
+    assert "em-dash in caption, hook 2:" in tail and "stock-phrase in hooks 2, 3:" in tail
+    assert "unsupported-detail in the use case:" in tail and "use-case:" not in tail
+
+
+def test_founder_hook_keeps_a_trailing_colon():
+    assert founder_hook("here is why:") == "Here is why:"
