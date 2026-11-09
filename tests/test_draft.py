@@ -1125,3 +1125,19 @@ def test_the_founder_post_still_keeps_a_line_naming_what_shipped():
                "reconnect.\n\nhttps://jotter.app")
     [founder, *_] = hook_options(jot_draft(caption), JOT_BRIEF, JOT_BRAND, REFS)
     assert not founder.dropped and post_failures(founder.post, JOT_BRIEF, JOT_BRAND, REFS, founder=True) == []
+
+
+# ------------------------------------------------------------------ R56: says what shipped, 40% in the body
+
+def test_says_what_shipped_takes_40_percent_of_the_words_in_the_body():
+    from launch_desk.draft import says_what_shipped
+    body = "Your focus sessions sit beside meetings now."  # 2 of 5 words of what shipped
+    assert says_what_shipped(body, "", K2_BRIEF.what)
+
+
+def test_the_founder_line_counts_only_past_half_of_the_words():
+    from launch_desk.draft import says_what_shipped
+    what = "custom themes for pet profile pages"  # custom, theme, pet, profile, page
+    founder = "People kept asking to match their pet page to their own site."  # pet, page: 2 of 5
+    assert not says_what_shipped("A small thing, but it helps.", "", what, founder)
+    assert says_what_shipped("A small thing, but it helps.", "", what, "Custom themes for pet pages are live.")

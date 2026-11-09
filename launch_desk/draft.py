@@ -658,13 +658,17 @@ def _keep_what_shipped(post: str, draft: Draft, brief: Brief, brand: BrandKit,
 
 def says_what_shipped(body: str, use_case: str, what: str = "", first: str = "") -> bool:
     """True when the body (the lines after the first) carries the draft's use case
-    (use_case_carried), or the body or a fixed first line (the founder's words) carries at least
-    two and more than half of the content words of the founder's own words for what shipped."""
-    if use_case_carried(use_case, body):
+    (use_case_carried), or at least two and 40% of the content words of the founder's own words
+    for what shipped. A fixed first line (the founder's words) counts too, but only when the
+    whole post then carries more than half of those words (R56)."""
+    if use_case and use_case_carried(use_case, body):
         return True
     words = _stems(what)
-    shared = len(words & _stems(first + "\n" + body))
-    return shared >= 2 and shared > 0.5 * len(words)
+    in_body = len(words & _stems(body))
+    if in_body >= 2 and in_body >= _CARRIED * len(words):
+        return True
+    in_post = len(words & _stems(first + "\n" + body))
+    return bool(first) and in_post >= 2 and in_post > 0.5 * len(words)
 
 
 def kept_from_style(text: str, brief: Brief, brand: BrandKit) -> set[str]:
