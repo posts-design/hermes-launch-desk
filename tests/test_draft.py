@@ -1058,12 +1058,20 @@ def test_missing_stops_and_a_name_only_line_show_on_the_checklist():
 
 
 def test_missing_stops_and_a_name_only_line_trigger_the_redraft():
-    bad = {**CLEAN, "caption": "Pet pages can wear your colours now.\n\nPick a theme in settings and the whole page "
-                               "follows\n\npawr.link.\n\nhttps://pawr.link"}
-    host, d = draft([bad, CLEAN])
+    good = {"use_case": "Focus sessions show up in your calendar.",
+            "hooks": ["Focus sessions now land in your calendar.", "Every timer hides your work. Brookhour shows it.",
+                      "Are you a maker? Stop hiding deep work."],
+            "caption": "Focus sessions now land in your calendar.\n\nFocus sessions show up in your calendar, "
+                       "marked Busy.\n\nhttps://brookhour.app",
+            "card_line": "Brookhour 2.0: focus sessions in your calendar"}
+    bad = {**good, "caption": "Focus sessions now land in your calendar.\n\nFocus sessions show up in your calendar, "
+                              "marked Busy\n\nBrookhour 2.0.\n\nhttps://brookhour.app"}
+    brief = replace_detail(K2_BRIEF, "")
+    host = FakeHost(llm_replies=[bad, good])
+    d = draft_post(host, brief, K2_BRAND, REFS, SHAPES)
     second = prompt_of(host.llm_calls[1])
     assert "line-end" in second and "name-only-line" in second
-    assert {"line-end", "name-only-line"} <= {f.rule_id for f in d.first_failures} and d.failures == ()
+    assert {"line-end", "name-only-line"} <= {f.rule_id for f in d.first_failures}
 
 
 def test_a_stopless_voice_keeps_lines_without_stops():

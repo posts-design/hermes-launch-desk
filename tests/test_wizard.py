@@ -1396,9 +1396,9 @@ def test_caught_line_names_each_invented_detail_once():
     assert line.count('"day"') == 1 and line.count('"one"') == 1 and line.count('"week"') == 1
 
 
-def test_caught_line_quotes_a_name_only_line():
-    named = {**CLEAN, "caption": CLEAN["caption"].replace("\n\nhttps://pawr.link", "\n\npawr.link.\n\nhttps://pawr.link")}
+def test_caught_line_quotes_a_line_without_a_stop():
+    stopless = {**CLEAN, "caption": CLEAN["caption"].replace("whole page follows.", "whole page follows\n\nYour site, your colours.")}
     clean_reply = start(make_host(PHASE1))
-    reply = start(make_host(PHASE1, llm=(named, CLEAN)))
+    reply = start(make_host(PHASE1, llm=(stopless, CLEAN)))
     [line] = [ln for ln in plain(reply) if ln and ln not in plain(clean_reply)]
-    assert '"pawr.link."' in line
+    assert '"whole page follows"' in line

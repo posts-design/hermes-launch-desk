@@ -347,14 +347,40 @@ _TAIL_RE = re.compile(r"(?:\s*(?:#\w+|" + _EMOJI_RE.pattern + r"))+\s*$")
 _ENDS_RE = re.compile(r"[.!?:\u2026][\"'\u2019\u201d)\]]*$")
 
 
+_DOMAIN_RE = re.compile(r"(?:www\.)?[a-z0-9-]+(?:\.[a-z0-9-]+)*\.[a-z]{2,}(?:/\S*)?", re.IGNORECASE)
+_POINTER_RE = re.compile(r"[\U0001f447\U0001f449\u2192\u2193\u2b07\u27a1](?:\ufe0f)?\s*$")  # 👇 👉 → ↓ ⬇ ➡ at the end
+_LIST_LEAD_RE = re.compile(r"^(?:[-*\u2022\u2013\u2014]\s|\d+[.)]\s)")
+
+
+def _is_link(token: str) -> bool:
+    """A URL, or a bare domain that X turns into a link ("pawr.link", "posts.design/mcp")."""
+    token = token.strip().rstrip(".,;:!?)]}'\"\u2019\u201d")
+    return bool(token) and bool(_URL_RE.fullmatch(token) or _DOMAIN_RE.fullmatch(token))
+
+
+def _is_link_line(line: str) -> bool:
+    words = line.split()
+    return bool(words) and all(_is_link(w) for w in words)
+
+
+def _is_list_item(line: str) -> bool:
+    """A bullet, a numbered item, or a line led by an emoji or symbol ("💫 GPT-4", "└ Nested")."""
+    first = line[:1]
+    return bool(_LIST_LEAD_RE.match(line)) or bool(first) and not (first.isalnum() or first in "\"'\u201c\u2018([@#")
+
+
 def _find_line_end(text: str) -> str:
     """The end of the first line that stops without a full stop, question mark, exclamation mark
-    or colon (its last three words); "" if none. Link lines (ending on a link) are exempt, and
-    trailing emoji or hashtags are looked past."""
-    for raw in text.split("\n"):
-        line = raw.strip()
-        if not line or _URL_RE.search(line.split()[-1]):
+    or colon (its last three words); "" if none. Exempt (R55): link lines (a URL or bare domain,
+    alone or at the end), list items, and a lead-in: a line followed straight away by a link line,
+    or ending on a pointer ("Here's what's new 👇"). Trailing emoji or hashtags are looked past."""
+    lines = [raw.strip() for raw in text.split("\n")]
+    filled = [ln for ln in lines if ln]
+    for n, line in enumerate(filled):
+        if _is_link_line(line) or _is_link(line.split()[-1]) or _is_list_item(line):
             continue
+        if (n + 1 < len(filled) and _is_link_line(filled[n + 1])) or _POINTER_RE.search(line):
+            continue  # a lead-in to a link or media below it
         core = _TAIL_RE.sub("", line).strip()
         if core and not _ENDS_RE.search(core):
             return " ".join(core.split()[-3:])
@@ -362,12 +388,14 @@ def _find_line_end(text: str) -> str:
 
 
 def _find_name_only(text: str, product: str = "") -> str:
-    """The first line that is only the product's name, maybe with a version ("Brookhour 2.0.")."""
+    """The first line that is only the product's name, maybe with a version ("Brookhour 2.0.").
+    A bare-domain line ("pawr.link") is a link, not the name."""
     name = " ".join(product.split())
     if not name:
         return ""
     pattern = re.compile(re.escape(name) + r"(?:\s+v?\d+(?:\.\d+)*)?[.!?:\u2026]*", re.IGNORECASE)
-    return next((ln.strip() for ln in text.split("\n") if pattern.fullmatch(ln.strip())), "")
+    return next((ln.strip() for ln in text.split("\n")
+                 if pattern.fullmatch(ln.strip()) and not _is_link_line(ln)), "")
 
 
 def _find_repeated_phrase(text: str, product: str = "", what: str = "") -> tuple[str, str]:

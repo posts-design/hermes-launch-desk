@@ -432,3 +432,53 @@ def test_a_line_that_is_only_the_product_name_fails():
         assert "name-only-line" in ids(f"Focus sessions land in your calendar.\n\n{line}", product="Brookhour")
     assert "name-only-line" not in ids("Focus sessions land in your calendar.\n\nBrookhour 2.0 is out.",
                                        product="Brookhour")
+
+
+# ------------------------------------------------------------------ R55: line-end exemptions
+
+@pytest.mark.parametrize("text", [
+    "Here is what is new:\n- faster search\n- dark mode\n1. pick a theme\n2) share it",
+    "Here is what is new:\n\U0001f4ab GPT-4 for the AI Chat\n▪️ Inboxes for agents\n└ Nested sub-issues",
+    "Here's what's new \U0001f447\nhttps://raycast.com/changelog",
+    "Full changelog \U0001f449\n\nhttps://linear.app/changelog",
+    "Try it: pawr.link",
+    "Get it at fernlight.app",
+    "Live now.\n\nposts.design/mcp",
+    "Live now.\n\npawr.link",
+    "Here's what's new \U0001f447",
+])
+def test_list_items_link_lead_ins_and_domains_need_no_stop(text):
+    assert "line-end" not in ids(text, product="pawr.link")
+
+
+@pytest.mark.parametrize("text", ["Dark mode is here\n\nPick a theme.", "So we put photo diagnosis in Fernlight\n\nhttps://x.app/a\n\nMore soon"])
+def test_plain_prose_without_a_stop_still_fails(text):
+    assert "line-end" in ids(text)
+
+
+def test_a_bare_domain_line_is_a_link_not_the_name():
+    assert "name-only-line" not in ids("Pet pages take themes now.\n\npawr.link", product="pawr.link")
+    assert "name-only-line" not in ids("Pet pages take themes now.\n\npawr.link.", product="pawr.link")
+
+
+def _real_captions():
+    import json
+    from pathlib import Path
+    root = Path(__file__).resolve().parent.parent
+    caps = [e["caption"] for e in json.loads((root / "launch_desk" / "sample_pack.json").read_text())]
+    fx = json.loads((root / "tests" / "fixtures" / "search_references.json").read_text())
+    caps += [e["caption"] for k in ("items", "also") for e in fx.get(k) or [] if e.get("caption")]
+    return caps
+
+
+def test_real_launch_captions_mostly_pass_line_end():
+    from launch_desk.rules import _find_line_end
+    caps = _real_captions()
+    failing = [c for c in caps if _find_line_end(c)]
+    assert len(caps) == 38
+    # was 22 of 38 before R55; what is left is unpunctuated prose and title lines ("Introducing
+    # Arrow 2", "fx v0.0.16"), listed in the Task 22 fix6 report
+    assert len(failing) == LINE_END_REAL_FAILURES
+
+
+LINE_END_REAL_FAILURES = 18
