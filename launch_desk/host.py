@@ -170,6 +170,11 @@ class HermesHost:
             out, _ = proc.communicate(timeout=timeout)
         except subprocess.TimeoutExpired:
             _stop(proc)
+            if proc.stdout is not None:
+                try:
+                    proc.stdout.close()  # never left full for a child that would not stop
+                except OSError:
+                    pass
             raise TimeoutError(f"no exit after {timeout} s") from None
         return proc.returncode, (out or b"").decode("utf-8", "replace")[-20_000:]
 
@@ -205,6 +210,10 @@ def _stop(proc: subprocess.Popen) -> None:
                 os.killpg(proc.pid, sig)
             else:
                 proc.kill()
+        except PermissionError:
+            # A command run through sudo can refuse it; the renderer then ends on its own limit.
+            logging.getLogger(__name__).warning("launch-desk: stopping the command was refused (pid %s)", proc.pid)
+            return
         except (OSError, ProcessLookupError):
             pass
         try:

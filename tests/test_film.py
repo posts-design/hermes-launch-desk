@@ -19,7 +19,7 @@ LIST = {"playbooks": [
     {"name": "founder-led-demo", "title": "Founder-led demo", "useWhen": ["A founder can show one thing"],
      "runtime": {"targetSeconds": 60, "minSeconds": 30, "maxSeconds": 90}},
     {"name": "screen-led-short", "title": "Screen-led short", "useWhen": ["Nobody needs to be on camera"],
-     "runtime": {"targetSeconds": 30, "minSeconds": 15, "maxSeconds": 45}},
+     "runtime": {"targetSeconds": 30, "minSeconds": 15, "maxSeconds": 45}, "version": "b" * 24},
 ], "hooks": [], "setVersion": "a" * 24}
 PLAYBOOK = {"name": "screen-led-short", "title": "Screen-led short", "runtime": {"targetSeconds": 30},
             "beats": [{"id": "problem", "label": "Their problem", "share": 0.2, "purpose": "p",
@@ -173,6 +173,21 @@ def test_screenshot_is_the_widest_the_card_used_and_fits_the_frame(tmp_path):
     project = film.write_project(pack, plan)
     w, h = (int(x) for x in re.search(r'id="shot-frame".*?width="(\d+)" height="(\d+)"', (project / "index.html").read_text(), re.S).groups())
     assert w <= film.SHOT_BOX[0] and h <= film.SHOT_BOX[1]
+    # the frame grows about its centre to ZOOM and still fits its box: nothing at the edge is cut
+    assert w * film.ZOOM <= film.SHOT_BOX[0] + 1 and h * film.ZOOM <= film.SHOT_BOX[1] + 1
+    html = (project / "index.html").read_text()
+    assert re.search(r"#shot-zoom \{ transform-origin: 50% 50%", html)
+    assert not re.search(r"#shot-frame img \{[^}]*animation", html)  # the image itself is never scaled inside its frame
+
+
+def test_an_overlong_first_line_ends_with_an_ellipsis_inside_the_box(tmp_path):
+    hook = " ".join(["Everything we heard from people who wrote to support"] * 8) + "."
+    pack = make_pack(tmp_path / "packs", hook=hook)
+    plan = film.plan_for(pack, json.loads((pack / "pack.json").read_text()))
+    line = film.layout(plan)["line"]
+    assert line.size == 56 and 1 <= len(line.lines) <= 4 and line.lines[-1].endswith("\u2026")
+    font = load_font(str(plan.head_font), line.size, 700)
+    assert all(font.getlength(ln) <= (film.WIDTH - 2 * film.MARGIN_X) * film.SLACK for ln in line.lines)
 
 
 def test_pack_keeps_the_face_screenshots_and_logo_for_later(tmp_path):
@@ -201,7 +216,7 @@ def test_beat_sheet_lists_the_four_beats_with_their_text(tmp_path):
     pack = make_pack(tmp_path / "packs")
     plan = film.plan_for(pack, json.loads((pack / "pack.json").read_text()))
     sheet = film.beat_sheet(plan)
-    assert sheet.count("\n## ") == 4
+    assert len(re.findall(r"^## \d\. ", sheet, re.M)) == 4
     assert plan.line1 in sheet and plan.card_line in sheet
 
 
@@ -293,8 +308,25 @@ def test_hermes_host_runs_a_command_and_stops_it_on_timeout(tmp_path):
     code, out = host.run([sys.executable, "-c", "import os; print(os.environ['DO_NOT_TRACK'])"], tmp_path,
                          {**os.environ, "DO_NOT_TRACK": "1"}, 30)
     assert code == 0 and out.strip() == "1"
+    pids = tmp_path / "pids.txt"
+    script = ("import os, subprocess, sys, time\n"
+              "child = subprocess.Popen([sys.executable, '-c', 'import time; time.sleep(60)'])\n"
+              f"open({str(pids)!r}, 'w').write(f'{{os.getpid()}} {{child.pid}}')\n"
+              "time.sleep(60)\n")
     with pytest.raises(TimeoutError):
-        host.run([sys.executable, "-c", "import time; time.sleep(30)"], tmp_path, dict(os.environ), 0.5)
+        host.run([sys.executable, "-c", script], tmp_path, dict(os.environ), 2)
+    import time
+    for pid in (int(p) for p in pids.read_text().split()):  # the command and its own child are gone
+        for _ in range(50):
+            try:
+                os.kill(pid, 0)
+            except ProcessLookupError:
+                break
+            if Path(f"/proc/{pid}/stat").is_file() and ") Z" in Path(f"/proc/{pid}/stat").read_text():
+                break  # a zombie waiting for init: it no longer runs
+            time.sleep(0.1)
+        else:
+            pytest.fail(f"process {pid} still runs")
 
 
 def test_hermes_host_reads_its_setting_and_survives_a_bad_ctx():
@@ -368,7 +400,33 @@ def test_posts_design_down_still_makes_the_film(tmp_path, mcp):
     reply = film.run_film(host, "")
     pack = only_pack(host)
     assert (pack / "film" / "index.html").is_file() and "npx hyperframes render" in reply
-    assert "get_playbook" not in [t for t, _ in host.mcp_calls] or mcp.get("get_playbook")
+    reads = [t for t, _ in host.mcp_calls].count("get_playbook")
+    assert reads == (1 if "get_playbook" in mcp else 0)  # tried only when access lists it
+    assert "credit" not in reply and host.state_get(film.CACHE_KEY) is None  # a failed read is not cached
+
+
+def test_playbook_beats_are_read_once_per_version(tmp_path):
+    host = host_with(tmp_path, mcp={"list_playbooks": LIST, "get_my_access": PRO, "get_playbook": PLAYBOOK})
+    first = film.run_film(host, "")
+    second = film.run_film(host, "")
+    reads = lambda: [t for t, _ in host.mcp_calls].count("get_playbook")  # noqa: E731
+    assert reads() == 1
+    assert "Their problem, 6 s" in first and "Their problem, 6 s" in second
+    assert "credit" in first and "credit" not in second  # the credit is named only on a real read
+    newer = {**LIST, "playbooks": [LIST["playbooks"][0], {**LIST["playbooks"][1], "version": "c" * 24}]}
+    host.mcp_replies["list_playbooks"] = newer
+    third = film.run_film(host, "")
+    assert reads() == 2 and "credit" in third
+    film.run_film(host, "")
+    assert reads() == 2
+
+
+def test_free_account_reads_no_playbook_even_with_beats_kept(tmp_path):
+    host = host_with(tmp_path, mcp={"list_playbooks": LIST, "get_my_access": PRO, "get_playbook": PLAYBOOK})
+    film.run_film(host, "")
+    host.mcp_replies["get_my_access"] = FREE
+    reply = film.run_film(host, "")
+    assert [t for t, _ in host.mcp_calls].count("get_playbook") == 1 and "Their problem" not in reply
 
 
 # ------------------------------------------------------------------ which pack, and the command
@@ -397,9 +455,19 @@ def test_launch_film_routes_to_the_film_and_a_launch_with_a_link_does_not(tmp_pa
     assert host2.asked and not (host2.data_dir() / "packs").exists()
 
 
-def test_unknown_pack_name_says_so_and_makes_nothing(tmp_path):
+def test_film_text_that_is_no_pack_is_a_normal_launch_for_a_returning_founder(tmp_path):
     host = host_with(tmp_path)
-    reply = wizard.run_launch(host, "film no-such-pack")
+    host.state_set("brand", {"name": "Brookhour", "url": "https://brookhour.test/", "tagline": "",
+                             "bg": "#F6F1E7", "ink": "#1D1B16", "accent": "#C2410C", "font_family": None,
+                             "logo_path": None, "font_face": "serif", "voice_samples": []})
+    reply = wizard.run_launch(host, "film grain filter for the editor")  # no link: the site is remembered
+    assert reply == wizard.STOPPED and host.asked  # the launch asked its first question, unanswered
+    assert not (only_pack(host) / "film").exists() and host.commands == []
+
+
+def test_film_with_an_unknown_pack_says_so_and_makes_nothing(tmp_path):
+    host = host_with(tmp_path)
+    reply = film.run_film(host, "no-such-pack")
     assert not (only_pack(host) / "film").exists() and "no-such-pack" in reply and host.asked == []
 
 
@@ -417,14 +485,42 @@ def test_chat_app_reply_names_the_pack_not_server_paths(tmp_path):
     assert host.said  # the slow render is announced on a chat app
 
 
-def test_a_second_film_replaces_the_project_and_keeps_an_earlier_mp4(tmp_path):
+def test_a_second_film_replaces_the_project_and_drops_the_earlier_mp4(tmp_path):
     host = host_with(tmp_path, on_path={"hyperframes": "/bin/hf"}, run=writes_mp4())
     film.run_film(host, "")
     pack = only_pack(host)
+    assert (pack / "film.mp4").is_file()
     (pack / "film" / "stale.txt").write_text("old")
-    first = json.loads((pack / "pack.json").read_text())["film"]
     host._on_path = {}
-    film.run_film(host, "")
+    reply = film.run_film(host, "")
     second = json.loads((pack / "pack.json").read_text())["film"]
-    assert not (pack / "film" / "stale.txt").exists()
-    assert second["mp4"] == "film.mp4" and second["rendered_at"] == first["rendered_at"]
+    assert not (pack / "film" / "stale.txt").exists() and not (pack / "film.mp4").exists()
+    assert second["mp4"] is None and second["rendered_at"] is None and not media(reply)
+
+
+def test_a_failed_render_also_drops_the_earlier_mp4(tmp_path):
+    host = host_with(tmp_path, on_path={"hyperframes": "/bin/hf"}, run=writes_mp4())
+    film.run_film(host, "")
+    pack = only_pack(host)
+    host._run = writes_mp4(code=1)
+    film.run_film(host, "")
+    assert not (pack / "film.mp4").exists() and json.loads((pack / "pack.json").read_text())["film"]["mp4"] is None
+
+
+def test_a_render_sweeps_partial_files_left_by_an_earlier_one(tmp_path):
+    host = host_with(tmp_path, on_path={"hyperframes": "/bin/hf"}, run=writes_mp4())
+    pack = only_pack(host)
+    old, recent = pack / ".film-dead0001.mp4", pack / ".film-live0002.mp4"
+    old.write_bytes(b"x")
+    recent.write_bytes(b"x")
+    long_ago = os.path.getmtime(old) - film.RENDER_TIMEOUT_S - 60
+    os.utime(old, (long_ago, long_ago))
+    film.run_film(host, "")
+    assert not old.exists() and recent.exists() and (pack / "film.mp4").is_file()
+
+
+def test_the_shot_list_ends_with_how_to_render_it(tmp_path):
+    host = host_with(tmp_path)
+    film.run_film(host, "")
+    sheet = (only_pack(host) / film.BEAT_SHEET).read_text()
+    assert film.render_line(film.PROJECT, film.MP4, bare=True) in sheet

@@ -1023,3 +1023,7 @@ def render_feed_preview(brand: BrandKit, caption: str, card: Path, out: Path, sc
     out.parent.mkdir(parents=True, exist_ok=True)
     final.save(out, "PNG", optimize=True)
     return out
+
+
+# Public names for the helpers the film reuses (launch_desk/film.py).
+drop_missing, open_image, rgb, mix, mark_tile = _drop_missing, _open_image, _rgb, _mix, _mark_tile

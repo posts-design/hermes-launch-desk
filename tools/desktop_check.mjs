@@ -220,8 +220,8 @@ if (args.react) {
   const expect = (name, got, want) => got !== want && fail(`loaded page: ${name} ${got}, expected ${want}`)
   expect('pack cards', report.loaded.packs, packs.length)
   expect('founder hooks marked', report.loaded.founderMarked, founder)
-  // Copy post on every pack, and Copy command beside each film's render line.
-  expect('copy buttons', report.loaded.copyButtons, packs.length + packs.filter(p => p.film && !p.film.has_mp4).length)
+  // Copy post on every pack, and Copy shot list under each film shown as its shot list.
+  expect('copy buttons', report.loaded.copyButtons, packs.length + packs.filter(p => p.film && !p.film.has_mp4 && p.film.beats).length)
   expect('check-ins shown', report.loaded.checkins, packs.reduce((n, p) => n + p.checkins.length, 0))
   expect('channels shown', report.loaded.channels, packs.reduce((n, p) => n + p.signups.length, 0))
   expect('empty or error states', report.loaded.emptyOrError, 0)

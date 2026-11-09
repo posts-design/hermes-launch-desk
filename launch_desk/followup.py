@@ -101,6 +101,11 @@ def _pack_file(root: Path, name: Any) -> Path:
     return path
 
 
+def valid_pack_name(name: Any) -> bool:
+    """A pack folder name: letters, digits, dot, dash and underscore, never "..", 160 at most."""
+    return isinstance(name, str) and bool(_NAME_RE.fullmatch(name)) and ".." not in name
+
+
 def _load(path: Path) -> dict:
     try:
         data = json.loads(path.read_text(encoding="utf-8"))
@@ -341,6 +346,9 @@ def _write_json(path: Path, data: dict) -> None:
     except BaseException:
         Path(tmp).unlink(missing_ok=True)
         raise
+
+
+write_json = _write_json  # public: /launch film rewrites pack.json the same way
 
 
 def record_results(root: Path, pack: Any, channel: Any, signups: Any) -> dict:

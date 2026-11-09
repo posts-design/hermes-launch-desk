@@ -36,6 +36,7 @@ from .references import (CATEGORY, McpSource, SamplePackSource, build_search_arg
                          rank_references, reference_line, reference_where, with_own)
 from .render import choose_layout, render_card, render_feed_preview
 from .rules import relaxed_rules
+from .session import LOCAL_SURFACES, is_local, is_unattended, redact, surface
 from .setup_check import check_setup
 
 logger = logging.getLogger(__name__)
@@ -187,22 +188,7 @@ def _cut(text: str, limit: int) -> str:
 
 # ------------------------------------------------------------------ host helpers
 
-LOCAL_SURFACES = {"cli", "tui", "local", "desktop", "acp"}
-
-
-def _surface(host: Host) -> str:
-    try:
-        return str(host.surface() or "")
-    except Exception:
-        return ""
-
-
-def _local(host: Host) -> bool:
-    """A terminal or desktop client, where long links and paths can be clicked or copied."""
-    try:
-        return host.surface() in LOCAL_SURFACES
-    except Exception:
-        return True
+_surface, _local, _unattended = surface, is_local, is_unattended
 
 
 def _tell(host: Host, notes: list[str], line: str) -> None:
@@ -212,18 +198,6 @@ def _tell(host: Host, notes: list[str], line: str) -> None:
         notes.append(line)
     else:
         host.say(line)
-
-
-def _unattended(host: Host) -> bool:
-    try:
-        if host.unattended():
-            return True
-    except Exception:
-        pass
-    try:
-        return host.surface() == "cron"
-    except Exception:
-        return False
 
 
 def _ask(host: Host, question: str, choices: list[dict]) -> str:
@@ -339,17 +313,7 @@ def _read_brand(host: Host, url: str, get: Callable[[str], bytes], out: Path,
 
 # ------------------------------------------------------------------ references
 
-_SECRET_RE = re.compile(
-    r"(?i)\b(bearer|basic|token|access_token|api[_-]?key|key|secret|password|authorization)(\s*[:=]\s*|\s+)\S+")
-_LONG_TOKEN_RE = re.compile(r"[A-Za-z0-9_\-.~+/=]{24,}")
-REASON_MAX = 200
-
-
-def _redact(text: str) -> str:
-    """An error message for the log: credentials and long opaque tokens out, one line, short."""
-    text = _SECRET_RE.sub(lambda m: f"{m.group(1)}{m.group(2)}[redacted]", " ".join(str(text).split()))
-    text = _LONG_TOKEN_RE.sub("[redacted]", text)
-    return text[:REASON_MAX]
+_redact = redact
 
 
 def _search(host: Host, brief: Brief, offline: bool, setup_issue: str = "") -> tuple[list[dict], str]:
@@ -889,8 +853,8 @@ def _guarded(fn: Callable[[], str], on_stop: str, after: str = "") -> str:
 
 def _film_args(host: Host, text: str) -> str | None:
     """What follows "film" when the command is /launch film [pack]; None when it is a launch.
-    `/launch film` alone, or with a pack's label or folder name, is the film. Other text after
-    "film" is a launch when it has a link or a detail ( -- ), else a pack name not found."""
+    `/launch film` alone, or with a pack's label or folder name, is the film; any other text
+    after "film" is a normal launch (R64), so "/launch film grain filter" announces that."""
     first, _, rest = text.partition(" ")
     if first.lower() != "film":
         return None
@@ -901,9 +865,7 @@ def _film_args(host: Host, text: str) -> str | None:
         known = film.resolve(host.data_dir() / "packs", rest) is not None
     except Exception:
         known = False
-    if known or not (_URL_RE.search(rest) or _DETAIL_SPLIT.search(rest)):
-        return rest
-    return None
+    return rest if known else None
 
 
 def _run(host: Host, raw: str, get: Callable[[str], bytes]) -> str:

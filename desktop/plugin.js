@@ -35,8 +35,6 @@ const PACKS_KEY = [ID, 'packs']
 const LAYOUTS = { hero: 'Hero card', statement: 'Statement card', split: 'Split card' }
 const STATES = { completed: 'Done', error: 'Failed', paused: 'Paused' }
 const WEB_LINK = /^https:\/\//i
-// launch_desk/film.py render_line, run in the pack folder where Hermes runs.
-export const RENDER_LINE = 'HYPERFRAMES_NO_TELEMETRY=1 npx hyperframes render film -o film.mp4'
 
 const muted = { color: 'var(--ui-text-tertiary)' }
 const label = { ...muted, fontSize: '0.6875rem', fontWeight: 500, letterSpacing: '0.04em', textTransform: 'uppercase' }
@@ -183,7 +181,7 @@ function References({ ctx, refs }) {
   })
 }
 
-// The pack's launch film: the video when film.mp4 was rendered, else the shot list and how to render it.
+// The pack's launch film: the video when film.mp4 was rendered, else its shot list (which ends with how to render it).
 function Film({ ctx, pack }) {
   const film = pack.film
   const [ref, seen] = useSeen()
@@ -216,14 +214,7 @@ function Film({ ctx, pack }) {
           style: { margin: 0, whiteSpace: 'pre-wrap', overflowWrap: 'anywhere', fontFamily: 'inherit', color: 'var(--ui-text-secondary)' },
           children: film.beats
         }),
-        jsx('div', { style: muted, children: 'To render it, in the pack folder where Hermes runs, with Node 22 or later:' }),
-        jsxs('div', {
-          style: row,
-          children: [
-            jsx('code', { style: { overflowWrap: 'anywhere' }, children: RENDER_LINE }),
-            jsx(CopyButton, { text: RENDER_LINE, label: 'Copy command', buttonVariant: 'ghost', buttonSize: 'sm' })
-          ]
-        })
+        film.beats && jsx(CopyButton, { text: film.beats, label: 'Copy shot list', buttonVariant: 'ghost', buttonSize: 'sm' })
       ]
     })
   }

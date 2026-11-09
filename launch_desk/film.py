@@ -35,8 +35,9 @@ from PIL import Image
 from . import followup
 from .host import Host
 from .models import BrandKit
-from .render import (FONT_DIR, FONT_PATH, HEAD_WEIGHT, LEADING, _drop_missing, _mark_tile,
-                     _mix, _open_image, _rgb, fit_text, head_font_path)
+from .render import (FONT_DIR, FONT_PATH, HEAD_WEIGHT, LEADING, drop_missing, fit_text, head_font_path,
+                     mark_tile, mix, open_image, rgb)
+from .session import is_local, is_unattended, redact, surface
 
 logger = logging.getLogger(__name__)
 
@@ -63,7 +64,7 @@ SHOT_BOX = (WIDTH - 2 * MARGIN_X, HEIGHT - 2 * 110)
 SHOT_MAX_SIDE = 2560
 SHOT_UPSCALE = 2.0
 SHOT_RADIUS = 28
-ZOOM = 1.06
+ZOOM = 1.03  # the framed screenshot grows about its centre, inside an inset that leaves room for it
 MARK_SIZE = 176
 HEAD_FAMILY, TEXT_FAMILY = "LD Head", "LD Text"
 OFL = {"Inter.ttf": "OFL.txt", "Newsreader.ttf": "Newsreader-OFL.txt", "Nunito.ttf": "Nunito-OFL.txt"}
@@ -155,7 +156,7 @@ def _shot_in(pack: Path, data: dict) -> Path | None:
     best, ratio = None, -1.0
     for name in files.get("screenshots") or []:
         path = _pack_file(pack, name)
-        im = _open_image(path) if path else None
+        im = open_image(path) if path else None
         if im is not None and im.width / max(1, im.height) > ratio:
             best, ratio = path, im.width / max(1, im.height)
     return best
@@ -180,11 +181,11 @@ def plan_for(pack: Path, data: dict, stored_brand: Any = None) -> Plan:
     site = _host_of(brand.get("url")) or _host_of(brief.get("product_url"))
     what = _clean(brief.get("what"))
     head = head_font_path(kit)
-    name = _drop_missing(kit.name, str(head)) or site or "Launch"
-    line1 = _drop_missing(_first_line(_post_text(pack, data)), str(head)) or name
-    card = _drop_missing(_clean(data.get("card_line")), str(head))
+    name = drop_missing(kit.name, str(head)) or site or "Launch"
+    line1 = drop_missing(_first_line(_post_text(pack, data)), str(head)) or name
+    card = drop_missing(_clean(data.get("card_line")), str(head))
     if not card:  # a pack written before card lines: what shipped, as a sentence
-        card = _drop_missing(what, str(head))
+        card = drop_missing(what, str(head))
         card = card[:1].upper() + card[1:] if card else name
     if site and site.lower() == name.lower():
         site = ""  # the end card shows it once
@@ -265,16 +266,16 @@ def _words_html(text: Text) -> str:
 
 
 def _shot_size(path: Path) -> tuple[int, int] | None:
-    im = _open_image(path)
+    im = open_image(path)
     if im is None:
         return None
-    k = min(SHOT_BOX[0] / im.width, SHOT_BOX[1] / im.height, SHOT_UPSCALE)
+    k = min(SHOT_BOX[0] / ZOOM / im.width, SHOT_BOX[1] / ZOOM / im.height, SHOT_UPSCALE)
     return max(1, round(im.width * k)), max(1, round(im.height * k))
 
 
 def _save_shot(src: Path, dest: Path) -> bool:
     """The screenshot as a PNG, its longest side at most SHOT_MAX_SIDE."""
-    im = _open_image(src)
+    im = open_image(src)
     if im is None:
         return False
     im = im.convert("RGBA") if im.mode in ("RGBA", "LA", "P") else im.convert("RGB")
@@ -305,8 +306,8 @@ def build_html(plan: Plan, shot: tuple[int, int] | None) -> str:
     """index.html: the root composition, its four beats and their keyframes."""
     fitted = plan.fitted or layout(plan)
     bg, ink, accent = plan.bg, plan.ink, plan.accent
-    muted = "#%02X%02X%02X" % _mix(_rgb(ink), _rgb(bg), 0.42)
-    edge = "#%02X%02X%02X" % _mix(_rgb(bg), _rgb(ink), 0.14)  # the screenshot's edge, seen on dark grounds too
+    muted = "#%02X%02X%02X" % mix(rgb(ink), rgb(bg), 0.42)
+    edge = "#%02X%02X%02X" % mix(rgb(bg), rgb(ink), 0.14)  # the screenshot's edge, seen on dark grounds too
     line, card, name, site = fitted["line"], fitted["card"], fitted["end_name"], fitted["end_host"]
     css = [
         _font_face(HEAD_FAMILY, plan.head_font, _WEIGHTS.get(plan.head_font.name, "100 900")),
@@ -338,11 +339,11 @@ def build_html(plan: Plan, shot: tuple[int, int] | None) -> str:
         w, h = shot
         css += [
             "#beat-product { align-items: center; padding: 0; }",
+            f"#shot-zoom {{ transform-origin: 50% 50%; " + _anim("ld-zoom", 5.0, 3.5, "linear") + " }",
             f"#shot-frame {{ width: {w}px; height: {h}px; border-radius: {SHOT_RADIUS}px; overflow: hidden; "
             f"box-shadow: 0 0 0 1px {edge}, 0 28px 80px rgba(0, 0, 0, 0.28), 0 4px 14px rgba(0, 0, 0, 0.12); "
             + _anim("ld-up", 0.9, 3.5) + " }",
-            f"#shot-frame img {{ display: block; width: {w}px; height: {h}px; transform-origin: 50% 40%; "
-            + _anim("ld-zoom", 5.0, 3.5, "linear") + " }",
+            f"#shot-frame img {{ display: block; width: {w}px; height: {h}px; }}",
         ]
     else:
         big = fitted["product"]
@@ -358,8 +359,8 @@ def build_html(plan: Plan, shot: tuple[int, int] | None) -> str:
         f"color: {muted}; margin-top: {round(site.size * 0.7)}px; " + _anim("ld-fade", 0.6, 11.9) + " }",
     ]
     if shot is not None:
-        product = ('<div id="shot-frame"><img src="assets/shot.png" alt="'
-                   + _esc(f"Screenshot of {plan.name}") + f'" width="{shot[0]}" height="{shot[1]}"></div>')
+        product = ('<div id="shot-zoom"><div id="shot-frame"><img src="assets/shot.png" alt="'
+                   + _esc(f"Screenshot of {plan.name}") + f'" width="{shot[0]}" height="{shot[1]}"></div></div>')
     else:
         product = f'<div class="lines">{_lines_html(fitted["product"], "l")}</div><div class="rule"></div>'
     end = ['<img id="end-mark" src="assets/mark.png" alt="" width="%d" height="%d">' % (MARK_SIZE, MARK_SIZE),
@@ -436,6 +437,7 @@ def beat_sheet(plan: Plan, playbook_md: list[str] = ()) -> str:
         if row.get("by_hand"):
             lines.append(f"To film it yourself: {row['by_hand']}")
         lines.append("")
+    lines += ["## To render it", "", f"In this pack's folder, with Node 22 or later: {render_line(PROJECT, MP4, bare=True)}", ""]
     if playbook_md:
         lines += list(playbook_md) + [""]
     return "\n".join(lines)
@@ -459,10 +461,10 @@ def write_project(pack: Path, plan: Plan) -> Path:
         else:
             plan.shot = None
     layout(plan)
-    logo = _open_image(plan.logo) if plan.logo else None
+    logo = open_image(plan.logo) if plan.logo else None
     kit = BrandKit(name=plan.name, url="", tagline="", bg=plan.bg, ink=plan.ink, accent=plan.accent,
                    font_family=None, logo_path=None)
-    _mark_tile(kit, logo, MARK_SIZE * 2, _rgb(plan.accent)).save(assets / "mark.png", "PNG")
+    mark_tile(kit, logo, MARK_SIZE * 2, rgb(plan.accent)).save(assets / "mark.png", "PNG")
     (project / "index.html").write_text(build_html(plan, shot), encoding="utf-8")
     return project
 
@@ -498,14 +500,26 @@ def render_env() -> dict:
 
 
 def _tail(output: Any) -> str:
-    from .wizard import _redact  # noqa: PLC0415 (wizard imports this module)
     lines = [ln for ln in str(output or "").splitlines() if ln.strip()][-OUTPUT_TAIL_LINES:]
-    return " | ".join(_redact(ln) for ln in lines)
+    return " | ".join(redact(ln) for ln in lines)
+
+
+def _sweep(pack: Path) -> None:
+    """Remove partial renders an earlier run gave up on (older than the render timeout): a
+    renderer that could not be stopped may still have written one after the run ended."""
+    cutoff = time.time() - RENDER_TIMEOUT_S
+    for old in pack.glob(".film-*.mp4"):
+        try:
+            if old.is_file() and not old.is_symlink() and old.stat().st_mtime < cutoff:
+                old.unlink()
+        except OSError:
+            pass
 
 
 def render(host: Host, template: list[str], project: Path, pack: Path) -> bool:
     """Run the renderer into a new file beside the pack, then move it to film.mp4. True on exit 0
     and a non-empty MP4. Never raises; the last lines of its output go to the plugin log."""
+    _sweep(pack)
     out = pack / f".film-{uuid.uuid4().hex[:8]}.mp4"
     argv = command(template, project, out)
     started = time.monotonic()
@@ -545,9 +559,51 @@ def _beat_line(beat: dict, target: int) -> str | None:
     return " ".join(parts)
 
 
+CACHE_KEY = "film_playbooks"
+
+
+def _playbook_beats(host: Host, book: dict, target: int) -> tuple[list[str], bool]:
+    """The playbook's beat lines and whether they were read now (1 credit). Only an account
+    whose get_my_access lists get_playbook gets them. They are kept in plugin state by name and
+    the version list_playbooks gives, and read again only when that version changes."""
+    try:
+        access = host.mcp("get_my_access", {})
+        owned = "get_playbook" in (access.get("tools") or [])
+    except Exception as exc:
+        logger.info("launch-desk: film access check skipped (%s)", type(exc).__name__)
+        owned = False
+    if not owned:
+        return [], False
+    name, version = str(book["name"]), str(book.get("version") or "")
+    try:
+        cache = host.state_get(CACHE_KEY)
+    except Exception:
+        cache = None
+    cache = cache if isinstance(cache, dict) else {}
+    kept = cache.get(name) if isinstance(cache.get(name), dict) else {}
+    lines = [ln for ln in kept.get("beats") or [] if isinstance(ln, str) and ln]
+    if version and kept.get("version") == version and lines:
+        return lines, False
+    try:
+        full = host.mcp("get_playbook", {"name": name})
+        full_target = (full.get("runtime") or {}).get("targetSeconds") or target or SECONDS
+        lines = [ln for ln in (_beat_line(b, int(full_target)) for b in full.get("beats") or []
+                               if isinstance(b, dict)) if ln]
+    except Exception as exc:
+        logger.info("launch-desk: film playbook beats skipped (%s)", type(exc).__name__)
+        return [], False
+    if lines and version:
+        try:
+            host.state_set(CACHE_KEY, {**cache, name: {"version": version, "target": int(full_target), "beats": lines}})
+        except Exception:
+            logger.info("launch-desk: film playbook not cached", exc_info=True)
+    return lines, True
+
+
 def recommend(host: Host, shipped: str) -> tuple[list[str], list[str], str | None]:
     """Lines for the reply (at most 6), lines for the shot list, and the playbook's name.
-    list_playbooks is free; get_playbook (1 credit) only when get_my_access lists it. Any
+    list_playbooks is free; get_playbook (1 credit) only when get_my_access lists it and the
+    listed version is not the one kept (_playbook_beats). Any
     posts.design failure leaves this part out, with one log line."""
     try:
         listing = host.mcp("list_playbooks", {})
@@ -566,28 +622,13 @@ def recommend(host: Host, shipped: str) -> tuple[list[str], list[str], str | Non
     about = f", about {target} s" if target else ""
     use = f", for {when[:1].lower() + when[1:]}" if when else ""
     head = f"For a longer film, posts.design suggests its {title} playbook{about}{use}."
-    beats: list[str] = []
-    try:
-        access = host.mcp("get_my_access", {})
-        owned = "get_playbook" in (access.get("tools") or [])
-    except Exception as exc:
-        logger.info("launch-desk: film access check skipped (%s)", type(exc).__name__)
-        owned = False
-    if owned:
-        try:
-            full = host.mcp("get_playbook", {"name": book["name"]})
-            full_target = (full.get("runtime") or {}).get("targetSeconds") or target or SECONDS
-            beats = [ln for ln in (_beat_line(b, int(full_target)) for b in full.get("beats") or []
-                                   if isinstance(b, dict)) if ln]
-        except Exception as exc:
-            logger.info("launch-desk: film playbook beats skipped (%s)", type(exc).__name__)
-            beats = []
+    beats, read = _playbook_beats(host, book, target)
     reply = [head]
     md = [f"## For a longer film: {title}{about}", ""]
     if when:
         md.append(f"Use it for: {when}.")
     if beats:
-        reply[0] = head + " Its beats, read for 1 posts.design credit:"
+        reply[0] = head + (" Its beats, read for 1 posts.design credit:" if read else " Its beats:")
         shown = beats if len(beats) <= PLAYBOOK_BEATS_SHOWN else beats[: PLAYBOOK_BEATS_SHOWN - 1]
         reply += [f"- {b}" for b in shown]
         if len(beats) > len(shown):
@@ -599,24 +640,13 @@ def recommend(host: Host, shipped: str) -> tuple[list[str], list[str], str | Non
 
 # ------------------------------------------------------------------ the command
 
-def _local(host: Host) -> bool:
-    from .wizard import _local as local  # noqa: PLC0415
-    return local(host)
-
-
-def _surface(host: Host) -> str:
-    from .wizard import _surface as surface  # noqa: PLC0415
-    return surface(host)
-
-
 def resolve(root: Path, value: str) -> str | None:
     """The pack /launch film means: blank is the newest, else a label or a folder name."""
     try:
         name = followup.resolve_pack(root, value)
     except Exception:
         return None
-    if isinstance(name, str) and followup._NAME_RE.fullmatch(name) and ".." not in name \
-            and (root / name / "pack.json").is_file() and not (root / name).is_symlink():
+    if followup.valid_pack_name(name) and (root / name / "pack.json").is_file() and not (root / name).is_symlink():
         return name
     return None
 
@@ -629,22 +659,31 @@ def _load(path: Path) -> dict | None:
     return data if isinstance(data, dict) else None
 
 
-def _film_field(pack: Path, previous: Any, renderer_kind: str | None, rendered: bool, playbook: str | None) -> dict:
-    prev = previous if isinstance(previous, dict) else {}
-    has_mp4 = (pack / MP4).is_file() and (pack / MP4).stat().st_size > 0
-    if rendered:
-        when, kind = datetime.now(timezone.utc).isoformat(timespec="seconds"), renderer_kind
-    elif has_mp4:  # an earlier render of the same pack is still there
-        when, kind = prev.get("rendered_at"), prev.get("renderer")
-    else:
-        when, kind = None, None
-    return {"project": PROJECT, "mp4": MP4 if has_mp4 else None, "rendered_at": when,
-            "renderer": kind if kind in ("config", "path") else None, "playbook": playbook}
+def _film_field(pack: Path, renderer_kind: str | None, rendered: bool, playbook: str | None) -> dict:
+    """pack.json's film: the MP4 only when this run rendered it (an older one is removed with
+    the old project, R66)."""
+    return {"project": PROJECT, "mp4": MP4 if rendered else None,
+            "rendered_at": datetime.now(timezone.utc).isoformat(timespec="seconds") if rendered else None,
+            "renderer": renderer_kind if rendered and renderer_kind in ("config", "path") else None,
+            "playbook": playbook}
 
 
-def render_line(project: Path | str, out: Path | str) -> str:
-    return (f"To render it yourself with Node 22 or later: HYPERFRAMES_NO_TELEMETRY=1 "
-            f"npx hyperframes render {project} -o {out}")
+def _drop_old_film(pack: Path) -> bool:
+    """Remove an earlier film.mp4: it belongs to the project this run replaces. True if one went."""
+    old = pack / MP4
+    try:
+        if old.is_symlink() or old.is_file():
+            old.unlink()
+            return True
+    except OSError:
+        logger.warning("launch-desk: earlier film.mp4 not removed", exc_info=True)
+    return False
+
+
+def render_line(project: Path | str, out: Path | str, bare: bool = False) -> str:
+    """The command to render the project by hand; `bare`: the command alone."""
+    cmd = f"HYPERFRAMES_NO_TELEMETRY=1 npx hyperframes render {project} -o {out}"
+    return cmd if bare else f"To render it yourself with Node 22 or later: {cmd}"
 
 
 def _beats_short(plan: Plan) -> list[str]:
@@ -672,6 +711,7 @@ def make_film(host: Host, value: str) -> str:
         return "That pack could not be read, so there is no film."
     plan = plan_for(pack, data, host.state_get("brand"))
     project = write_project(pack, plan)
+    _drop_old_film(pack)
     rec, md, playbook = recommend(host, plan.shipped)
     (pack / BEAT_SHEET).write_text(beat_sheet(plan, md), encoding="utf-8")
 
@@ -684,14 +724,14 @@ def make_film(host: Host, value: str) -> str:
     if found is not None:
         host.say("Rendering the film. This takes a minute or two.")
         rendered = render(host, found[0], project, pack)
-    data["film"] = _film_field(pack, data.get("film"), found[1] if found else None, rendered, playbook)
+    data["film"] = _film_field(pack, found[1] if found else None, rendered, playbook)
     try:
-        followup._write_json(pack / "pack.json", data)
+        followup.write_json(pack / "pack.json", data)
     except OSError:
         logger.warning("launch-desk: pack.json film field not saved", exc_info=True)
 
-    local = _local(host)
-    desktop = local and _surface(host) in ("desktop", "acp")
+    local = is_local(host)
+    desktop = local and surface(host) in ("desktop", "acp")
     where = pack if local and not desktop else None
     lines: list[str] = []
     if rendered:
@@ -725,8 +765,7 @@ def make_film(host: Host, value: str) -> str:
 
 def run_film(host: Host, value: str = "") -> str:
     """/launch film [pack]: the chat reply. Never raises; unattended, renders nothing."""
-    from .wizard import _unattended  # noqa: PLC0415
-    if _unattended(host):
+    if is_unattended(host):
         return UNATTENDED
     try:
         return make_film(host, value or "")

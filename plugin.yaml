@@ -12,7 +12,8 @@ description: >-
   the packs and, from Hermes' cron/jobs.json, the times of the check-ins Launch Desk scheduled.
   Only when asked, /launch film writes a 14-second film project from a pack and runs the renderer
   the user set up (the film_render setting, or HyperFrames on PATH) on this machine, with
-  HyperFrames' telemetry off; nothing is downloaded or posted.
+  HyperFrames' telemetry off. Launch Desk downloads nothing itself; HyperFrames may download its
+  own headless Chrome on its first render. Nothing is posted.
 author: posts.design
 license: MIT
 homepage: https://github.com/posts-design/hermes-launch-desk
