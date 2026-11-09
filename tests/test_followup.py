@@ -514,3 +514,12 @@ def test_with_no_packs_the_check_in_is_one_plain_line(tmp_path):
 def test_an_unknown_pack_still_fails_plainly(tmp_path):
     three_packs(tmp_path)
     assert followup.followup(tmp_path, "not a pack · 1 Jan 00:00")["ok"] is False
+
+
+def test_a_pack_without_created_at_is_labelled_with_when_its_files_were_written(tmp_path):
+    from datetime import datetime, timezone
+    make_pack(tmp_path, "2026-11-05-old", brand={"name": "pawr.link"})
+    stamp = datetime(2026, 11, 5, 9, 30, tzinfo=timezone.utc).timestamp()
+    for f in (tmp_path / "2026-11-05-old").iterdir():
+        os.utime(f, (stamp, stamp))
+    assert followup.recent_labels(tmp_path) == ["pawr.link · 5 Nov 09:30"]

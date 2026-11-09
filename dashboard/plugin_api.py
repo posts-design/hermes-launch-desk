@@ -292,7 +292,7 @@ def _made(data: dict, name: str) -> str:
     return m.group(1) if m else ""
 
 
-def _label(name: str, data: dict) -> str:
+def _label(name: str, data: dict, folder: Optional[Path] = None) -> str:
     """The plugin's pack_label (launch_desk/followup.py), for matching a blueprint check-in."""
     brand = data.get("brand") if isinstance(data.get("brand"), dict) else {}
     who = " ".join(str(brand.get("name") or "").split()) or name
@@ -302,6 +302,8 @@ def _label(name: str, data: dict) -> str:
         stamp = datetime.fromisoformat(created) if isinstance(created, str) and created.strip() else None
     except ValueError:
         stamp = None
+    if stamp is None and folder is not None and _created(folder):
+        stamp = datetime.fromtimestamp(_created(folder), tz=timezone.utc)
     if stamp is not None:
         stamp = stamp.astimezone(timezone.utc) if stamp.tzinfo else stamp
         when = f"{stamp.day} {MONTHS[stamp.month - 1]} {stamp:%H:%M}"
@@ -323,7 +325,7 @@ def pack_labels(root: Path) -> dict:
     found.sort(key=lambda t: (t[0], t[1]), reverse=True)
     out, seen = {}, {}
     for _made_at, name, data in found:
-        label = _label(name, data)
+        label = _label(name, data, root / name)
         seen[label] = seen.get(label, 0) + 1
         out[label if seen[label] == 1 else f"{label} ({seen[label]})"] = name
     return out

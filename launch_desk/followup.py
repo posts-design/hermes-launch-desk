@@ -177,9 +177,20 @@ def compose_message(pack: str, suggestions: list[dict]) -> str:
 _MONTHS = ("Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec")
 
 
-def pack_label(name: str, data: dict) -> str:
+def _written(folder: Path | None) -> datetime | None:
+    """When a pack's files were written (the oldest; the card is never rewritten), UTC."""
+    try:
+        times = [e.stat(follow_symlinks=False).st_mtime for e in os.scandir(folder)
+                 if e.is_file(follow_symlinks=False)] if folder is not None else []
+    except OSError:
+        return None
+    return datetime.fromtimestamp(min(times), tz=timezone.utc) if times else None
+
+
+def pack_label(name: str, data: dict, folder: Path | None = None) -> str:
     """A friendly name for a pack: "pawr.link · 7 Nov 02:06" (its brand, then when it was made,
-    UTC); without created_at, the date in its folder name ("pawr.link · 5 Nov")."""
+    UTC): its created_at, else when its files were written, else the date in its folder name
+    ("pawr.link · 5 Nov")."""
     brand = data.get("brand") if isinstance(data.get("brand"), dict) else {}
     who = " ".join(str(brand.get("name") or "").split()) or _pack_site(data) or name
     when = ""
@@ -188,6 +199,8 @@ def pack_label(name: str, data: dict) -> str:
         stamp = datetime.fromisoformat(created) if isinstance(created, str) and created.strip() else None
     except ValueError:
         stamp = None
+    if stamp is None:
+        stamp = _written(folder)
     if stamp is not None:
         stamp = stamp.astimezone(timezone.utc) if stamp.tzinfo else stamp
         when = f"{stamp.day} {_MONTHS[stamp.month - 1]} {stamp:%H:%M}"
@@ -224,7 +237,7 @@ def _labelled(root: Path) -> list[tuple[str, str]]:
     """(label, folder name) for every pack, newest first; a repeated label gets " (2)", " (3)"."""
     out, seen = [], {}
     for name, data in _packs_newest_first(root):
-        label = pack_label(name, data)
+        label = pack_label(name, data, Path(root) / name)
         seen[label] = seen.get(label, 0) + 1
         out.append((label if seen[label] == 1 else f"{label} ({seen[label]})", name))
     return out
