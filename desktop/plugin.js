@@ -3,8 +3,9 @@
 // Plain ESM, loaded uncompiled by Desktop (no JSX). It reads the plugin's own backend
 // (dashboard/plugin_api.py, mounted at /api/plugins/launch-desk) through ctx.rest, which
 // only carries JSON, so an image arrives as a data URL from /packs/<name>/images?kind=...,
-// fetched only once its pack scrolls into view. Read-only: nothing here writes a pack, posts
-// anything or schedules anything.
+// fetched only once its pack scrolls into view; a launch film (/launch film) arrives the same way,
+// from /packs/<name>/film. Read-only: nothing here writes a pack, posts anything, schedules
+// anything or renders anything.
 
 import {
   Badge,
@@ -34,6 +35,8 @@ const PACKS_KEY = [ID, 'packs']
 const LAYOUTS = { hero: 'Hero card', statement: 'Statement card', split: 'Split card' }
 const STATES = { completed: 'Done', error: 'Failed', paused: 'Paused' }
 const WEB_LINK = /^https:\/\//i
+// launch_desk/film.py render_line, run in the pack folder where Hermes runs.
+export const RENDER_LINE = 'HYPERFRAMES_NO_TELEMETRY=1 npx hyperframes render film -o film.mp4'
 
 const muted = { color: 'var(--ui-text-tertiary)' }
 const label = { ...muted, fontSize: '0.6875rem', fontWeight: 500, letterSpacing: '0.04em', textTransform: 'uppercase' }
@@ -180,6 +183,53 @@ function References({ ctx, refs }) {
   })
 }
 
+// The pack's launch film: the video when film.mp4 was rendered, else the shot list and how to render it.
+function Film({ ctx, pack }) {
+  const film = pack.film
+  const [ref, seen] = useSeen()
+  const video = useQuery({
+    queryKey: [ID, 'film', pack.name],
+    queryFn: () => ctx.rest(`/packs/${encodeURIComponent(pack.name)}/film`),
+    enabled: Boolean(seen && film.has_mp4),
+    staleTime: 10 * 60_000
+  })
+  const frame = { width: '100%', borderRadius: 6, border: '1px solid var(--ui-stroke-secondary)' }
+  let body
+  if (film.has_mp4 && video.data?.url) {
+    body = jsx('video', {
+      'data-film': 'video',
+      src: video.data.url,
+      controls: true,
+      muted: true,
+      playsInline: true,
+      preload: 'metadata',
+      style: { ...frame, display: 'block', height: 'auto', background: '#000' }
+    })
+  } else if (film.has_mp4 && !video.isError && !video.data) {
+    body = jsx(Skeleton, { style: { ...frame, aspectRatio: '16 / 9' } })
+  } else {
+    body = jsxs('div', {
+      'data-film': 'beats',
+      style: { ...stack('8px'), fontSize: '0.75rem' },
+      children: [
+        film.beats && jsx('pre', {
+          style: { margin: 0, whiteSpace: 'pre-wrap', overflowWrap: 'anywhere', fontFamily: 'inherit', color: 'var(--ui-text-secondary)' },
+          children: film.beats
+        }),
+        jsx('div', { style: muted, children: 'To render it, in the pack folder where Hermes runs, with Node 22 or later:' }),
+        jsxs('div', {
+          style: row,
+          children: [
+            jsx('code', { style: { overflowWrap: 'anywhere' }, children: RENDER_LINE }),
+            jsx(CopyButton, { text: RENDER_LINE, label: 'Copy command', buttonVariant: 'ghost', buttonSize: 'sm' })
+          ]
+        })
+      ]
+    })
+  }
+  return jsx('div', { ref, children: body })
+}
+
 function FollowUp({ pack }) {
   const checkins = pack.checkins.map((c, i) => {
     const when = fmtWhen(c.next_run_at)
@@ -248,6 +298,7 @@ function PackCard({ ctx, pack }) {
           }),
           pack.checks && pack.checks.length > 0 && jsx(Section, { title: 'Checks', children: jsx(Checks, { checks: pack.checks }) }),
           pack.references.length > 0 && jsx(Section, { title: 'Posts that shaped it', children: jsx(References, { ctx, refs: pack.references }) }),
+          pack.film && jsx(Section, { title: 'Film', children: jsx(Film, { ctx, pack }) }),
           jsx(Section, { title: 'After posting', children: jsx(FollowUp, { pack }) })
         ]
       })

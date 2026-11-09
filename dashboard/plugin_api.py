@@ -9,6 +9,8 @@ reads another plugin's data and never follows a link out of a pack folder.
   GET /packs/{name}/card             the share card PNG
   GET /packs/{name}/preview          the feed preview PNG
   GET /packs/{name}/images?kind=...  one of them as a data URL (Desktop's REST door carries JSON only)
+  GET /packs/{name}/film.mp4         the pack's launch film (/launch film), when it was rendered
+  GET /packs/{name}/film             the same film as a data URL, for Desktop
 
 The pure functions below take their folders as arguments so tests can call them directly.
 """
@@ -42,6 +44,9 @@ MAX_PACKS = 200
 PACK_JSON_MAX = 1024 * 1024
 TEXT_MAX = 64 * 1024
 IMAGE_MAX = 8 * 1024 * 1024
+FILM_NAME = "film.mp4"  # launch_desk/film.py MP4: the only video this backend serves
+FILM_BEATS = "film-beats.md"  # launch_desk/film.py BEAT_SHEET
+FILM_MAX = 64 * 1024 * 1024
 JOBS_MAX = 8 * 1024 * 1024
 LIST_MAX = 50  # checks, references and results read per pack
 MISSED_AFTER_S = 600  # a check-in this long past its run time that has not run counts as missed
@@ -253,6 +258,22 @@ def _image_file(folder: Path, files: dict, kind: str) -> Optional[Path]:
     return _plain_file(folder, name)
 
 
+def _film(folder: Path) -> Optional[dict]:
+    """The pack's launch film: whether film.mp4 is there, and its shot list. None when
+    /launch film was never run for the pack."""
+    beats = _plain_file(folder, FILM_BEATS)
+    mp4 = _plain_file(folder, FILM_NAME)
+    if beats is None and mp4 is None:
+        return None
+    raw = _read_bytes(beats, TEXT_MAX) if beats else None
+    try:
+        has_mp4 = bool(mp4 and os.lstat(mp4).st_size > 0)
+    except OSError:
+        has_mp4 = False
+    return {"has_mp4": has_mp4, "beats": raw.decode("utf-8", "replace").strip() if raw else None,
+            "project": "film" if _is_plain_dir(folder / "film") else None}
+
+
 def summarize_pack(folder: Path, checkins: Optional[list] = None) -> Optional[dict]:
     """Everything the page shows for one pack, from its own folder. None if pack.json is unreadable."""
     data = _read_json(_plain_file(folder, "pack.json"), PACK_JSON_MAX)
@@ -282,6 +303,7 @@ def summarize_pack(folder: Path, checkins: Optional[list] = None) -> Optional[di
         "has_preview": _image_file(folder, files, "preview") is not None,
         "signups": _signups(data.get("results")),
         "checkins": list(checkins or []),
+        "film": _film(folder),
     }
 
 
@@ -499,6 +521,18 @@ def data_url(png: Optional[bytes]) -> Optional[str]:
     return "data:image/png;base64," + base64.b64encode(png).decode("ascii") if png else None
 
 
+def pack_film(root: Path, name: Any) -> Optional[bytes]:
+    """The bytes of a pack's film.mp4, only from inside that pack's folder, only an MP4."""
+    folder = pack_folder(root, name)
+    path = _plain_file(folder, FILM_NAME) if folder is not None else None
+    raw = _read_bytes(path, FILM_MAX) if path else None
+    return raw if raw and raw[4:8] == b"ftyp" else None
+
+
+def film_data_url(mp4: Optional[bytes]) -> Optional[str]:
+    return "data:video/mp4;base64," + base64.b64encode(mp4).decode("ascii") if mp4 else None
+
+
 # ------------------------------------------------------------------ routes
 
 def _build_router():
@@ -528,6 +562,20 @@ def _build_router():
     @api.get("/packs/{name}/preview")
     def get_preview(name: str):
         return _png(name, "preview")
+
+    @api.get("/packs/{name}/film.mp4")
+    def get_film_file(name: str):
+        mp4 = pack_film(packs_root(), name)
+        if mp4 is None:
+            raise HTTPException(status_code=404, detail="No film.")
+        return Response(content=mp4, media_type="video/mp4", headers=no_store)
+
+    @api.get("/packs/{name}/film")
+    def get_film(name: str):
+        root = packs_root()
+        if pack_folder(root, name) is None:
+            raise HTTPException(status_code=404, detail="No such pack.")
+        return {"name": name, "url": film_data_url(pack_film(root, name))}
 
     @api.get("/packs/{name}/images")
     def get_image(name: str, kind: str = "card"):

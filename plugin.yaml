@@ -1,5 +1,5 @@
 name: launch-desk
-version: 0.1.0
+version: 0.2.0
 description: >-
   Turns "I just shipped X" into a launch post pack: three hooks, a caption, a share card and a
   feed preview, checked against a scroll test. What you shipped (first 160 characters) is sent to
@@ -10,6 +10,9 @@ description: >-
   sign-ups the founder reports are stored in the pack. An optional Hermes Desktop page (its UI off
   until turned on) shows the packs; its read-only backend, served while the plugin is enabled, reads
   the packs and, from Hermes' cron/jobs.json, the times of the check-ins Launch Desk scheduled.
+  Only when asked, /launch film writes a 14-second film project from a pack and runs the renderer
+  the user set up (the film_render setting, or HyperFrames on PATH) on this machine, with
+  HyperFrames' telemetry off; nothing is downloaded or posted.
 author: posts.design
 license: MIT
 homepage: https://github.com/posts-design/hermes-launch-desk
@@ -18,3 +21,12 @@ provides_tools:
   - launch_desk_attach_screenshot
   - launch_desk_followup
   - launch_desk_record_results
+config_schema:
+  film_render:
+    type: list
+    default: []
+    label: Film render command
+    description: >-
+      Optional. The command /launch film runs to render a film, as a list of arguments with
+      {project} and {out}, e.g. ["hyperframes", "render", "{project}", "-o", "{out}"]. Empty: a
+      hyperframes on PATH is used, else nothing is rendered.

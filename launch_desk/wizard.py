@@ -24,7 +24,7 @@ from dataclasses import asdict, dataclass, replace
 from pathlib import Path
 from typing import Any, Callable
 
-from . import followup
+from . import film, followup
 from .brand import NEUTRAL, PRESET_ACCENTS, fetch_brand, font_face, http_get
 from .draft import (PHRASE_SEP, UNSUPPORTED, DraftError, card_line, checklist, draft_post, hook_options,
                     kept_from_style, post_failures, site_details)
@@ -59,6 +59,7 @@ HELP = "\n".join((
     "/launch brand <url> reads your site's colours and logo again.",
     "/launch voice: <a past post of yours> keeps it as a voice sample, up to 3; drafts follow its style. "
     "/launch voice: clear forgets them.",
+    "/launch film makes a 14-second launch film from your latest pack (or name one).",
     "Nothing is ever posted. You get a pack to post yourself.",
 ))
 UNATTENDED = "/launch needs you to answer a few questions; run it in a chat."
@@ -76,6 +77,7 @@ STYLE_WORDS = {"em-dash": "more than one em-dash", "emoji": "more than one emoji
 NO_MORE_REFS = "There are no other references to swap in, so these stay."
 PACK_UNAVAILABLE = "posts.design isn't available, so these come from the sample pack of launch posts."
 PACK_TOO_FEW = "Not enough close matches on posts.design; using the sample pack."
+FILM_HINT = "Send /launch film for a 14-second launch film made from this pack."
 DRAFT_FAILED = "the model did not return a usable draft; run /launch again, or try a larger model"
 
 SHIPPED = [
@@ -761,7 +763,8 @@ def _approve(host: Host, p: _Pending) -> str:
                       preview=Path(p.data["preview"]),
                       headline=p.data.get("card_line") or p.card(), more_refs=more,
                       layout=p.data.get("layout"), hook_source=p.option.source,
-                      checks=[asdict(c) for c in p.checks()])
+                      checks=[asdict(c) for c in p.checks()],
+                      screenshots=[Path(s) for s in _screenshots(_used_screenshots(p.data))])
     if p.data.get("brand_new"):
         _store_brand(host, p.brand)
     _drop_pending(host, p.data)
@@ -788,6 +791,7 @@ def _approve(host: Host, p: _Pending) -> str:
         "Read it once and change anything that isn't true.",
         "To edit the text, change it in X's compose box or in post-x.txt.",
         *checkins,
+        FILM_HINT,
         f"MEDIA:{host.media_path(pack / data['files']['card_x'], 'card')}",
         f"MEDIA:{host.media_path(pack / data['files']['preview'], 'preview')}",
     ))
@@ -883,10 +887,32 @@ def _guarded(fn: Callable[[], str], on_stop: str, after: str = "") -> str:
         return _went_wrong("making your pack", "an unexpected error, with details in the Hermes log") + after
 
 
+def _film_args(host: Host, text: str) -> str | None:
+    """What follows "film" when the command is /launch film [pack]; None when it is a launch.
+    `/launch film` alone, or with a pack's label or folder name, is the film. Other text after
+    "film" is a launch when it has a link or a detail ( -- ), else a pack name not found."""
+    first, _, rest = text.partition(" ")
+    if first.lower() != "film":
+        return None
+    rest = rest.strip()
+    if not rest:
+        return ""
+    try:
+        known = film.resolve(host.data_dir() / "packs", rest) is not None
+    except Exception:
+        known = False
+    if known or not (_URL_RE.search(rest) or _DETAIL_SPLIT.search(rest)):
+        return rest
+    return None
+
+
 def _run(host: Host, raw: str, get: Callable[[str], bytes]) -> str:
+    text = raw.strip()
+    film_value = _film_args(host, text)
+    if film_value is not None:
+        return film.run_film(host, film_value)
     if _unattended(host):
         return UNATTENDED
-    text = raw.strip()
     if text.lower() in _HELP_WORDS:
         return HELP
     first, _, rest = text.partition(" ")

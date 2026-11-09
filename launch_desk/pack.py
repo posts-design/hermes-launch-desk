@@ -94,6 +94,33 @@ def post_text(draft: Draft, hook: str) -> str:
     return "\n".join(lines).strip()
 
 
+ASSET_MAX = 20 * 1024 * 1024
+ASSET_TYPES = {b"\x89PNG\r\n\x1a\n": ".png", b"\xff\xd8\xff": ".jpg", b"\x00\x00\x01\x00": ".ico"}
+
+
+def _copy_asset(src: Path, pack: Path, stem: str, limit: int) -> str | None:
+    """Copy an image into the pack as <stem>.<ext> (PNG, JPEG, WebP or ICO, at most `limit`
+    bytes); its file name, or None when it is missing, too big or not an image."""
+    try:
+        src = Path(src)
+        if not src.is_file() or src.stat().st_size > limit:
+            return None
+        with open(src, "rb") as handle:
+            head = handle.read(12)
+    except OSError:
+        return None
+    ext = next((e for magic, e in ASSET_TYPES.items() if head.startswith(magic)), None)
+    if ext is None and head[:4] == b"RIFF" and head[8:12] == b"WEBP":
+        ext = ".webp"
+    if ext is None:
+        return None
+    try:
+        shutil.copyfile(src, pack / f"{stem}{ext}")
+    except OSError:
+        return None
+    return f"{stem}{ext}"
+
+
 def _fmt_views(views: int | None) -> str:
     return f"{views:,} views" if views is not None else "views not shown"
 
@@ -103,9 +130,10 @@ def write_pack(out_dir: Path, brief: Brief, brand: BrandKit, draft: Draft, hook:
                has_screenshot: bool = False, preview: Path | None = None,
                headline: str | None = None, more_refs: list[Reference] = (),
                layout: str | None = None, hook_source: str = "model",
-               checks: list[dict] = ()) -> Path:
+               checks: list[dict] = (), screenshots: list[Path] = ()) -> Path:
     """The pack folder. `checks` is the post's checklist ({"rules", "ok", "text"} per line);
-    `hook_source` says whose words the hook is: "founder" or "model"."""
+    `hook_source` says whose words the hook is: "founder" or "model". The screenshots the card
+    used and the brand's logo are copied in too, so /launch film can use them later."""
     name = f"{date.today().isoformat()}-{_slug(brand.name, SLUG_WHAT_MAX)}-{_slug(brief.what, SLUG_WHAT_MAX)}"
     pack = _new_folder(Path(out_dir), name)
 
@@ -122,6 +150,16 @@ def write_pack(out_dir: Path, brief: Brief, brand: BrandKit, draft: Draft, hook:
     if preview is not None:
         shutil.copyfile(preview, pack / "preview-x.png")
         files["preview"] = "preview-x.png"
+    shots = []
+    for n, src in enumerate(screenshots, 1):
+        name_ = _copy_asset(src, pack, f"screenshot-{n}", ASSET_MAX)
+        if name_:
+            shots.append(name_)
+    if shots:
+        files["screenshots"] = shots
+    logo = _copy_asset(Path(brand.logo_path), pack, "logo", ASSET_MAX) if brand.logo_path else None
+    if logo:
+        files["logo"] = logo
     (pack / "alt-text.txt").write_text(alt_text(brief, brand, has_screenshot, headline, layout) + "\n", encoding="utf-8")
 
     check = ["# Before you post", "", f"Open this link to post on X with the text filled in: {intent}", "",
@@ -145,7 +183,7 @@ def write_pack(out_dir: Path, brief: Brief, brand: BrandKit, draft: Draft, hook:
         "brief": {"shipped": brief.shipped, "network": brief.network, "what": brief.what,
                   "detail": brief.detail, "product_url": brief.product_url},
         "brand": {"name": brand.name, "url": brand.url, "bg": brand.bg, "ink": brand.ink,
-                  "accent": brand.accent},
+                  "accent": brand.accent, "font_face": brand.font_face, "font_family": brand.font_family},
         "hook": hook,
         "hook_source": hook_source,
         "card_line": headline or "",

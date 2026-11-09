@@ -11,7 +11,8 @@
 //
 // node tools/desktop_check.mjs [--react <node_modules>] [--sdk-src <apps/desktop/src>]
 //                              [--data <packs.json>] [--out <preview.html>]
-// --data is JSON {"packs": <GET /packs body>, "images": {<name>: <GET /packs/<name>/images body>}}
+// --data is JSON {"packs": <GET /packs body>, "images": {<name>: <GET /packs/<name>/images body>},
+// "films": {<name>: <the data URL of GET /packs/<name>/film>}}
 // (tools/desktop_preview_data.py writes one). Exit code 1 on any failed check.
 
 import { execFileSync } from 'node:child_process'
@@ -90,6 +91,7 @@ const FIXTURE = {
         layout: 'statement', intent_url: 'https://x.com/intent/post?text=x', alt_text: 'Launch card for Acme.',
         has_card: true, has_preview: true,
         signups: [{ channel: 'X', signups: 12, recorded_at: null }],
+        film: { has_mp4: true, beats: '# Launch film for Acme', project: 'film' },
         checkins: [
           { id: 'j1', state: 'scheduled', missed: false, next_run_at: FUTURE, last_run_at: null },
           { id: '', state: 'scheduled', missed: true, next_run_at: '2026-11-01T09:00:00+00:00', last_run_at: null }
@@ -98,11 +100,13 @@ const FIXTURE = {
       {
         name: '2026-11-05-acme-export', date: '2026-11-05', created: null, product: null, post: 'Export to CSV.\nNow.',
         hook: 'Something else.', hook_source: 'founder', checks: null, references: [], layout: null, intent_url: null,
-        alt_text: null, has_card: false, has_preview: false, signups: [], checkins: []
+        alt_text: null, has_card: false, has_preview: false, signups: [], checkins: [],
+        film: { has_mp4: false, beats: '# Launch film for Acme\n\n## 1. 0 to 3.5 s: the first line', project: 'film' }
       }
     ]
   },
-  images: {}
+  images: {},
+  films: { '2026-11-06-acme-dark-mode': 'data:video/mp4;base64,AAAAGGZ0eXBpc29t' }
 }
 
 async function loadPlugin(reactDir) {
@@ -190,9 +194,12 @@ if (args.react) {
       ['card', 'preview'].map(kind => [JSON.stringify(['launch-desk', 'image', name, kind]), { status: 'success', data: { name, kind, url: body[kind] } }])
     )
   )
+  const filmQueries = Object.fromEntries(
+    Object.entries(data.films || {}).map(([name, url]) => [JSON.stringify(['launch-desk', 'film', name]), { status: 'success', data: { name, url } }])
+  )
   const page = () => route.render()
 
-  const loaded = render({ [packsKey]: { status: 'success', data: data.packs }, ...imageQueries }, page())
+  const loaded = render({ [packsKey]: { status: 'success', data: data.packs }, ...imageQueries, ...filmQueries }, page())
   const packs = data.packs.packs
   const founder = packs.filter(p => p.hook_source === 'founder' && p.hook && p.post.split('\n')[0].trim() === p.hook.trim()).length
   report.loaded = {
@@ -206,12 +213,15 @@ if (args.react) {
     webLinks: count(loaded, /data-link="/g),
     plainReferences: count(loaded, /data-plain-reference="true"/g),
     ownReferences: count(loaded, /data-own-reference="true"/g),
-    missed: count(loaded, /data-checkin="missed"/g)
+    missed: count(loaded, /data-checkin="missed"/g),
+    films: count(loaded, /data-film="video"/g),
+    filmBeats: count(loaded, /data-film="beats"/g)
   }
   const expect = (name, got, want) => got !== want && fail(`loaded page: ${name} ${got}, expected ${want}`)
   expect('pack cards', report.loaded.packs, packs.length)
   expect('founder hooks marked', report.loaded.founderMarked, founder)
-  expect('copy buttons', report.loaded.copyButtons, packs.length)
+  // Copy post on every pack, and Copy command beside each film's render line.
+  expect('copy buttons', report.loaded.copyButtons, packs.length + packs.filter(p => p.film && !p.film.has_mp4).length)
   expect('check-ins shown', report.loaded.checkins, packs.reduce((n, p) => n + p.checkins.length, 0))
   expect('channels shown', report.loaded.channels, packs.reduce((n, p) => n + p.signups.length, 0))
   expect('empty or error states', report.loaded.emptyOrError, 0)
@@ -227,6 +237,10 @@ if (args.react) {
     if (typeof r.signups === 'number' && !loaded.includes(`${r.signups} sign-up`)) fail(`own launch without its sign-ups: ${r.pack}`)
   }
   expect('missed check-ins', report.loaded.missed, packs.reduce((n, p) => n + p.checkins.filter(c => c.missed).length, 0))
+  const films = data.films || {}
+  expect('films shown', report.loaded.films, packs.filter(p => p.film && p.film.has_mp4 && films[p.name]).length)
+  expect('shot lists shown', report.loaded.filmBeats, packs.filter(p => p.film && !p.film.has_mp4).length)
+  if (report.loaded.films && !/<video[^>]*muted=""[^>]*controls=""|<video[^>]*controls=""[^>]*muted=""/.test(loaded)) fail('film video is not muted with controls')
   if (!events.includes('cron.changed')) fail('does not refresh on cron.changed')
   if (plugin.defaultEnabled !== false) fail('the Desktop half must ship off (defaultEnabled: false)')
   // Only web links reach the OS: Desktop's openExternal also opens file: URLs and local paths.

@@ -2,7 +2,10 @@ from __future__ import annotations
 
 import json
 import logging
+import os
 import shutil
+import signal
+import subprocess
 import time
 import uuid
 from pathlib import Path
@@ -42,6 +45,12 @@ class Host(Protocol):
     def media_path(self, src: Path, label: str) -> str: ...
 
     def schedule(self, job: dict) -> dict: ...
+
+    def config(self, key: str) -> Any: ...
+
+    def which(self, name: str) -> str | None: ...
+
+    def run(self, argv: list[str], cwd: Path, env: dict, timeout: float) -> tuple[int, str]: ...
 
 
 class HermesHost:
@@ -136,11 +145,39 @@ class HermesHost:
                 break
         return reply
 
+    def config(self, key: str) -> Any:
+        """One of this plugin's settings (plugins.entries.launch-desk.settings.<key> in Hermes'
+        config.yaml), read-only; None when unset or unreadable."""
+        get = getattr(self.ctx, "get_config", None)
+        if get is None:
+            return None
+        try:
+            return get(key, None)
+        except Exception:
+            logging.getLogger(__name__).warning("launch-desk: setting %s unreadable", key, exc_info=True)
+            return None
+
+    def which(self, name: str) -> str | None:
+        return shutil.which(name)
+
+    def run(self, argv: list[str], cwd: Path, env: dict, timeout: float) -> tuple[int, str]:
+        """Run one command (list args, no shell) in its own process group: its exit code and
+        its output (stdout and stderr together). TimeoutError after `timeout` seconds, once the
+        process group has been stopped."""
+        proc = subprocess.Popen(argv, cwd=str(cwd), env=env, stdin=subprocess.DEVNULL,
+                                stdout=subprocess.PIPE, stderr=subprocess.STDOUT, start_new_session=True)
+        try:
+            out, _ = proc.communicate(timeout=timeout)
+        except subprocess.TimeoutExpired:
+            _stop(proc)
+            raise TimeoutError(f"no exit after {timeout} s") from None
+        return proc.returncode, (out or b"").decode("utf-8", "replace")[-20_000:]
+
     def media_path(self, src: Path, label: str) -> str:
         """The path for a MEDIA line. Chat apps only get files from Hermes' media cache, so a
-        copy goes to <HERMES_HOME>/cache/images (Hermes clears it after about a day); the
-        original stays put. data_dir is <HERMES_HOME>/plugin-data/<namespace>: if it isn't (or isn't absolute),
-        or the copy fails, the original path is used."""
+        copy goes to <HERMES_HOME>/cache/images, or cache/videos for an MP4 (Hermes clears them
+        after about a day); the original stays put. data_dir is <HERMES_HOME>/plugin-data/<namespace>:
+        if it isn't (or isn't absolute), or the copy fails, the original path is used."""
         try:
             data = self.data_dir()
             if not data.is_absolute():
@@ -148,12 +185,30 @@ class HermesHost:
             home = data.parents[1]
             if data.parent != home / "plugin-data":
                 return str(src)
-            cache = home / "cache" / "images"
+            video = Path(src).suffix.lower() == ".mp4"
+            cache = home / "cache" / ("videos" if video else "images")
             cache.mkdir(parents=True, exist_ok=True)
             stamp = time.strftime("%Y%m%d_%H%M%S")
-            dest = cache / f"launch-desk_{stamp}_{uuid.uuid4().hex[:8]}_{label}.png"
+            dest = cache / f"launch-desk_{stamp}_{uuid.uuid4().hex[:8]}_{label}{'.mp4' if video else '.png'}"
             shutil.copyfile(src, dest)
             return str(dest)
         except Exception:
             logging.getLogger(__name__).warning("launch-desk: media copy failed", exc_info=True)
             return str(src)
+
+
+def _stop(proc: subprocess.Popen) -> None:
+    """Stop a command that ran too long: its process group gets SIGTERM, then SIGKILL."""
+    for sig in (signal.SIGTERM, getattr(signal, "SIGKILL", signal.SIGTERM)):
+        try:
+            if hasattr(os, "killpg"):
+                os.killpg(proc.pid, sig)
+            else:
+                proc.kill()
+        except (OSError, ProcessLookupError):
+            pass
+        try:
+            proc.wait(timeout=5)
+            return
+        except subprocess.TimeoutExpired:
+            continue

@@ -136,7 +136,7 @@ def test_lists_packs_newest_first_with_the_fields_the_pane_shows(tmp_path):
     # Only what the page shows goes out.
     assert set(pack) == {"name", "date", "created", "product", "post", "hook", "hook_source", "checks",
                          "references", "layout", "intent_url", "alt_text", "has_card", "has_preview",
-                         "signups", "checkins"}
+                         "signups", "checkins", "film"}
 
 
 def test_recording_results_later_does_not_move_a_pack_to_the_top(tmp_path):
@@ -521,3 +521,78 @@ def test_labels_are_built_only_when_a_blueprint_check_in_exists(tmp_path, monkey
     from launch_desk import followup
     api.list_packs(root, jobs(tmp_path / "jobs2.json", blueprint_job("b1", followup.LATEST)), NOW)
     assert len(built) == 1
+
+
+# ------------------------------------------------------------------ the launch film
+
+MP4 = b"\x00\x00\x00\x18ftypisom" + b"\x00" * 64
+
+
+def test_a_pack_lists_its_film_and_shot_list(tmp_path):
+    with_film = make_pack(tmp_path, "2026-11-06-a", 1_000)
+    (with_film / "film.mp4").write_bytes(MP4)
+    (with_film / "film-beats.md").write_text("# Launch film\n\n## 1. 0 to 3.5 s: the first line\n", encoding="utf-8")
+    (with_film / "film").mkdir()
+    beats_only = make_pack(tmp_path, "2026-11-05-b", 900)
+    (beats_only / "film-beats.md").write_text("# Launch film\n", encoding="utf-8")
+    make_pack(tmp_path, "2026-11-04-c", 800)
+    films = {p["name"]: p["film"] for p in api.list_packs(tmp_path)["packs"]}
+    assert films["2026-11-06-a"]["has_mp4"] is True and films["2026-11-06-a"]["project"] == "film"
+    assert films["2026-11-06-a"]["beats"].startswith("# Launch film")
+    assert films["2026-11-05-b"]["has_mp4"] is False and films["2026-11-05-b"]["beats"]
+    assert films["2026-11-04-c"] is None
+
+
+def test_film_is_served_only_from_inside_a_pack_and_only_as_mp4(tmp_path):
+    root = tmp_path / "packs"
+    pack = make_pack(root, "2026-11-06-a", 1_000)
+    (pack / "film.mp4").write_bytes(MP4)
+    fake = make_pack(root, "2026-11-06-fake", 1_000)
+    (fake / "film.mp4").write_bytes(b"<html>not a film</html>")
+    outside = make_pack(tmp_path, "secret-pack", 1_000)
+    (outside / "film.mp4").write_bytes(MP4)
+    linked = make_pack(root, "2026-11-06-link", 1_000)
+    (linked / "film.mp4").symlink_to(outside / "film.mp4")
+    assert api.pack_film(root, "2026-11-06-a") == MP4
+    assert api.film_data_url(api.pack_film(root, "2026-11-06-a")).startswith("data:video/mp4;base64,")
+    for name in ("2026-11-06-fake", "../secret-pack", "secret-pack", "2026-11-06-link", "..", "2026-11-06-missing"):
+        assert api.pack_film(root, name) is None, name
+
+
+@pytest.fixture
+def film_client(tmp_path, monkeypatch):
+    fastapi = pytest.importorskip("fastapi")
+    pytest.importorskip("httpx")
+    from fastapi.testclient import TestClient
+
+    root = tmp_path / "packs"
+    pack = make_pack(root, "2026-11-06-newer", 2_000)
+    (pack / "film.mp4").write_bytes(MP4)
+    make_pack(root, "2026-11-05-older", 1_000)
+    secret = make_pack(tmp_path, "secret-pack", 3_000)
+    (secret / "film.mp4").write_bytes(MP4)
+    monkeypatch.setattr(api, "packs_root", lambda: root)
+    monkeypatch.setattr(api, "jobs_file", lambda: tmp_path / "cron" / "jobs.json")
+    app = fastapi.FastAPI()
+    app.include_router(api._build_router(), prefix="/api/plugins/launch-desk")
+    return TestClient(app)
+
+
+def test_film_routes_serve_the_mp4_and_its_data_url(film_client):
+    base = "/api/plugins/launch-desk/packs/2026-11-06-newer"
+    res = film_client.get(base + "/film.mp4")
+    assert res.status_code == 200 and res.headers["content-type"] == "video/mp4" and res.content == MP4
+    body = film_client.get(base + "/film").json()
+    assert base64.b64decode(body["url"].split(",", 1)[1]) == MP4
+    assert film_client.get("/api/plugins/launch-desk/packs/2026-11-05-older/film").json()["url"] is None
+    assert film_client.get("/api/plugins/launch-desk/packs/2026-11-05-older/film.mp4").status_code == 404
+
+
+@pytest.mark.parametrize("path", [
+    "/packs/..%2Fsecret-pack/film.mp4", "/packs/%2E%2E/film.mp4", "/packs/secret-pack/film.mp4",
+    "/packs/..%2F..%2Fsecret-pack/film", "/packs/secret-pack/film", "/packs/2026-11-06-newer%2F..%2F..%2Fsecret-pack/film.mp4",
+    "/packs/../secret-pack/film.mp4",
+])
+def test_film_routes_refuse_anything_outside_the_packs(film_client, path):
+    res = film_client.get("/api/plugins/launch-desk" + path)
+    assert res.status_code == 404 and res.content != MP4

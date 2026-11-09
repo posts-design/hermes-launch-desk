@@ -1,4 +1,4 @@
-"""Write the data tools/desktop_check.mjs renders: GET /packs and each pack's images, read-only.
+"""Write the data tools/desktop_check.mjs renders: GET /packs, each pack's images and films, read-only.
 
 python tools/desktop_preview_data.py <packs folder> [<cron jobs.json>] > data.json
 """
@@ -22,7 +22,9 @@ def main(argv: list) -> int:
     images = {p["name"]: {"card": api.data_url(api.pack_image(root, p["name"], "card")),
                           "preview": api.data_url(api.pack_image(root, p["name"], "preview"))}
               for p in listing["packs"]}
-    json.dump({"packs": listing, "images": images}, sys.stdout)
+    films = {p["name"]: api.film_data_url(api.pack_film(root, p["name"])) for p in listing["packs"]
+             if (p.get("film") or {}).get("has_mp4")}
+    json.dump({"packs": listing, "images": images, "films": films}, sys.stdout)
     return 0
 
 

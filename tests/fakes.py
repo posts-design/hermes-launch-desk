@@ -8,7 +8,8 @@ from typing import Any
 
 class FakeHost:
     def __init__(self, choices=None, llm_replies=None, mcp_replies=None, surface="cli",
-                 unattended=False, data_dir=None, schedule_replies=None):
+                 unattended=False, data_dir=None, schedule_replies=None, config=None, on_path=None,
+                 run=None):
         self.choices = list(choices or [])
         self.llm_replies = list(llm_replies or [])
         self.mcp_replies = dict(mcp_replies or {})
@@ -23,6 +24,11 @@ class FakeHost:
         self.schedule_replies = list(schedule_replies or [])
         self.scheduled: list[dict] = []
         self.events: list[tuple[str, str]] = []  # ("ask", question) and ("say", text), in order
+        self._config = dict(config or {})
+        self._on_path = dict(on_path or {})
+        # run(argv, cwd, env, timeout) -> (code, output), or raises; None: no command may run
+        self._run = run
+        self.commands: list[dict] = []
 
     def choose(self, question: str, choices: list[dict]) -> str | None:
         self.asked.append((question, choices))
@@ -76,3 +82,15 @@ class FakeHost:
             reply = {"success": True, "job_id": f"job{len(self.scheduled)}", "deliver": "origin",
                      "next_run_at": "2026-11-06T12:00:00+00:00"}
         return reply
+
+    def config(self, key: str):
+        return self._config.get(key)
+
+    def which(self, name: str):
+        return self._on_path.get(name)
+
+    def run(self, argv, cwd, env, timeout):
+        self.commands.append({"argv": list(argv), "cwd": cwd, "env": dict(env), "timeout": timeout})
+        if self._run is None:
+            raise AssertionError("no command expected")
+        return self._run(argv, cwd, env, timeout)

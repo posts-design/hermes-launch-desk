@@ -30,6 +30,10 @@ A card made from the real product beats any generated image. If the user wants a
 
 Never generate or invent an image for the card.
 
+## A launch film
+
+When the founder asks for a launch video or film after a pack is approved, suggest `/launch film` (their newest pack) or `/launch film <pack>`. It writes a 14-second silent film project in the founder's brand from the pack, renders it only with what they set up (the `film_render` setting, or HyperFrames on PATH, run on their machine with its telemetry off), and otherwise says how to render it or film it by hand from the shot list. Never write a film script yourself in its place, never run `npx` to render it, and never download a renderer. A playbook's beats, when shown, are shapes to fill with the founder's own words, not lines to read out.
+
 ## What you must not do
 
 - Do not write the launch post yourself in place of `/launch`. The command picks references and checks the draft in code; a post written in chat skips every check.

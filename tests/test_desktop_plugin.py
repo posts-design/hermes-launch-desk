@@ -76,6 +76,7 @@ def test_registers_a_page_and_renders_every_state():
     assert report["loaded"]["packs"] == 2 and report["loaded"]["founderMarked"] == 1
     assert report["loaded"]["webLinks"] == 1 and report["loaded"]["plainReferences"] == 1
     assert report["loaded"]["missed"] == 1
+    assert report["loaded"]["films"] == 1 and report["loaded"]["filmBeats"] == 1
     assert report["states"] == {"empty": True, "error": True, "loading": True}
     assert report["chip"] == {"missed": True, "next": True, "hiddenWhenNone": True, "hiddenWhenOff": True}
 
@@ -91,6 +92,8 @@ def test_renders_packs_from_the_real_backend_listing(tmp_path):
                           {"brand": "Web", "url": "https://posts.design/a", "views": 3},
                           {"brand": "Local", "url": "file:///Applications/X.app", "views": 2}])
     make_pack(root, "2026-11-05-b", 1_000, hook_source="model")
+    (root / "2026-11-06-a" / "film.mp4").write_bytes(b"\x00\x00\x00\x18ftypisom" + b"\x00" * 32)
+    (root / "2026-11-05-b" / "film-beats.md").write_text("# Launch film\n", encoding="utf-8")
     path = jobs(tmp_path / "jobs.json", job("2026-11-06-a", "j1", next_run_at="2099-01-01T00:00:00+00:00"),
                 job("2026-11-06-a", "j2", next_run_at="2020-01-01T00:00:00+00:00"))
     listing = api.list_packs(root, path)
@@ -98,11 +101,12 @@ def test_renders_packs_from_the_real_backend_listing(tmp_path):
                           "preview": api.data_url(api.pack_image(root, p["name"], "preview"))}
               for p in listing["packs"]}
     data = tmp_path / "data.json"
-    data.write_text(json.dumps({"packs": listing, "images": images}), encoding="utf-8")
+    films = {"2026-11-06-a": api.film_data_url(api.pack_film(root, "2026-11-06-a"))}
+    data.write_text(json.dumps({"packs": listing, "images": images, "films": films}), encoding="utf-8")
     result = run_check("--react", str(SRC / "node_modules"), "--data", str(data), "--out", str(tmp_path / "p.html"))
     report = json.loads(result.stdout)
     assert result.returncode == 0, report["failures"]
-    assert report["loaded"] == {"packs": 2, "founderMarked": 1, "copyButtons": 2, "images": 2, "checkins": 2,
+    assert report["loaded"] == {"packs": 2, "founderMarked": 1, "copyButtons": 3, "images": 2, "checkins": 2,
                                 "channels": 2, "emptyOrError": 0, "webLinks": 4, "plainReferences": 2,
-                                "ownReferences": 1, "missed": 1}
+                                "ownReferences": 1, "missed": 1, "films": 1, "filmBeats": 1}
     assert (tmp_path / "p.html").is_file()

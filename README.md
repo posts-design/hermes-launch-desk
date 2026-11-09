@@ -56,13 +56,28 @@ The next `/launch` reads those numbers back. Of the packs for the same site, the
 
 To put your product on the card, send a screenshot and the agent attaches it with `launch_desk_attach_screenshot`. Send two and the card shows them side by side; with none, the card sets its headline large. The plugin also ships a skill, `launch-desk:launch-desk`, that teaches the agent the launch workflow, so it steers you well even when you do not type the command.
 
+## Launch film
+
+After you approve a pack, send `/launch film` for a 14-second silent launch film in your brand: your first line, your screenshot (or your product's name, large), what shipped, then your logo and site. `/launch film <pack>` makes one from an older pack, by its folder name or its label as the check-in shows it.
+
+It writes a [HyperFrames](https://github.com/heygen-com/hyperframes) project into the pack (`film/`, HTML with its own fonts and images, nothing fetched) and a shot list (`film-beats.md`) to film it yourself from. It renders only with what you set up, first found wins:
+
+1. the `film_render` setting, a command with `{project}` and `{out}`:
+   `hermes config set plugins.entries.launch-desk.settings.film_render '["hyperframes", "render", "{project}", "-o", "{out}"]'`
+   (it is also on the plugin's settings page in Hermes Desktop);
+2. a `hyperframes` executable on your PATH (`hyperframes render <project> -o <out>`).
+
+The render runs on the machine where Hermes runs, for up to 10 minutes, with HyperFrames' telemetry, update check and auto-install turned off (`HYPERFRAMES_NO_TELEMETRY=1`, `DO_NOT_TRACK=1`, `HYPERFRAMES_NO_UPDATE_CHECK=1`, `HYPERFRAMES_NO_AUTO_INSTALL=1`). Launch Desk never runs `npx` and never downloads anything. With no renderer, the reply gives the project folder, the line to render it yourself (`HYPERFRAMES_NO_TELEMETRY=1 npx hyperframes render <project> -o film.mp4`, Node 22 or later) and the shot list. A rendered `film.mp4` is sent in the chat and shown on the Desktop page.
+
+The reply also suggests a posts.design playbook for a longer film, picked by the kind of launch. Listing playbooks is free; on posts.design Pro it also reads that playbook (1 credit) and shows its beats with their seconds. What a beat says is a shape to fill with your own words, not a script. If posts.design is not set up, this part is left out.
+
 ## Hermes Desktop
 
-In Hermes Desktop, Launch Desk adds a Launch Desk page to the sidebar (also in the command palette as Open Launch Desk). It shows every pack, newest first: the card and the feed preview, the post with your own words marked, the checks, the three reference posts with their views, the check-ins and the sign-ups you recorded. Copy post copies the text; Open X opens X with it filled in, in your browser. The status bar shows when the next check-in runs, or how many never ran.
+In Hermes Desktop, Launch Desk adds a Launch Desk page to the sidebar (also in the command palette as Open Launch Desk). It shows every pack, newest first: the card and the feed preview, the post with your own words marked, the checks, the three reference posts with their views, the check-ins, the sign-ups you recorded and, when you made one, the launch film (or its shot list and render line). Copy post copies the text; Open X opens X with it filled in, in your browser. The status bar shows when the next check-in runs, or how many never ran.
 
 The Desktop half ships off. Turn on Launch Desk in Capabilities → Plugins. If Desktop and Hermes run on different machines, install it from Desktop with Install from Git and the Desktop part checked, or with this link: `hermes://plugin/install?repo=posts-design/hermes-launch-desk`.
 
-The page only reads. Its backend (`dashboard/plugin_api.py`, loaded when the plugin is enabled in Hermes) reads this plugin's own packs folder and, from Hermes' `cron/jobs.json`, the ids, state and times of the check-in jobs `/launch` created. It writes nothing and sends nothing anywhere. Links on the page open only if they are web (https) links.
+The page only reads. Its backend (`dashboard/plugin_api.py`, loaded when the plugin is enabled in Hermes) reads this plugin's own packs folder (serving a pack's `film.mp4` only from inside that pack) and, from Hermes' `cron/jobs.json`, the ids, state and times of the check-in jobs `/launch` created. It writes nothing and sends nothing anywhere. Links on the page open only if they are web (https) links.
 
 ## What it checks
 
@@ -88,6 +103,7 @@ Sent to posts.design, through your own account:
 - The first 160 characters of what you shipped, as the search text.
 - A short keyword phrase from it, a fixed phrase for the kind of launch, and a category.
 - An access check (`get_my_access`) on each run.
+- With `/launch film`: a playbook list (`list_playbooks`, free), an access check, and on Pro one playbook read (`get_playbook`, 1 credit). Nothing from your pack is sent.
 
 Not sent to posts.design: the detail after ` -- `, your site link, the draft, your brand kit and your screenshots.
 
@@ -99,17 +115,19 @@ Stored on your machine, in the plugin's data folder and Hermes plugin state:
 
 - The brand kit: name, site link, tagline, colours, font name and face, logo file and voice samples.
 - A pending draft with its card, its preview and the search results it came from (items.json), kept up to 24 hours or until you approve or discard it.
-- Finished packs, kept until you delete them, with when they were made and the sign-ups per channel you report after a check-in (the last 50). The next `/launch` reads them from there.
-- Copies of the card and preview in Hermes' image cache, so chat apps can show them. Hermes clears them after about a day.
-- The paths of up to two attached screenshots, until you approve or discard the draft that used them. The files are not copied; the screenshot tool reads each image where it is and leaves it there.
+- Finished packs, kept until you delete them, with when they were made and the sign-ups per channel you report after a check-in (the last 50). The next `/launch` reads them from there. A pack keeps a copy of the screenshots its card used and of your logo (each at most 20 MB), so `/launch film` can use them later, and, once you make one, the film project, its shot list and `film.mp4`.
+- Copies of the card and preview in Hermes' image cache, and of a rendered film in its video cache, so chat apps can show them. Hermes clears them after about a day.
+- The paths of up to two attached screenshots, until you approve or discard the draft that used them. Until you approve, the screenshot tool reads each image where it is and leaves it there.
 
 Scheduled, only if you say Yes after approving: two check-ins on Hermes' own scheduler, a day and three days later. They run as ordinary Hermes cron jobs with the plugin's own tools and no MCP server, post to the same chat, and are listed by `hermes cron list`. Nothing else is scheduled, unless you create a check-in yourself from the "Launch Desk check-in" blueprint; that one runs with Hermes' default toolsets.
 
-Nothing is posted or sent to any social network. No credentials are read, no shell commands are run, no telemetry.
+Run on your machine, only when you send `/launch film` and only if you set one up: the film renderer (your `film_render` command, or `hyperframes` on PATH), as a list of arguments with no shell, with HyperFrames' telemetry off. No other command is run.
+
+Nothing is posted or sent to any social network. No credentials are read, nothing is downloaded, no telemetry.
 
 ## Credits
 
-One search per run, about one posts.design credit. Free accounts get 100 credits a month. References come from posts.design. Pro adds full playbooks.
+One search per run, about one posts.design credit. Free accounts get 100 credits a month. References come from posts.design. Pro adds full playbooks; `/launch film` reads one (1 credit) on Pro. Films are rendered with HyperFrames by HeyGen (Apache-2.0), when you have it.
 
 ## License
 
