@@ -140,7 +140,7 @@ def test_parse_args_strips_url_and_splits_detail():
     assert p.what == "custom themes for pet pages"
     assert p.detail == DETAIL
     assert wizard.parse_args("just a thing").url is None
-    assert wizard.parse_args("a thing -- with https://x.test/a.").url == "https://x.test/a"
+    assert wizard.parse_args("a thing -- with https://x.test/a.").url is None  # R58: never from the detail
 
 
 def test_no_network_before_the_first_answer():
@@ -581,7 +581,7 @@ def samples(host):
 
 def test_launch_text_starting_with_voice_is_a_normal_launch():
     host = make_host(PHASE1)
-    start(host, f"Voice mode in the editor -- people asked {URL}")
+    start(host, f"Voice mode in the editor {URL} -- people asked")  # R58: the site link goes before --
     assert questions(host, "feature") and pending(host) is not None
 
 
@@ -1402,3 +1402,28 @@ def test_caught_line_quotes_a_line_without_a_stop():
     reply = start(make_host(PHASE1, llm=(stopless, CLEAN)))
     [line] = [ln for ln in plain(reply) if ln and ln not in plain(clean_reply)]
     assert '"whole page follows"' in line
+
+
+# ------------------------------------------------------------------ R58: a link in the detail stays the founder's
+
+@pytest.mark.parametrize("raw,detail", [
+    ("dark mode -- people asked in https://github.com/x/y/issues/1 for months",
+     "people asked in https://github.com/x/y/issues/1 for months"),
+    ("themes -- we moved from https://old.app", "we moved from https://old.app"),
+])
+def test_a_link_in_the_detail_is_kept_as_typed_and_never_the_product_url(raw, detail):
+    args = wizard.parse_args(raw)
+    assert args.url is None and args.detail == detail
+
+
+def test_a_link_in_the_detail_never_reads_another_brand_and_shows_on_the_checklist():
+    host = with_brand()
+    host.choices.extend(["feature", "x", "1"])
+    llm = {**CLEAN, "card_line": "Pet pages now take dark mode."}
+    host.llm_replies.append(llm)
+    start(host, args="dark mode for pet pages -- people asked in https://github.com/x/y/issues/1 for months",
+          get=no_get)
+    p = wizard._Pending(pending(host))
+    assert p.brief.product_url == URL and not p.data["brand_new"]
+    assert p.data["hook"] == founder_hook("people asked in https://github.com/x/y/issues/1 for months")
+    assert [c.ok for c in p.checks() if "link-first-line" in c.rules] == [False]

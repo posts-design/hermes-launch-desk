@@ -152,8 +152,9 @@ def _tidy(text: str) -> str:
 
 
 def parse_args(raw: str) -> Args:
-    """`<what> [-- <detail>]`; the first URL anywhere is the product URL and every URL is
-    taken out of the text."""
+    """`<what> [-- <detail>]`. The product URL is the first URL before ` -- `, and the URLs there
+    are taken out of what shipped. The detail is the founder's words and stays as typed, links
+    included (R58): it is hook 1 word for word, and a link in it is never the product's."""
     parts = _DETAIL_SPLIT.split(raw or "", maxsplit=1)
     found: list[str] = []
 
@@ -164,8 +165,8 @@ def parse_args(raw: str) -> Args:
         return _URL_RE.sub(repl, text)
 
     what = strip_urls(parts[0])
-    detail = strip_urls(parts[1]) if len(parts) > 1 else ""
-    return Args(_tidy(what), _tidy(detail), found[0] if found else None)
+    detail = " ".join(parts[1].split()).strip(" ,;:-\u2013\u2014") if len(parts) > 1 else ""
+    return Args(_tidy(what), detail, found[0] if found else None)
 
 
 def _hostname(url: str) -> str:
