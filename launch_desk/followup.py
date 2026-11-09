@@ -40,6 +40,19 @@ PROMPT = (
     "If the tool is missing or its result has ok false, reply with one line saying the check-in "
     "for {pack} could not run, and stop. Do not wait for an answer."
 )
+# The automation blueprint's check-in (Hermes Desktop "New cron job"): its pack slot may be the
+# latest pack, a label from the suggestions, or a folder name; launch_desk_followup resolves it
+# when the check-in runs (resolve_pack). The tool's own message covers every outcome, including
+# "no pack yet", so the job's agent never improvises.
+LATEST = "Your latest pack"
+LABELS_MAX = 8
+BLUEPRINT_PROMPT = (
+    "Launch Desk check-in. Call the launch_desk_followup tool with pack set to \"{pack}\" exactly "
+    "as written, then reply with the message field of its result exactly, adding nothing. "
+    "If the tool is missing, reply with one line saying the Launch Desk check-in could not run, "
+    "and stop. Do not wait for an answer."
+)
+NO_PACKS = "Launch Desk check-in: there is no launch pack yet, so there is nothing to check in on."
 # no_mcp: Hermes' cron scheduler then attaches no MCP server to the job (else it adds every
 # enabled one); a check-in needs only the plugin's own tools, never posts.design's.
 TOOLSETS = ["launch_desk", "no_mcp"]
@@ -161,6 +174,82 @@ def compose_message(pack: str, suggestions: list[dict]) -> str:
     return "\n".join(head)
 
 
+_MONTHS = ("Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec")
+
+
+def pack_label(name: str, data: dict) -> str:
+    """A friendly name for a pack: "pawr.link · 7 Nov 02:06" (its brand, then when it was made,
+    UTC); without created_at, the date in its folder name ("pawr.link · 5 Nov")."""
+    brand = data.get("brand") if isinstance(data.get("brand"), dict) else {}
+    who = " ".join(str(brand.get("name") or "").split()) or _pack_site(data) or name
+    when = ""
+    created = data.get("created_at")
+    try:
+        stamp = datetime.fromisoformat(created) if isinstance(created, str) and created.strip() else None
+    except ValueError:
+        stamp = None
+    if stamp is not None:
+        stamp = stamp.astimezone(timezone.utc) if stamp.tzinfo else stamp
+        when = f"{stamp.day} {_MONTHS[stamp.month - 1]} {stamp:%H:%M}"
+    else:
+        m = _DATE_RE.match(name)
+        if m:
+            year, month, day = (int(x) for x in m.group(0).split("-"))
+            when = f"{day} {_MONTHS[month - 1]}" if 1 <= month <= 12 else ""
+    return f"{who} \u00b7 {when}" if when else who
+
+
+def _packs_newest_first(root: Path) -> list[tuple[str, dict]]:
+    """(folder name, pack.json) for every readable pack, newest first (created_at, else the date
+    in the name; then the name). Never raises."""
+    found = []
+    try:
+        folders = [p for p in Path(root).iterdir() if p.is_dir()]
+    except OSError:
+        return []
+    for folder in folders:
+        try:
+            path = _pack_file(root, folder.name)
+            if path.stat().st_size > PACK_READ_MAX:
+                continue
+            data = _load(path)
+        except (_Refused, OSError):
+            continue
+        found.append((_made(data, folder.name), folder.name, data))
+    found.sort(key=lambda t: (t[0], t[1]), reverse=True)
+    return [(name, data) for _made_at, name, data in found]
+
+
+def _labelled(root: Path) -> list[tuple[str, str]]:
+    """(label, folder name) for every pack, newest first; a repeated label gets " (2)", " (3)"."""
+    out, seen = [], {}
+    for name, data in _packs_newest_first(root):
+        label = pack_label(name, data)
+        seen[label] = seen.get(label, 0) + 1
+        out.append((label if seen[label] == 1 else f"{label} ({seen[label]})", name))
+    return out
+
+
+def recent_labels(root: Path, limit: int = LABELS_MAX) -> list[str]:
+    """The newest packs' labels, newest first: the blueprint's suggestions."""
+    return [label for label, _name in _labelled(root)[:limit]]
+
+
+def resolve_pack(root: Path, value: Any) -> str | None:
+    """The pack a check-in means: blank or LATEST is the newest pack, else a folder name or a
+    label from recent_labels(). None when there is no pack at all; an unknown value comes back
+    as it was, so followup() reports it."""
+    if value is None or (isinstance(value, str) and value.strip().lower() in ("", LATEST.lower())):
+        packs = _packs_newest_first(root)
+        return packs[0][0] if packs else None
+    if not isinstance(value, str):
+        return value
+    if _NAME_RE.fullmatch(value) and ".." not in value and (Path(root) / value / "pack.json").is_file():
+        return value  # a folder name, exactly as written
+    text = " ".join(value.split())
+    return next((name for label, name in _labelled(root) if label == text), value)
+
+
 def _failed(pack: Any, error: str) -> dict:
     name = pack if isinstance(pack, str) and _NAME_RE.fullmatch(pack) and ".." not in pack else "that pack"
     return {"ok": False, "error": error,
@@ -168,7 +257,14 @@ def _failed(pack: Any, error: str) -> dict:
 
 
 def followup(root: Path, pack: Any) -> dict:
-    """What a check-in needs, with the message ready to post. Never raises."""
+    """What a check-in needs, with the message ready to post. `pack` may be a folder name, a label
+    or blank (the newest pack, resolve_pack). Never raises."""
+    try:
+        pack = resolve_pack(root, pack)
+    except Exception:
+        pack = None
+    if pack is None:
+        return {"ok": False, "error": "No launch pack yet.", "message": NO_PACKS}
     try:
         data = _load(_pack_file(root, pack))
     except _Refused as exc:

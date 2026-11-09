@@ -124,8 +124,8 @@ def test_followup_reads_a_pack_written_before_check_ins(tmp_path):
     assert [s["kind"] for s in out["suggestions"]] == ["reply-with-detail"]
 
 
-@pytest.mark.parametrize("name", ["../outside", "..", ".", "/etc", "a/b", "", "x" * 300, "nope",
-                                  PACK + "/../" + PACK, "~/x", None, 5])
+@pytest.mark.parametrize("name", ["../outside", "..", ".", "/etc", "a/b", "x" * 300, "nope",
+                                  PACK + "/../" + PACK, "~/x", 5])  # blank or None: the latest (R57)
 def test_followup_refuses_names_outside_the_packs_folder(tmp_path, name):
     root = tmp_path / "packs"
     make_pack(root)
@@ -463,3 +463,54 @@ def test_an_older_pack_whose_hook_is_the_founder_words_skips_the_reply(tmp_path)
     out = followup.followup(tmp_path, PACK)
     assert "reply-with-detail" not in kinds(out)
     assert out["unused_hooks"] == MODEL_HOOKS
+
+
+# ------------------------------------------------------------------ R57: the blueprint's pack slot
+
+def pack_at(root: Path, name: str, created: str, brand: str = "Pawr") -> None:
+    make_pack(root, name, created_at=created, brand={"name": brand, "url": "https://pawr.link"})
+
+
+def three_packs(root: Path):
+    pack_at(root, "2026-11-05-pawr-themes", "2026-11-05T09:30:00+00:00", "pawr.link")
+    pack_at(root, "2026-11-07-pawr-dark", "2026-11-07T02:06:00+00:00", "pawr.link")
+    pack_at(root, "2026-11-06-brookhour-focus", "2026-11-06T18:45:00+00:00", "Brookhour")
+
+
+@pytest.mark.parametrize("value", [None, "", "   ", followup.LATEST, followup.LATEST.upper()])
+def test_a_blank_pack_means_the_newest(tmp_path, value):
+    three_packs(tmp_path)
+    assert followup.resolve_pack(tmp_path, value) == "2026-11-07-pawr-dark"
+    out = followup.followup(tmp_path, value)
+    assert out["ok"] is True and out["pack"] == "2026-11-07-pawr-dark"
+
+
+def test_a_label_or_a_folder_name_picks_that_pack(tmp_path):
+    three_packs(tmp_path)
+    labels = followup.recent_labels(tmp_path)
+    assert labels[0] == followup.pack_label("2026-11-07-pawr-dark", followup._load(
+        tmp_path / "2026-11-07-pawr-dark" / "pack.json"))
+    assert "7 Nov 02:06" in labels[0] and "pawr.link" in labels[0]
+    by_label = {followup.resolve_pack(tmp_path, label) for label in labels}
+    assert by_label == {"2026-11-05-pawr-themes", "2026-11-07-pawr-dark", "2026-11-06-brookhour-focus"}
+    assert followup.resolve_pack(tmp_path, "2026-11-05-pawr-themes") == "2026-11-05-pawr-themes"
+    assert followup.followup(tmp_path, labels[2])["pack"] == "2026-11-05-pawr-themes"
+
+
+def test_recent_labels_are_unique_newest_first_and_at_most_eight(tmp_path):
+    for n in range(10):
+        pack_at(tmp_path, f"2026-11-0{n % 9 + 1}-p{n}", "2026-11-07T02:06:00+00:00", "pawr.link")
+    labels = followup.recent_labels(tmp_path)
+    assert len(labels) == 8 and len(set(labels)) == 8
+
+
+def test_with_no_packs_the_check_in_is_one_plain_line(tmp_path):
+    out = followup.followup(tmp_path, "")
+    assert out["ok"] is False and out["message"] and "\n" not in out["message"]
+    assert followup.recent_labels(tmp_path) == []
+    assert followup.followup(tmp_path / "missing", None)["ok"] is False
+
+
+def test_an_unknown_pack_still_fails_plainly(tmp_path):
+    three_packs(tmp_path)
+    assert followup.followup(tmp_path, "not a pack · 1 Jan 00:00")["ok"] is False

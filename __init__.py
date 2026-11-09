@@ -127,6 +127,10 @@ def register(ctx):
         description="Record sign-ups per channel for a launch pack.",
     )
     if hasattr(ctx, "register_automation_blueprint"):  # Hermes 0.22.7 and later
+        try:  # the newest packs as suggestions; computed now, so they refresh when the plugin reloads
+            labels = followup.recent_labels(packs_root())
+        except Exception:
+            labels = []
         ctx.register_automation_blueprint(
             "follow-up",
             title="Launch Desk check-in",
@@ -134,8 +138,13 @@ def register(ctx):
                          "channel brought and suggests one next post from the pack."),
             category="work",
             schedule_template="in 24h",
-            prompt_template=followup.PROMPT,
-            slots=[{"name": "pack", "type": "text", "label": "Which launch pack (its folder name)?"}],
+            prompt_template=followup.BLUEPRINT_PROMPT,
+            slots=[{
+                "name": "pack", "type": "enum", "label": "Launch pack (leave blank for your latest)",
+                "optional": True, "strict": False, "default": followup.LATEST,
+                "options": [followup.LATEST, *labels],
+                "help": "Your latest pack is the newest one when the check-in runs. Or pick a recent pack.",
+            }],
             deliver_default="origin",
             skills=[followup.SKILL],
             tags=["launch", "follow-up"],

@@ -431,3 +431,42 @@ def test_a_malformed_own_sign_up_count_is_left_out(tmp_path, signups):
         {"brand": "Your own launch", "url": "2026-11-02-a", "views": None, "signups": signups}])
     ref = api.list_packs(tmp_path)["packs"][0]["references"][0]
     assert "signups" not in ref and "pack" not in ref
+
+
+# ------------------------------------------------------------------ R57: check-ins made from the blueprint
+
+def blueprint_job(job_id, pack_value, **extra):
+    from launch_desk import followup
+    record = {"id": job_id, "name": "Launch Desk check-in", "enabled": True, "state": "scheduled",
+              "next_run_at": "2026-11-08T10:00:00+00:00", "last_run_at": None,
+              "prompt": followup.BLUEPRINT_PROMPT.format(pack=pack_value)}
+    record.update(extra)
+    return record
+
+
+def test_blueprint_check_ins_are_matched_by_label_name_or_latest(tmp_path):
+    from launch_desk import followup
+    root = tmp_path / "packs"
+    make_pack(root, "2026-11-07-new", 2_000, created_at="2026-11-07T02:06:00+00:00")
+    make_pack(root, "2026-11-05-old", 1_000, created_at="2026-11-05T09:30:00+00:00",
+              brand={"name": "Brookhour", "url": "https://brookhour.app"})
+    old_label = followup.recent_labels(root)[1]
+    path = jobs(tmp_path / "jobs.json",
+                blueprint_job("by-latest", followup.LATEST),
+                blueprint_job("by-label", old_label),
+                blueprint_job("by-name", "2026-11-05-old"),
+                blueprint_job("unknown", "no such pack"),
+                {"id": "other", "name": "Launch Desk check-in", "prompt": "something else"})
+    listing = api.list_packs(root, path, NOW)
+    by_pack = {p["name"]: sorted(c["id"] for c in p["checkins"]) for p in listing["packs"]}
+    assert by_pack == {"2026-11-07-new": ["by-latest"], "2026-11-05-old": ["by-label", "by-name"]}
+
+
+def test_the_dashboard_labels_packs_as_the_plugin_does(tmp_path):
+    from launch_desk import followup
+    root = tmp_path / "packs"
+    make_pack(root, "2026-11-07-new", 2_000, created_at="2026-11-07T02:06:00+00:00")
+    make_pack(root, "2026-11-06-same", 1_500, created_at="2026-11-07T02:06:00+00:00")
+    make_pack(root, "2026-11-05-old", 1_000)  # no created_at: the folder date
+    assert api.pack_labels(root) == dict(zip(followup.recent_labels(root, limit=99),
+                                             ["2026-11-07-new", "2026-11-06-same", "2026-11-05-old"]))

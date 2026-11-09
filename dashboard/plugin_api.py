@@ -24,6 +24,12 @@ from typing import Any, Optional
 
 PLUGIN_ID = "launch-desk"
 JOB_PREFIX = "Launch Desk check-in: "  # launch_desk/followup.py JOB_NAME, before {pack}
+# A check-in made from the automation blueprint is named after its title, and its prompt carries
+# the pack slot (launch_desk/followup.py BLUEPRINT_PROMPT): a folder name, a label or LATEST.
+BLUEPRINT_JOB_NAME = "Launch Desk check-in"
+BLUEPRINT_PACK_RE = re.compile(r'launch_desk_followup tool with pack set to "([^"\n]*)"')
+LATEST = "Your latest pack"  # launch_desk/followup.py LATEST
+MONTHS = ("Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec")
 NAME_RE = re.compile(r"[A-Za-z0-9][A-Za-z0-9._-]{0,159}")  # same rule as followup._pack_file
 DATE_RE = re.compile(r"(\d{4}-\d{2}-\d{2})-")
 PNG_MAGIC = b"\x89PNG\r\n\x1a\n"
@@ -276,6 +282,67 @@ def summarize_pack(folder: Path, checkins: Optional[list] = None) -> Optional[di
     }
 
 
+# ------------------------------------------------------------------ pack labels (the blueprint's)
+
+def _made(data: dict, name: str) -> str:
+    created = data.get("created_at")
+    if isinstance(created, str) and created.strip():
+        return created.strip()
+    m = DATE_RE.match(name)
+    return m.group(1) if m else ""
+
+
+def _label(name: str, data: dict) -> str:
+    """The plugin's pack_label (launch_desk/followup.py), for matching a blueprint check-in."""
+    brand = data.get("brand") if isinstance(data.get("brand"), dict) else {}
+    who = " ".join(str(brand.get("name") or "").split()) or name
+    when = ""
+    created = data.get("created_at")
+    try:
+        stamp = datetime.fromisoformat(created) if isinstance(created, str) and created.strip() else None
+    except ValueError:
+        stamp = None
+    if stamp is not None:
+        stamp = stamp.astimezone(timezone.utc) if stamp.tzinfo else stamp
+        when = f"{stamp.day} {MONTHS[stamp.month - 1]} {stamp:%H:%M}"
+    else:
+        m = DATE_RE.match(name)
+        if m:
+            _year, month, day = (int(x) for x in m.group(1).split("-"))
+            when = f"{day} {MONTHS[month - 1]}" if 1 <= month <= 12 else ""
+    return f"{who} \u00b7 {when}" if when else who
+
+
+def pack_labels(root: Path) -> dict:
+    """{label: pack name} for every pack, newest first, as the blueprint offers them."""
+    found = []
+    for name in pack_names(root):
+        data = _read_json(_plain_file(root / name, "pack.json"), PACK_JSON_MAX)
+        if isinstance(data, dict):
+            found.append((_made(data, name), name, data))
+    found.sort(key=lambda t: (t[0], t[1]), reverse=True)
+    out, seen = {}, {}
+    for _made_at, name, data in found:
+        label = _label(name, data)
+        seen[label] = seen.get(label, 0) + 1
+        out[label if seen[label] == 1 else f"{label} ({seen[label]})"] = name
+    return out
+
+
+def _blueprint_pack(prompt: Any, labels: dict, names: list) -> Optional[str]:
+    """The pack a blueprint check-in is for: LATEST (or blank) is the newest, else a pack name or a
+    label. None when it names no pack this folder has."""
+    m = BLUEPRINT_PACK_RE.search(prompt) if isinstance(prompt, str) else None
+    if not m:
+        return None
+    value = " ".join(m.group(1).split())
+    if value.lower() in ("", LATEST.lower()):
+        return next(iter(labels.values()), None)
+    if value in names:
+        return value
+    return labels.get(value)
+
+
 # ------------------------------------------------------------------ check-ins (Hermes cron)
 
 def _when(value: Any) -> Optional[datetime]:
@@ -286,21 +353,31 @@ def _when(value: Any) -> Optional[datetime]:
     return when.replace(tzinfo=timezone.utc) if when and when.tzinfo is None else when
 
 
-def checkins_by_pack(path: Path, now: Optional[datetime] = None) -> dict:
+def checkins_by_pack(path: Path, now: Optional[datetime] = None, root: Optional[Path] = None) -> dict:
     """{pack name: [check-in jobs]} from Hermes' jobs.json, matched by the job name /launch gives
     them. Read-only: the file is parsed here, never loaded through the scheduler (which may repair
     and rewrite it). Missing or unreadable file: no check-ins.
 
     state follows the scheduler: completed and error stay; a job runs only when it is enabled and
     carries no pause marker (cron.jobs.is_job_runnable), else it is paused. A scheduled check-in
-    whose run time passed more than MISSED_AFTER_S ago without a run is marked missed."""
+    whose run time passed more than MISSED_AFTER_S ago without a run is marked missed. With
+    `root`, check-ins made from the automation blueprint (named BLUEPRINT_JOB_NAME) are matched
+    too, by the pack their prompt names (a "latest" one goes with the newest pack)."""
     now = now or datetime.now(timezone.utc)
     data = _read_json(path, JOBS_MAX)
     jobs = data.get("jobs") if isinstance(data, dict) else data
     out: dict = {}
+    labels = pack_labels(root) if root is not None else {}
+    names = pack_names(root) if root is not None else []
     for job in _dicts(jobs) if isinstance(jobs, list) else []:
         name = job.get("name")
-        if not isinstance(name, str) or not name.startswith(JOB_PREFIX):
+        if isinstance(name, str) and name.strip() == BLUEPRINT_JOB_NAME and root is not None:
+            pack = _blueprint_pack(job.get("prompt"), labels, names)
+            if pack is None:
+                continue
+        elif isinstance(name, str) and name.startswith(JOB_PREFIX):
+            pack = name[len(JOB_PREFIX):].strip()
+        else:
             continue
         stored = (_str(job.get("state")) or "").strip()
         runnable = bool(job.get("enabled", True)) and stored != "paused" and not job.get("paused_at")
@@ -308,7 +385,7 @@ def checkins_by_pack(path: Path, now: Optional[datetime] = None) -> dict:
         next_run = _when(job.get("next_run_at"))
         missed = (state == "scheduled" and next_run is not None and not _str(job.get("last_run_at"))
                   and (now - next_run).total_seconds() > MISSED_AFTER_S)
-        out.setdefault(name[len(JOB_PREFIX):].strip(), []).append({
+        out.setdefault(pack, []).append({
             "id": _str(job.get("id")) or "",
             "state": state,
             "missed": missed,
@@ -334,7 +411,7 @@ def checkin_summary(packs: list, now: Optional[datetime] = None) -> dict:
 
 def list_packs(root: Path, jobs_path: Optional[Path] = None, now: Optional[datetime] = None) -> dict:
     """Every readable pack, newest first (by when it was written, then by name)."""
-    checkins = checkins_by_pack(jobs_path, now) if jobs_path is not None else {}
+    checkins = checkins_by_pack(jobs_path, now, root) if jobs_path is not None else {}
     packs = []
     for name in pack_names(root):
         summary = summarize_pack(root / name, checkins.get(name))

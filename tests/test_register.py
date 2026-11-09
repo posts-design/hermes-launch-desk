@@ -1,6 +1,10 @@
 import importlib.util
 import json
+import os
+import sys
 from pathlib import Path
+
+import pytest
 
 ROOT = Path(__file__).resolve().parent.parent
 
@@ -198,3 +202,55 @@ def test_blueprint_is_registered_only_when_hermes_has_the_method():
 def test_manifest_keeps_the_hermes_floor():
     manifest = (ROOT / "plugin.yaml").read_text(encoding="utf-8")
     assert 'requires_hermes: ">=0.22.6"' in manifest
+
+
+def test_blueprint_pack_slot_is_optional_with_recent_packs_as_suggestions(tmp_path):
+    ctx = BlueprintCtx()
+    ctx.state.data_dir = tmp_path
+    for n, (name, created) in enumerate((("2026-11-05-a", "2026-11-05T09:30:00+00:00"),
+                                         ("2026-11-07-b", "2026-11-07T02:06:00+00:00"))):
+        folder = tmp_path / "packs" / name
+        folder.mkdir(parents=True)
+        (folder / "pack.json").write_text(json.dumps({"caption": "Hi.", "hook": "Hi.", "brief": {},
+                                                      "brand": {"name": "pawr.link"}, "created_at": created}))
+    load_plugin().register(ctx)
+    [slot] = ctx.blueprints["follow-up"]["slots"]
+    plugin = load_plugin()
+    assert slot["optional"] is True and slot["strict"] is False and slot["type"] == "enum"
+    assert slot["default"] == plugin.followup.LATEST and slot["options"][0] == plugin.followup.LATEST
+    assert slot["options"][1:] == plugin.followup.recent_labels(tmp_path / "packs")
+    assert len(slot["options"]) == 3 and slot["help"] and slot["label"]
+
+
+def test_blueprint_with_no_packs_offers_only_the_latest(tmp_path):
+    ctx = BlueprintCtx()
+    ctx.state.data_dir = tmp_path
+    load_plugin().register(ctx)
+    [slot] = ctx.blueprints["follow-up"]["slots"]
+    assert slot["options"] == [load_plugin().followup.LATEST]
+
+
+HERMES_SRC = os.environ.get("HERMES_AGENT_SRC")
+
+
+@pytest.mark.skipif(not HERMES_SRC, reason="needs HERMES_AGENT_SRC (Hermes' cron.blueprint_plugins)")
+def test_hermes_fills_the_blueprint_blank_label_or_name(tmp_path):
+    sys.path.insert(0, HERMES_SRC)
+    try:
+        from cron.blueprint_catalog import BlueprintFillError, fill_blueprint
+        from cron.blueprint_plugins import build_plugin_blueprint
+    finally:
+        sys.path.remove(HERMES_SRC)
+    ctx = BlueprintCtx()
+    ctx.state.data_dir = tmp_path
+    load_plugin().register(ctx)
+    kwargs = dict(ctx.blueprints["follow-up"])
+    blueprint = build_plugin_blueprint("launch-desk", "follow-up", **kwargs)  # Hermes' own validation
+    latest = load_plugin().followup.LATEST
+    assert f'"{latest}"' in fill_blueprint(blueprint, {})["prompt"]  # the slot left out: the latest
+    label = "pawr.link · 7 Nov 02:06"
+    spec = fill_blueprint(blueprint, {"pack": label})
+    assert f'"{label}"' in spec["prompt"] and spec["name"] == kwargs["title"]
+    assert f'"2026-11-07-b"' in fill_blueprint(blueprint, {"pack": "2026-11-07-b"})["prompt"]
+    with pytest.raises(BlueprintFillError):  # Hermes 0.22.7 drops a blank optional value before
+        fill_blueprint(blueprint, {"pack": ""})  # formatting: an explicit "" cannot reach the prompt
