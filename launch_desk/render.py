@@ -243,11 +243,16 @@ def _drop_missing(text: str, font_path: str = str(FONT_PATH)) -> str:
 
 # ---------------------------------------------------------------- images
 
+OPEN_MAX_PIXELS = 40_000_000  # a screenshot or logo larger than this is never decoded (I3)
+
+
 def _open_image(path: Path | str | None) -> Image.Image | None:
     if not path:
         return None
     try:
         im = Image.open(path)
+        if im.size[0] * im.size[1] > OPEN_MAX_PIXELS:
+            return None
         if im.format == "ICO" and hasattr(im, "ico"):
             sizes = list(im.ico.sizes())
             if sizes:

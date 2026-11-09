@@ -3,7 +3,15 @@ from pathlib import Path
 from launch_desk.brand import NEUTRAL, PRESET_ACCENTS, _cut_tagline, fetch_brand, parse_brand
 
 FIX = Path(__file__).parent / "fixtures"
-PNG = b"\x89PNG\r\n\x1a\n" + b"0" * 20
+def _png(size=(16, 16), mode="RGB") -> bytes:
+    import io as _io
+    from PIL import Image as _Image
+    out = _io.BytesIO()
+    _Image.new(mode, size).save(out, "PNG")
+    return out.getvalue()
+
+
+PNG = _png()
 
 
 def _fix(name: str) -> str:
@@ -169,6 +177,13 @@ class _Handler(http.server.BaseHTTPRequestHandler):
         elif path == "/ftp":
             self.send_response(302)
             self.send_header("Location", "ftp://example.com/x")
+            self.send_header("Content-Length", "0")
+            self.end_headers()
+            return
+        elif path in ("/to-metadata", "/to-private"):
+            self.send_response(302)
+            self.send_header("Location", "http://169.254.169.254/latest/meta-data/" if path == "/to-metadata"
+                             else "http://10.0.0.7/admin")
             self.send_header("Content-Length", "0")
             self.end_headers()
             return
@@ -616,3 +631,61 @@ def test_the_scan_budget_keeps_ordinary_reads_whole():
         kit, _ = parse_brand("http://127.0.0.1:8731/", html, [])
         assert kit.accent in ("#FF5B2E", "#17A34A"), name
     assert _posts_design().bg == "#101010"
+
+
+# --- R59: no private hosts but the founder's own; I3: no pixel bombs ----------
+
+@pytest.mark.parametrize("path", ["/to-metadata", "/to-private"])
+def test_a_redirect_to_a_private_host_is_refused(server, path):
+    with pytest.raises(ValueError):  # refused before any connection is tried
+        http_get(server + path)
+
+
+def test_a_redirect_on_the_same_local_host_is_followed(server):
+    assert http_get(server + "/hop/1") == b"hello"  # a staging site on 127.0.0.1 still reads
+
+
+@pytest.mark.parametrize("logo", ["http://169.254.169.254/icon.png", "http://10.1.2.3/icon.png",
+                                  "http://localhost:9000/icon.png"])
+def test_a_public_site_cannot_point_its_logo_at_a_private_host(tmp_path, logo):
+    calls = []
+
+    def get(url):
+        calls.append(url)
+        if url == logo:
+            return PNG
+        return f'<link rel="icon" href="{logo}">'.encode()
+
+    kit = fetch_brand("https://x.test", get, tmp_path)
+    assert kit.logo_path is None and logo not in calls
+
+
+def test_a_local_staging_site_keeps_its_own_logo(tmp_path):
+    def get(url):
+        if url.endswith("/icon.png"):
+            return PNG
+        return b'<link rel="icon" href="/icon.png">'
+
+    kit = fetch_brand("http://127.0.0.1:8731/k3/", get, tmp_path)
+    assert kit.logo_path is not None
+
+
+def test_a_pixel_bomb_logo_is_not_kept_and_the_card_still_renders(tmp_path):
+    from launch_desk.render import _open_image, render_card
+    bomb = _png((9000, 9000), mode="1")
+
+    def get(url):
+        if url.endswith("/icon.png"):
+            return bomb
+        return b'<link rel="icon" href="/icon.png">'
+
+    kit = fetch_brand("https://x.test", get, tmp_path)
+    assert kit.logo_path is None
+    path = tmp_path / "bomb.png"
+    path.write_bytes(bomb)
+    assert _open_image(path) is None  # above ~40 M pixels: never decoded
+    from dataclasses import replace
+    out = render_card(replace(kit, logo_path=str(path)), [path], "Pet pages take themes now.", (1200, 675),
+                      tmp_path / "card.png")
+    from PIL import Image
+    assert Image.open(out).size == (1200, 675)

@@ -2,6 +2,7 @@
 from __future__ import annotations
 
 import colorsys
+import io
 import math
 import re
 import urllib.parse
@@ -11,7 +12,10 @@ from html.parser import HTMLParser
 from pathlib import Path
 from typing import Any, Callable, Sequence
 
+from PIL import Image
+
 from .models import BrandKit
+from .rules import _private_host
 
 NEUTRAL = BrandKit(
     name="",
@@ -705,8 +709,24 @@ def parse_brand(url: str, html: str, css: Sequence[str]) -> tuple[BrandKit, str 
 MAX_REDIRECTS = 3
 
 
+def _host(url: str) -> str:
+    try:
+        return (urllib.parse.urlsplit(url).hostname or "").lower()
+    except ValueError:
+        return ""
+
+
+def _private_elsewhere(target: str, own: str) -> bool:
+    """A private, loopback or link-local host other than the founder's own (R59): a public site
+    must not send the read to the founder's network or a metadata address. The founder's own
+    staging host (http://127.0.0.1:8731/...) is still read."""
+    host = _host(target)
+    return bool(host) and host != _host(own) and _private_host(host)
+
+
 class _HttpOnlyRedirects(urllib.request.HTTPRedirectHandler):
-    """Follow at most 3 redirects, and only to http(s) URLs."""
+    """Follow at most 3 redirects, only to http(s) URLs, and never to a private host other than
+    the one first asked for."""
 
     max_redirections = MAX_REDIRECTS
 
@@ -714,7 +734,13 @@ class _HttpOnlyRedirects(urllib.request.HTTPRedirectHandler):
         target = urllib.parse.urljoin(req.full_url, newurl)
         if urllib.parse.urlsplit(target).scheme not in ("http", "https"):
             raise ValueError("redirected to a non-http URL")
-        return super().redirect_request(req, fp, code, msg, headers, newurl)
+        first = getattr(req, "launch_desk_first_url", req.full_url)
+        if _private_elsewhere(target, first):
+            raise ValueError("redirected to a private address")
+        new = super().redirect_request(req, fp, code, msg, headers, newurl)
+        if new is not None:
+            new.launch_desk_first_url = first
+        return new
 
 
 def http_get(url: str) -> bytes:
@@ -726,6 +752,8 @@ def http_get(url: str) -> bytes:
     with opener.open(req, timeout=TIMEOUT_S) as resp:  # noqa: S310
         if urllib.parse.urlsplit(resp.geturl()).scheme not in ("http", "https"):
             raise ValueError("redirected to a non-http URL")
+        if _private_elsewhere(resp.geturl(), url):
+            raise ValueError("redirected to a private address")
         data = resp.read(MAX_BYTES + 1)
     if len(data) > MAX_BYTES:
         raise ValueError("response larger than 2 MB")
@@ -768,6 +796,20 @@ def _logo_ext(data: bytes) -> str | None:
     return None
 
 
+LOGO_MAX_PIXELS = 4096 * 4096
+
+
+def _small_enough(data: bytes) -> bool:
+    """An image a logo can be: it opens (lazily, without decoding) and has at most 4096² pixels.
+    A pixel-bomb icon would cost the gateway gigabytes to decode (I3)."""
+    try:
+        with Image.open(io.BytesIO(data)) as im:
+            width, height = im.size
+    except Exception:
+        return False
+    return width * height <= LOGO_MAX_PIXELS
+
+
 def _neutral_for(url: str) -> BrandKit:
     host = urllib.parse.urlsplit(url).hostname or ""
     return BrandKit(**{**NEUTRAL.__dict__, "name": host, "url": url})
@@ -789,11 +831,11 @@ def fetch_brand(url: str, get: Callable[[str], bytes], out_dir: Path) -> BrandKi
         kit, logo_url = parse_brand(url, html, css)
     except Exception:
         return _neutral_for(url)
-    if logo_url:
+    if logo_url and not _private_elsewhere(logo_url, url):
         try:
             data = get(logo_url)
             ext = _logo_ext(data)
-            if ext:
+            if ext and _small_enough(data):
                 out_dir = Path(out_dir)
                 out_dir.mkdir(parents=True, exist_ok=True)
                 dest = out_dir / f"logo{ext}"
