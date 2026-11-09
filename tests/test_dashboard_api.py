@@ -482,3 +482,42 @@ def test_the_listing_caps_before_reading_every_pack(tmp_path, monkeypatch):
     monkeypatch.setattr(api, "summarize_pack", lambda folder, checkins=None: seen.append(folder) or real(folder, checkins))
     listing = api.list_packs(root)
     assert len(seen) <= api.MAX_PACKS and len(listing["packs"]) <= api.MAX_PACKS
+
+
+def test_labels_fall_back_to_the_site_then_the_folder_as_the_plugin_does(tmp_path):
+    from launch_desk import followup
+    root = tmp_path / "packs"
+    make_pack(root, "2026-11-07-a", 3_000, created_at="2026-11-07T02:06:00+00:00", brand={"url": "https://www.pawr.link"})
+    make_pack(root, "2026-11-06-b", 2_000, created_at="2026-11-06T02:06:00+00:00", brand={},
+              brief={"product_url": "http://127.0.0.1:8731/k3/"})
+    make_pack(root, "2026-11-05-c", 1_000, created_at="2026-11-05T02:06:00+00:00", brand={}, brief={})
+    assert api.pack_labels(root) == dict(zip(followup.recent_labels(root, limit=99),
+                                             ["2026-11-07-a", "2026-11-06-b", "2026-11-05-c"]))
+    assert list(api.pack_labels(root))[0].startswith("pawr.link")
+
+
+def test_a_latest_check_in_stays_with_the_pack_that_was_newest_when_it_was_made(tmp_path):
+    from launch_desk import followup
+    root = tmp_path / "packs"
+    make_pack(root, "2026-11-05-old", 1_000, created_at="2026-11-05T09:00:00+00:00")
+    make_pack(root, "2026-11-07-new", 2_000, created_at="2026-11-07T09:00:00+00:00")
+    path = jobs(tmp_path / "jobs.json",
+                blueprint_job("made-on-6th", followup.LATEST, created_at="2026-11-06T12:00:00+00:00"),
+                blueprint_job("made-on-8th", followup.LATEST, created_at="2026-11-08T12:00:00+00:00"),
+                blueprint_job("no-date", followup.LATEST))
+    by_pack = {p["name"]: sorted(c["id"] for c in p["checkins"]) for p in api.list_packs(root, path, NOW)["packs"]}
+    assert by_pack == {"2026-11-07-new": ["made-on-8th", "no-date"], "2026-11-05-old": ["made-on-6th"]}
+
+
+def test_labels_are_built_only_when_a_blueprint_check_in_exists(tmp_path, monkeypatch):
+    root = tmp_path / "packs"
+    make_pack(root, "2026-11-06-a", 2_000)
+    path = jobs(tmp_path / "jobs.json", job("2026-11-06-a", "j1"))
+    built = []
+    real = api.pack_index
+    monkeypatch.setattr(api, "pack_index", lambda r: built.append(r) or real(r))
+    api.list_packs(root, path, NOW)
+    assert built == []
+    from launch_desk import followup
+    api.list_packs(root, jobs(tmp_path / "jobs2.json", blueprint_job("b1", followup.LATEST)), NOW)
+    assert len(built) == 1

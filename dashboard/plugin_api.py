@@ -14,10 +14,13 @@ The pure functions below take their folders as arguments so tests can call them 
 """
 import base64
 import hashlib
+import ipaddress
 import json
 import os
 import re
+import socket
 import stat
+import urllib.parse
 from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any, Optional
@@ -292,10 +295,47 @@ def _made(data: dict, name: str) -> str:
     return m.group(1) if m else ""
 
 
-def _label(name: str, data: dict, folder: Optional[Path] = None) -> str:
-    """The plugin's pack_label (launch_desk/followup.py), for matching a blueprint check-in."""
+def _private(host: str) -> bool:
+    """launch_desk/rules.py _private_host, offline: localhost, .local, private or local addresses."""
+    host = host.lower().rstrip(".")
+    if host == "localhost" or host.endswith((".localhost", ".local")):
+        return True
+    try:
+        addr = ipaddress.ip_address(host.split("%", 1)[0])
+    except ValueError:
+        if not re.fullmatch(r"(?:0x[0-9a-f]*|[0-9]+)(?:\.(?:0x[0-9a-f]*|[0-9]+)){0,3}", host):
+            return False
+        try:
+            addr = ipaddress.ip_address(socket.inet_aton(host))
+        except OSError:
+            return False
+    return addr.is_loopback or addr.is_private or addr.is_link_local or addr.is_unspecified
+
+
+def _site(url: Any) -> str:
+    """launch_desk/followup.py _site: the host, lower case, without www, with its port when local."""
+    if not isinstance(url, str):
+        return ""
+    try:
+        parts = urllib.parse.urlsplit(url.strip())
+        host, port = (parts.hostname or "").lower(), parts.port
+    except ValueError:
+        return ""
+    host = host[4:] if host.startswith("www.") else host
+    return f"{host}:{port}" if host and port and _private(host) else host
+
+
+def _pack_site(data: dict) -> str:
     brand = data.get("brand") if isinstance(data.get("brand"), dict) else {}
-    who = " ".join(str(brand.get("name") or "").split()) or name
+    brief = data.get("brief") if isinstance(data.get("brief"), dict) else {}
+    return _site(brand.get("url")) or _site(brief.get("product_url"))
+
+
+def _label(name: str, data: dict, folder: Optional[Path] = None) -> str:
+    """The plugin's pack_label (launch_desk/followup.py), for matching a blueprint check-in: the
+    brand's name, else its site, else the folder name; then when it was made."""
+    brand = data.get("brand") if isinstance(data.get("brand"), dict) else {}
+    who = " ".join(str(brand.get("name") or "").split()) or _pack_site(data) or name
     when = ""
     created = data.get("created_at")
     try:
@@ -315,34 +355,49 @@ def _label(name: str, data: dict, folder: Optional[Path] = None) -> str:
     return f"{who} \u00b7 {when}" if when else who
 
 
-def pack_labels(root: Path) -> dict:
-    """{label: pack name} for every pack, newest first, as the blueprint offers them."""
+def _pack_index(root: Path) -> list:
+    """(label, pack name, made) for every pack, newest first, as the blueprint offers them."""
     found = []
     for name in pack_names(root):
         data = _read_json(_plain_file(root / name, "pack.json"), PACK_JSON_MAX)
         if isinstance(data, dict):
             found.append((_made(data, name), name, data))
     found.sort(key=lambda t: (t[0], t[1]), reverse=True)
-    out, seen = {}, {}
-    for _made_at, name, data in found:
+    out, seen = [], {}
+    for made, name, data in found:
         label = _label(name, data, root / name)
         seen[label] = seen.get(label, 0) + 1
-        out[label if seen[label] == 1 else f"{label} ({seen[label]})"] = name
+        out.append((label if seen[label] == 1 else f"{label} ({seen[label]})", name, made))
     return out
 
 
-def _blueprint_pack(prompt: Any, labels: dict, names: list) -> Optional[str]:
-    """The pack a blueprint check-in is for: LATEST (or blank) is the newest, else a pack name or a
-    label. None when it names no pack this folder has."""
+def pack_index(root: Path) -> list:
+    return _pack_index(root)
+
+
+def pack_labels(root: Path) -> dict:
+    """{label: pack name} for every pack, newest first, as the blueprint offers them."""
+    return {label: name for label, name, _made_at in pack_index(root)}
+
+
+def _blueprint_pack(prompt: Any, index: list, created: Any = None) -> Optional[str]:
+    """The pack a blueprint check-in is for: LATEST (or blank) is the newest pack made before the
+    job was created (the one it ran for), else a pack name or a label. None when it names no pack
+    this folder has."""
     m = BLUEPRINT_PACK_RE.search(prompt) if isinstance(prompt, str) else None
     if not m:
         return None
     value = " ".join(m.group(1).split())
     if value.lower() in ("", LATEST.lower()):
-        return next(iter(labels.values()), None)
-    if value in names:
+        made_by = _when(created)
+        for _label_text, name, made in index:
+            when = _when(made)
+            if made_by is None or when is None or when <= made_by:
+                return name
+        return None
+    if any(value == name for _label_text, name, _made_at in index):
         return value
-    return labels.get(value)
+    return next((name for label, name, _made_at in index if label == value), None)
 
 
 # ------------------------------------------------------------------ check-ins (Hermes cron)
@@ -364,17 +419,19 @@ def checkins_by_pack(path: Path, now: Optional[datetime] = None, root: Optional[
     carries no pause marker (cron.jobs.is_job_runnable), else it is paused. A scheduled check-in
     whose run time passed more than MISSED_AFTER_S ago without a run is marked missed. With
     `root`, check-ins made from the automation blueprint (named BLUEPRINT_JOB_NAME) are matched
-    too, by the pack their prompt names (a "latest" one goes with the newest pack)."""
+    too, by the pack their prompt names (a "latest" one goes with the newest pack made before the
+    job was created)."""
     now = now or datetime.now(timezone.utc)
     data = _read_json(path, JOBS_MAX)
     jobs = data.get("jobs") if isinstance(data, dict) else data
     out: dict = {}
-    labels = pack_labels(root) if root is not None else {}
-    names = pack_names(root) if root is not None else []
+    index: Optional[list] = None  # built only when a blueprint check-in is there
     for job in _dicts(jobs) if isinstance(jobs, list) else []:
         name = job.get("name")
         if isinstance(name, str) and name.strip() == BLUEPRINT_JOB_NAME and root is not None:
-            pack = _blueprint_pack(job.get("prompt"), labels, names)
+            if index is None:
+                index = list(pack_index(root))
+            pack = _blueprint_pack(job.get("prompt"), index, job.get("created_at"))
             if pack is None:
                 continue
         elif isinstance(name, str) and name.startswith(JOB_PREFIX):
