@@ -275,18 +275,17 @@ def test_accent_skips_social_platform_colours():
 
 # --- dark brands, exact accents and the headline face (Task 20) -------------
 
-import gzip  # noqa: E402
 
 from launch_desk.brand import font_face  # noqa: E402
 
 
-def _gz(name: str) -> str:
-    return gzip.decompress((FIX / name).read_bytes()).decode("utf-8")
+def _fixture(name: str) -> str:
+    return (FIX / name).read_text(encoding="utf-8")
 
 
 def _posts_design():
-    return parse_brand("https://posts.design/mcp", _gz("posts-mcp.html.gz"),
-                       [_gz("posts-mcp-1.css.gz"), _gz("posts-mcp-2.css.gz")])[0]
+    return parse_brand("https://posts.design/mcp", _fixture("posts-mcp.html"),
+                       [_fixture("posts-mcp-1.css"), _fixture("posts-mcp-2.css")])[0]
 
 
 def _lum(hex_: str) -> float:
