@@ -1,11 +1,11 @@
 ---
 name: launch-desk
-description: Use when a founder says they just shipped something (a feature, product, rebrand or partnership) and wants to announce it. Teaches the launch workflow and when to run /launch, which builds a checked launch post pack. Never posts.
+description: Use when a founder says they just shipped something (a feature, product, rebrand or partnership) and wants to announce it or make a launch video. Teaches the launch workflow and when to run /launch, which prepares a checked launch post pack from what posts.design learned from launches that worked, and /launch film, a short film with a checklist for launch videos. Never posts.
 ---
 
 # Launch Desk
 
-Launch Desk turns "I just shipped X" into a launch pack: three real launch posts from posts.design as references, a draft checked in code, a card built from the founder's own screenshot and brand, a feed preview, and a link to post on X. It never posts anything.
+Launch Desk prepares a launch from what posts.design learned from launches that worked: three real launch posts from posts.design as references, a draft checked in code, a card built from the founder's own screenshot and brand, a feed preview, and a link to post on X. It never posts anything.
 
 ## When to suggest /launch
 
@@ -32,7 +32,7 @@ Never generate or invent an image for the card.
 
 ## A launch film
 
-When the founder asks for a launch video or film after a pack is approved, suggest `/launch film` (their newest pack) or `/launch film <pack>`. It writes a 14-second silent film project in the founder's brand from the pack, renders it only with what they set up (the `film_render` setting, or HyperFrames on PATH, run on their machine with its telemetry off), and otherwise says how to render it or film it by hand from the shot list. Never write a film script yourself in its place, never run `npx` to render it, and never download a renderer (HyperFrames may fetch its own headless Chrome on its first render; that is HyperFrames, not Launch Desk). A playbook's beats, when shown, are shapes to fill with the founder's own words, not lines to read out.
+When the founder asks for a launch video or film, or is about to post one, after a pack is approved, suggest `/launch film` (their newest pack) or `/launch film <pack>`. It writes a 14-second silent film project in the founder's brand from the pack, renders it only with what they set up (the `film_render` setting, or HyperFrames on PATH, run on their machine with its telemetry off), and otherwise says how to render it or film it by hand from the shot list. Never write a film script yourself in its place, never run `npx` to render it, and never download a renderer (HyperFrames may fetch its own headless Chrome on its first render; that is HyperFrames, not Launch Desk). A playbook's beats, when shown, are shapes to fill with the founder's own words, not lines to read out. The reply ends with a checklist for any launch video; point to it when the founder shares a video of their own.
 
 ## What you must not do
 

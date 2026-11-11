@@ -1,21 +1,13 @@
 # Launch Desk
 
-A posts.design plugin for Hermes Agent.
+Built something? Ask Hermes to prepare the launch, based on what we've learned from [posts.design](https://posts.design).
 
-Tell it what you just shipped. It finds three real launch posts, drafts yours, and builds a card from your own screenshot and brand.
-You get a pack with the text, the card, a feed preview and a link to post on X. It never posts for you.
+- **Ideas from launches that worked.** Three real launch posts like yours, with what each one does well, and hooks to pick from, your own words first.
+- **A post without the slop.** Checked in code for stock phrases, made-up numbers, broken links and X's length, and redrafted when it fails.
+- **Visuals in your brand.** A share card from your screenshots, a short launch film, a checklist so you don't post a sloppy video, and a posts.design playbook for a longer one.
+- **You stay in charge.** Nothing is posted for you. You approve, then open X with the post filled in.
 
-## How it works
-
-The model writes about 20% of this. The rest is code and your own material:
-
-- Your words lead. The detail you give after ` -- ` is offered as the first line, word for word, marked as yours. The model's hooks come after it, each offered only if it adds no failure of its own to the post, does not echo your words, and is built unlike the others.
-- References are real launch posts from posts.design, chosen in code by what you shipped.
-- The draft is checked in code against AI-sounding copy and against details you never gave it, and is redrafted when it fails. You see the checks: a line says what the first draft was caught on, and the draft comes with a checklist of the post, one line per check.
-- The card is composed from your screenshot, colours and logo. It is never generated. Its headline names your product and what shipped: the model's card line (9 words at most, checked like the post, never echoing your first line or repeating a line of the post), else your product's name and what shipped from your brief. So the feed never shows the same sentence twice. It reads your site the way a visitor sees it: dark if the site is dark, the accent your site names or puts on its buttons, and a headline face close to yours (a serif, a rounded sans, or Inter).
-- Your results feed the next launch. Once you record sign-ups for a pack, the next `/launch` opens with one line on your best launch so far, and that post is reference 1: the draft borrows its shape, never its words.
-
-Because the checks and the design do the heavy lifting, it works on small models.
+The model writes about 20% of this; the references, the checks and your own brand do the rest, so it works on small models.
 
 ## Install
 
@@ -41,24 +33,21 @@ Without them, `/launch` runs on a built-in sample pack of launch posts and tells
 
 ```
 /launch https://yoursite.com dark mode for the editor -- people kept asking for it
-/launch a new onboarding flow
 ```
 
-The text after ` -- ` is one true detail, such as who asked for it. The draft treats it as a fact, and it is hook 1, word for word. If a line of the draft would repeat it, that line comes out when you pick it. Add your site's link the first time; it is remembered. A brand saved by an older version, before dark sites and headline faces were read, is read again once on your next `/launch`.
+The text after ` -- ` is one true detail, such as who asked for it. It becomes hook 1, word for word. Add your site's link the first time; it is remembered.
 
-It takes two steps. The first run ends with the draft, the card and a feed preview. Send `/launch` again to approve, change the hook, swap references or discard. `/launch brand <url>` reads your site's colours and logo again, and `/launch help` shows the usage.
+The first run ends with the draft, the card and a feed preview. Send `/launch` again to approve, change the hook, swap references or discard. Send a screenshot and the agent attaches it to the card with `launch_desk_attach_screenshot` (two screenshots sit side by side; with none, the headline is set large). `/launch voice: <a past post of yours>` makes drafts sound like you, `/launch brand <url>` reads your site again, and `/launch help` shows the rest.
 
-To make drafts sound like you, send `/launch voice: <a past post of yours>`. It keeps your last three; `/launch voice: clear` forgets them. If your posts use more em-dashes, emoji or hashtags than the checks allow, the draft may too, and the reply says so.
+After you approve, Launch Desk asks whether to check in tomorrow and in 3 days. Only if you say Yes, Hermes' own scheduler runs two check-ins in the same chat: each asks how many sign-ups each channel brought, suggests a next post from your pack, and records your numbers with `launch_desk_record_results`. Your best launch so far then shapes the next `/launch`. Cancel a check-in with `hermes cron remove <id>` (the reply names each job). The `launch-desk:follow-up` blueprint adds one more check-in; it runs with Hermes' default toolsets, since a blueprint cannot narrow them.
 
-After you approve, `/launch` asks whether to check in tomorrow and in 3 days. Say Yes and Hermes' own scheduler runs two check-ins that post to the same chat. Each posts one message composed in code from your pack and run through the em-dash, emoji, placeholder and stock-phrase checks: it asks how many sign-ups each channel brought and gives up to two next-post ideas (a reply with your detail, a hook you did not use, or the shape of a reference you did not see). Reply with your numbers and the agent records them in the pack with `launch_desk_record_results`. The reply names each job. To cancel one in the terminal chat, send `/cron remove <id>`; in a chat app, ask the agent to remove check-in `<id>`, or run `hermes cron remove <id>` where Hermes runs. There is also an automation blueprint, `launch-desk:follow-up` ("Launch Desk check-in" under New cron job in Hermes Desktop, or `/blueprint`), for one more check-in a day later. Leave the pack as "Your latest pack" to check in on your newest pack when it runs, or pick one of your recent packs. The list of recent packs is read when the plugin loads, and their times are UTC. A check-in made from the blueprint runs with Hermes' default toolsets (a blueprint cannot narrow them), unlike the two `/launch` check-ins, which run with the plugin's own tools and no MCP server.
-
-The next `/launch` reads those numbers back. Of the packs for the same site, the one with the most sign-ups (the most recent one on a tie) gives one line, such as: Your last launch brought N sign-ups on X with "<the first line of that post>". Its post is listed first among the references as your own launch, with its sign-ups and pack name, and the draft borrows its shape. It is yours, so the check for five copied words leaves it out, and your detail for this launch never counts as copied either. A later answer for a channel replaces the earlier one, since each check-in asks for the count so far. Packs without results, and packs for another site, change nothing.
-
-To put your product on the card, send a screenshot and the agent attaches it with `launch_desk_attach_screenshot`. Send two and the card shows them side by side; with none, the card sets its headline large. The plugin also ships a skill, `launch-desk:launch-desk`, that teaches the agent the launch workflow, so it steers you well even when you do not type the command.
+The plugin also ships a skill, `launch-desk:launch-desk`, so the agent suggests `/launch` when you say you shipped something.
 
 ## Launch film
 
 After you approve a pack, send `/launch film` for a 14-second silent launch film in your brand: your first line, your screenshot (or your product's name, large), what shipped, then your logo and site. `/launch film <pack>` makes one from an older pack, by its folder name or its label as the check-in shows it.
+
+The reply and the shot list end with a short checklist for any launch video you post, from what posts.design learned from the videos in its library: one idea per shot, text big enough for a phone, captions on, captions held long enough to read, a first frame that works as the thumbnail, and under 90 seconds on X with your product on screen early.
 
 It writes a [HyperFrames](https://github.com/heygen-com/hyperframes) project into the pack (`film/`, HTML with its own fonts and images, nothing fetched) and a shot list (`film-beats.md`) to film it yourself from. It renders only with what you set up, first found wins:
 
@@ -73,11 +62,7 @@ The reply also suggests a posts.design playbook for a longer film, picked by the
 
 ## Hermes Desktop
 
-In Hermes Desktop, Launch Desk adds a Launch Desk page to the sidebar (also in the command palette as Open Launch Desk). It shows every pack, newest first: the card and the feed preview, the post with your own words marked, the checks, the three reference posts with their views, the check-ins, the sign-ups you recorded and, when you made one, the launch film (or its shot list, which ends with the line to render it). Copy post copies the text; Open X opens X with it filled in, in your browser. The status bar shows when the next check-in runs, or how many never ran.
-
-The Desktop half ships off. Turn on Launch Desk in Capabilities → Plugins. If Desktop and Hermes run on different machines, install it from Desktop with Install from Git and the Desktop part checked, or with this link: `hermes://plugin/install?repo=posts-design/hermes-launch-desk`.
-
-The page only reads. Its backend (`dashboard/plugin_api.py`, loaded when the plugin is enabled in Hermes) reads this plugin's own packs folder (serving a pack's `film.mp4` only from inside that pack) and, from Hermes' `cron/jobs.json`, the ids, state and times of the check-in jobs `/launch` created. It writes nothing and sends nothing anywhere. Links on the page open only if they are web (https) links.
+Launch Desk adds a page to Hermes Desktop that shows every pack: the card, the post, the checks, the references, the check-ins, your sign-ups and the film, with Copy post and Open X. It ships off; turn it on in Capabilities → Plugins. The page only reads: its backend (`dashboard/plugin_api.py`, loaded when the plugin is enabled) reads this plugin's packs folder (serving a pack's `film.mp4` only from inside that pack) and, from Hermes' `cron/jobs.json`, the ids, state and times of the check-ins `/launch` created. It writes nothing and sends nothing anywhere, and opens only https links.
 
 ## What it checks
 

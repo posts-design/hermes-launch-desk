@@ -76,6 +76,16 @@ PLAYBOOK_BEATS_SHOWN = 5
 UNATTENDED = "/launch film makes a film only when you ask in a chat, so nothing was rendered."
 NO_PACK = "There is no launch pack yet. Approve one with /launch first, then send /launch film."
 RENDER_FAILED = "The render did not finish, so there is no MP4 this time."
+# What posts.design learned from the launch videos in its library, for any video the founder posts.
+VIDEO_CHECKLIST_TITLE = "Before you post a launch video"
+VIDEO_CHECKLIST = (
+    "One idea per shot, with two or three things on screen at most.",
+    "Text big enough to read on a phone. Nothing small.",
+    "Captions on, because most people watch with the sound off.",
+    "Each caption held long enough to read twice.",
+    "A first frame that works as the thumbnail: your line or your product, not a logo or a blank screen.",
+    "Under 90 seconds on X, with your product on screen in the first few seconds.",
+)
 
 
 # ------------------------------------------------------------------ what goes in the film
@@ -438,6 +448,7 @@ def beat_sheet(plan: Plan, playbook_md: list[str] = ()) -> str:
             lines.append(f"To film it yourself: {row['by_hand']}")
         lines.append("")
     lines += ["## To render it", "", f"In this pack's folder, with Node 22 or later: {render_line(PROJECT, MP4, bare=True)}", ""]
+    lines += [f"## {VIDEO_CHECKLIST_TITLE}", ""] + [f"- {item}" for item in VIDEO_CHECKLIST] + [""]
     if playbook_md:
         lines += list(playbook_md) + [""]
     return "\n".join(lines)
@@ -767,6 +778,7 @@ def make_film(host: Host, value: str) -> str:
             lines.append(render_line(PROJECT, MP4) + f", in the {name} folder where Hermes runs.")
             lines.append("Or film it yourself from the shot list:")
         lines += _beats_short(plan)
+    lines += ["", f"{VIDEO_CHECKLIST_TITLE}:"] + [f"- {item}" for item in VIDEO_CHECKLIST]
     if rec:
         lines += [""] + rec
     if rendered:
