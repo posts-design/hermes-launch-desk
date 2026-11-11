@@ -11,11 +11,13 @@ The model writes about 20% of this; the references, the checks and your own bran
 
 ## Install
 
+Launch Desk is in the Hermes plugin catalog:
+
 ```
-hermes plugins install posts-design/hermes-launch-desk
+hermes plugins install launch-desk
 ```
 
-Once the plugin is listed in the Hermes catalog, you will be able to install it by name.
+If your Hermes doesn't find it by name yet, install it from GitHub instead: `hermes plugins install posts-design/hermes-launch-desk`.
 
 ## Setup
 
