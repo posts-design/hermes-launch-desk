@@ -269,7 +269,11 @@ def test_screenshot_refuses_hermes_home_outside_its_media_caches(tmp_path):
     home = tmp_path / "hermes"
     assert plugin.screenshot_refusal(_png(home / "cache" / "images" / "img.png"), home.resolve()) is None
     assert plugin.screenshot_refusal(_png(home / "image_cache" / "img.png"), home.resolve()) is None
-    assert plugin.screenshot_refusal(_png(home / "plugin-data" / "ns" / "card.png"), home.resolve()) is None
+    own = (home / "plugin-data" / "ns").resolve()
+    assert plugin.screenshot_refusal(_png(home / "plugin-data" / "ns" / "card.png"), home.resolve(),
+                                     own_data=own) is None
+    assert plugin.screenshot_refusal(_png(home / "plugin-data" / "other" / "x.png"), home.resolve(),
+                                     own_data=own)
     assert plugin.screenshot_refusal(_png(home / "logs" / "x.png"), home.resolve())
     assert plugin.screenshot_refusal(_png(home / "x.png"), home.resolve())
 
@@ -295,5 +299,8 @@ def test_attach_refuses_a_file_in_hermes_home(tmp_path):
     load_plugin().register(ctx)
     handler = ctx.tools["launch_desk_attach_screenshot"]["handler"]
     assert json.loads(handler({"path": str(_png(home / "auth" / "x.png"))}))["ok"] is False
+    assert json.loads(handler({"path": str(_png(home / "plugin-data" / "other" / "x.png"))}))["ok"] is False
+    mine = json.loads(handler({"path": str(_png(home / "plugin-data" / "agent-plugin-launch-desk" / "c.png"))}))
+    assert mine["ok"] is True
     ok = json.loads(handler({"path": str(_png(home / "cache" / "images" / "img.png"))}))
     assert ok["ok"] is True

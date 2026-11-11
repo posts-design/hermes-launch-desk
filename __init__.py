@@ -65,17 +65,21 @@ def _is_image(path: Path) -> bool:
 
 
 # Inside Hermes' home only its media caches hold images people sent (Telegram photos, uploads,
-# browser screenshots) and the plugin's own data; the rest of it (auth, config, logs) is refused.
+# browser screenshots), plus this plugin's own data; the rest of it (auth, config, logs and other
+# plugins' data) is refused.
 HERMES_MEDIA_DIRS = ("cache/images", "image_cache", "cache/screenshots", "browser_screenshots",
-                     "cache/documents", "document_cache", "plugin-data")
+                     "cache/documents", "document_cache")
 
 
-def _hermes_home(ctx) -> Path | None:
+def _hermes_dirs(ctx) -> tuple[Path | None, Path | None]:
+    """Hermes' home and this plugin's own data folder, or (None, None) when Hermes does not say."""
     try:
         data = HermesHost(ctx).data_dir()
     except Exception:
-        return None
-    return data.parents[1].resolve() if data.is_absolute() and data.parent.name == "plugin-data" else None
+        return None, None
+    if not (data.is_absolute() and data.parent.name == "plugin-data"):
+        return None, None
+    return data.parents[1].resolve(), data.resolve()
 
 
 def _within(path: Path, folder: Path) -> bool:
@@ -86,15 +90,17 @@ def _within(path: Path, folder: Path) -> bool:
         return False
 
 
-def screenshot_refusal(path: Path, hermes_home: Path | None, user_home: Path | None = None) -> str | None:
+def screenshot_refusal(path: Path, hermes_home: Path | None, user_home: Path | None = None,
+                       own_data: Path | None = None) -> str | None:
     """Why a path is not taken as a screenshot, or None. Refused: a symlink, anything in Hermes'
-    home outside its media caches and the plugin data, and anything in a hidden folder of the
-    user's home (~/.ssh, ~/.config and the like)."""
+    home outside its media caches and this plugin's own data, and anything in a hidden folder of
+    the user's home (~/.ssh, ~/.config and the like)."""
     if path.is_symlink():
         return "Links are not taken; attach the image file itself."
     real = path.resolve()
     if hermes_home is not None and _within(real, hermes_home):
-        if any(_within(real, hermes_home / d) for d in HERMES_MEDIA_DIRS):
+        if any(_within(real, hermes_home / d) for d in HERMES_MEDIA_DIRS) or (
+                own_data is not None and _within(real, own_data)):
             return None
         return "That file is in Hermes' own folder; send the screenshot in the chat or attach it from elsewhere."
     home = (user_home or Path.home()).resolve()
@@ -111,7 +117,8 @@ def register(ctx):
         path = Path(str((args or {}).get("path", ""))).expanduser()
         if not path.is_file():
             return json.dumps({"ok": False, "error": "File not found."})
-        refusal = screenshot_refusal(path, _hermes_home(ctx))
+        hermes_home, own_data = _hermes_dirs(ctx)
+        refusal = screenshot_refusal(path, hermes_home, own_data=own_data)
         if refusal:
             return json.dumps({"ok": False, "error": refusal})
         if not _is_image(path):
