@@ -524,3 +524,24 @@ def test_the_shot_list_ends_with_how_to_render_it(tmp_path):
     film.run_film(host, "")
     sheet = (only_pack(host) / film.BEAT_SHEET).read_text()
     assert film.render_line(film.PROJECT, film.MP4, bare=True) in sheet
+
+
+def test_render_env_is_minimal():
+    environ = {"PATH": "/usr/bin", "HOME": "/home/u", "LANG": "C.UTF-8", "LC_ALL": "C.UTF-8",
+               "TMPDIR": "/tmp", "HYPERFRAMES_BROWSER_PATH": "/opt/chrome",
+               "OPENAI_API_KEY": "sk-secret", "ANTHROPIC_API_KEY": "x", "TELEGRAM_BOT_TOKEN": "y",
+               "HERMES_HOME": "/home/u/.hermes", "DO_NOT_TRACK": "0"}
+    env = film.render_env(environ)
+    assert env["PATH"] == "/usr/bin" and env["HOME"] == "/home/u" and env["LC_ALL"] == "C.UTF-8"
+    assert env["HYPERFRAMES_BROWSER_PATH"] == "/opt/chrome" and env["TMPDIR"] == "/tmp"
+    for secret in ("OPENAI_API_KEY", "ANTHROPIC_API_KEY", "TELEGRAM_BOT_TOKEN", "HERMES_HOME"):
+        assert secret not in env
+    assert all(env[k] == v for k, v in film.RENDER_ENV.items())
+    assert set(env) <= set(film.RENDER_PASS_ENV) | set(film.RENDER_ENV) | {"LC_ALL"}
+
+
+def test_render_env_reads_os_environ_by_default(monkeypatch):
+    monkeypatch.setenv("LAUNCH_DESK_TEST_SECRET", "nope")
+    monkeypatch.setenv("PATH", "/usr/bin")
+    env = film.render_env()
+    assert "LAUNCH_DESK_TEST_SECRET" not in env and env["PATH"] == "/usr/bin"

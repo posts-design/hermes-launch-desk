@@ -494,9 +494,20 @@ def command(template: list[str], project: Path, out: Path) -> list[str]:
     return [a.replace("{project}", str(project)).replace("{out}", str(out)) for a in template]
 
 
-def render_env() -> dict:
-    """The environment the renderer gets: Hermes' own, plus the telemetry and update opt-outs."""
-    return {**os.environ, **RENDER_ENV}
+# The only variables the renderer gets from Hermes' environment, so provider keys and other
+# secrets never reach it or anything it starts. SYSTEMROOT, TEMP and TMP are for Windows.
+RENDER_PASS_ENV = ("PATH", "HOME", "LANG", "TMPDIR", "TMP", "TEMP", "SYSTEMROOT",
+                   "HYPERFRAMES_BROWSER_PATH")
+
+
+def render_env(environ=None) -> dict:
+    """The environment the renderer gets: a minimal one (PATH, HOME, locale, temp folder, the
+    HyperFrames browser path if set) plus the telemetry and update opt-outs, never all of Hermes'."""
+    environ = os.environ if environ is None else environ
+    env = {k: environ[k] for k in RENDER_PASS_ENV if environ.get(k)}
+    env.update({k: v for k, v in environ.items() if k.startswith("LC_") and v})
+    env.update(RENDER_ENV)
+    return env
 
 
 def _tail(output: Any) -> str:
