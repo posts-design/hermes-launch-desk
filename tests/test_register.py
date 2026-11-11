@@ -254,3 +254,46 @@ def test_hermes_fills_the_blueprint_blank_label_or_name(tmp_path):
     assert f'"2026-11-07-b"' in fill_blueprint(blueprint, {"pack": "2026-11-07-b"})["prompt"]
     with pytest.raises(BlueprintFillError):  # Hermes 0.22.7 drops a blank optional value before
         fill_blueprint(blueprint, {"pack": ""})  # formatting: an explicit "" cannot reach the prompt
+
+
+def _png(path):
+    from PIL import Image
+
+    path.parent.mkdir(parents=True, exist_ok=True)
+    Image.new("RGB", (8, 8), "white").save(path)
+    return path
+
+
+def test_screenshot_refuses_hermes_home_outside_its_media_caches(tmp_path):
+    plugin = load_plugin()
+    home = tmp_path / "hermes"
+    assert plugin.screenshot_refusal(_png(home / "cache" / "images" / "img.png"), home.resolve()) is None
+    assert plugin.screenshot_refusal(_png(home / "image_cache" / "img.png"), home.resolve()) is None
+    assert plugin.screenshot_refusal(_png(home / "plugin-data" / "ns" / "card.png"), home.resolve()) is None
+    assert plugin.screenshot_refusal(_png(home / "logs" / "x.png"), home.resolve())
+    assert plugin.screenshot_refusal(_png(home / "x.png"), home.resolve())
+
+
+def test_screenshot_refuses_hidden_folders_and_symlinks(tmp_path):
+    plugin = load_plugin()
+    user = tmp_path / "user"
+    assert plugin.screenshot_refusal(_png(user / ".ssh" / "k.png"), None, user)
+    assert plugin.screenshot_refusal(_png(user / "Desktop" / "shot.png"), None, user) is None
+    link = user / "Desktop" / "link.png"
+    link.symlink_to(user / "Desktop" / "shot.png")
+    assert plugin.screenshot_refusal(link, None, user)
+
+
+def test_attach_refuses_a_file_in_hermes_home(tmp_path):
+    class Ctx(StubCtx):
+        def __init__(self, data):
+            super().__init__()
+            self.state.data_dir = str(data)
+
+    home = tmp_path / "hermes"
+    ctx = Ctx(home / "plugin-data" / "agent-plugin-launch-desk")
+    load_plugin().register(ctx)
+    handler = ctx.tools["launch_desk_attach_screenshot"]["handler"]
+    assert json.loads(handler({"path": str(_png(home / "auth" / "x.png"))}))["ok"] is False
+    ok = json.loads(handler({"path": str(_png(home / "cache" / "images" / "img.png"))}))
+    assert ok["ok"] is True

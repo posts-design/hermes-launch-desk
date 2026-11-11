@@ -64,6 +64,45 @@ def _is_image(path: Path) -> bool:
     )
 
 
+# Inside Hermes' home only its media caches hold images people sent (Telegram photos, uploads,
+# browser screenshots) and the plugin's own data; the rest of it (auth, config, logs) is refused.
+HERMES_MEDIA_DIRS = ("cache/images", "image_cache", "cache/screenshots", "browser_screenshots",
+                     "cache/documents", "document_cache", "plugin-data")
+
+
+def _hermes_home(ctx) -> Path | None:
+    try:
+        data = HermesHost(ctx).data_dir()
+    except Exception:
+        return None
+    return data.parents[1].resolve() if data.is_absolute() and data.parent.name == "plugin-data" else None
+
+
+def _within(path: Path, folder: Path) -> bool:
+    try:
+        path.relative_to(folder)
+        return True
+    except ValueError:
+        return False
+
+
+def screenshot_refusal(path: Path, hermes_home: Path | None, user_home: Path | None = None) -> str | None:
+    """Why a path is not taken as a screenshot, or None. Refused: a symlink, anything in Hermes'
+    home outside its media caches and the plugin data, and anything in a hidden folder of the
+    user's home (~/.ssh, ~/.config and the like)."""
+    if path.is_symlink():
+        return "Links are not taken; attach the image file itself."
+    real = path.resolve()
+    if hermes_home is not None and _within(real, hermes_home):
+        if any(_within(real, hermes_home / d) for d in HERMES_MEDIA_DIRS):
+            return None
+        return "That file is in Hermes' own folder; send the screenshot in the chat or attach it from elsewhere."
+    home = (user_home or Path.home()).resolve()
+    if _within(real, home) and any(part.startswith(".") for part in real.relative_to(home).parts[:-1]):
+        return "That file is in a hidden folder; attach the screenshot from a normal folder."
+    return None
+
+
 def register(ctx):
     def launch(raw_args="", **kwargs):
         return wizard.run_launch(HermesHost(ctx), raw_args or "")
@@ -72,6 +111,9 @@ def register(ctx):
         path = Path(str((args or {}).get("path", ""))).expanduser()
         if not path.is_file():
             return json.dumps({"ok": False, "error": "File not found."})
+        refusal = screenshot_refusal(path, _hermes_home(ctx))
+        if refusal:
+            return json.dumps({"ok": False, "error": refusal})
         if not _is_image(path):
             return json.dumps({"ok": False, "error": "Not a PNG, JPEG or WebP image."})
         kept = [p for p in wizard.screenshot_paths(ctx.state.get("screenshot"))
